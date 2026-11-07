@@ -1,0 +1,15 @@
+// Plain Java: the rules and the reminder logic, testable without Android.
+plugins {
+    id 'java-library'
+}
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+// Tests are a plain main class (no test libraries to download): ./gradlew :core:coreTest
+tasks.register('coreTest', JavaExec) {
+    dependsOn 'testClasses'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'app.tracker.core.CoreTest'
+}
+tasks.named('check') { dependsOn 'coreTest' }
