@@ -1,0 +1,4 @@
+// Tracker for Android. No libraries beyond the Android SDK itself.
+plugins {
+    id 'com.android.application' version '8.13.0' apply false
+}

@@ -1,0 +1,27 @@
+/* The first-run screen (shared setup.html) at phone size: system font, touch-sized controls. */
+html,
+body {
+	font: 16px/1.45 Roboto, "Google Sans Text", system-ui, sans-serif;
+	-webkit-tap-highlight-color: transparent;
+}
+body.setup {
+	padding: 32px 24px;
+}
+.setup h1 {
+	font-size: 24px;
+}
+.setup input {
+	height: 48px;
+	padding: 0 14px;
+	border-radius: 12px;
+	font-size: 16px;
+}
+.u-primary,
+.u-secondary {
+	height: 48px;
+	border-radius: 999px;
+	font-size: 16px;
+}
+.u-logo {
+	border-radius: 22px;
+}
