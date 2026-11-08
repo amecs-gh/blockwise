@@ -2,6 +2,7 @@ package app.tracker.android;
 
 import android.Manifest;
 import android.app.Activity;
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -109,10 +110,16 @@ public final class MainActivity extends Activity implements Tracking.Listener {
         super.onDestroy();
     }
 
+    /**
+     * Android 12 and older. From Android 13 on, back (button and predictive
+     * gesture) goes to the OnBackInvokedCallback registered in onCreate
+     * (enableOnBackInvokedCallback is on in the manifest).
+     */
     @Override
     @SuppressWarnings("deprecation")
+    @SuppressLint("GestureBackNavigation")
     public void onBackPressed() {
-        goBack(); // Android 12 and older
+        goBack();
     }
 
     private void goBack() {
@@ -156,6 +163,7 @@ public final class MainActivity extends Activity implements Tracking.Listener {
                 + (payloadJson == null ? "null" : JSONObject.quote(payloadJson)) + ")");
     }
 
+    @SuppressLint("SetJavaScriptEnabled") // the interface is JavaScript; it only ever loads the app's own files
     private void configure(WebView w) {
         WebSettings s = w.getSettings();
         s.setJavaScriptEnabled(true);
@@ -349,7 +357,7 @@ public final class MainActivity extends Activity implements Tracking.Listener {
                 })
                 .setPositiveButton(t.t("Close"), null)
                 .setNegativeButton(t.t("Log out"), (d, w) -> confirmLogout(host));
-        if (!Tracking.canExactAlarms(this) && Build.VERSION.SDK_INT >= 31) {
+        if (!Tracking.canExactAlarms(this)) { // only false on Android 12+
             b.setNeutralButton(t.t("Allow exact reminders"), (d, w) -> {
                 try {
                     startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + getPackageName())));

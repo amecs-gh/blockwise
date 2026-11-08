@@ -255,7 +255,6 @@ final class Tracking {
                 .setUsesChronometer(true)
                 .setChronometerCountDown(st.countDown)
                 .setWhen(st.when * 1000)
-                .setCategory(Notification.CATEGORY_STOPWATCH)
                 // The lock screen shows only "Tracking", not what you work on
                 .setVisibility(Notification.VISIBILITY_PRIVATE)
                 .setPublicVersion(new Notification.Builder(c, CH_TIMER)
@@ -266,6 +265,9 @@ final class Tracking {
                         .setWhen(st.when * 1000)
                         .build())
                 .setContentIntent(openApp(c));
+        if (Build.VERSION.SDK_INT >= 31) {
+            b.setCategory(Notification.CATEGORY_STOPWATCH);
+        }
         if (d.running != null) {
             b.addAction(new Notification.Action.Builder(Icon.createWithResource(c, R.drawable.ic_stop), t.t("Stop"), broadcast(c, ACTION_STOP, 1)).build());
         }

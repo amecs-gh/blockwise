@@ -1,5 +1,6 @@
 package app.tracker.android;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.os.Bundle;
 import android.webkit.CookieManager;
@@ -40,6 +41,7 @@ public final class LoginActivity extends Activity {
     }
 
     @Override
+    @SuppressLint("SetJavaScriptEnabled") // Nextcloud's login page needs JavaScript; it has no bridge to the app
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         String url = getIntent().getStringExtra(EXTRA_URL);
