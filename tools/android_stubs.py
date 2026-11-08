@@ -9,6 +9,8 @@ out = sys.argv[1]
 S = {}
 def c(path, body): S[path] = textwrap.dedent(body)
 
+c('android/annotation/SuppressLint.java', '''package android.annotation;
+public @interface SuppressLint { String[] value(); }''')
 c('android/Manifest.java', '''package android;
 public final class Manifest { public static final class permission { public static final String POST_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS"; } }''')
 c('android/content/Context.java', '''package android.content;
