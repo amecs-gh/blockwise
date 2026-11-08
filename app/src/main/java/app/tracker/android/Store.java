@@ -37,10 +37,10 @@ final class Store {
         return c.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
     }
 
+    /** Logged in = address, login name and a password that can still be decrypted. */
     static boolean loggedIn(Context c) {
         SharedPreferences p = prefs(c);
-        return p.getString("server", null) != null && p.getString("loginName", null) != null
-                && (p.getString("password", null) != null || memoryPassword != null);
+        return p.getString("server", null) != null && p.getString("loginName", null) != null && password(c) != null;
     }
 
     static String server(Context c) {

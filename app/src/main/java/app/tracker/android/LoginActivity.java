@@ -87,7 +87,7 @@ public final class LoginActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        if (!closedByApp) {
+        if (!closedByApp && isFinishing()) {
             // You went back without granting access: stop waiting
             MainActivity.loginWindowClosed();
         }

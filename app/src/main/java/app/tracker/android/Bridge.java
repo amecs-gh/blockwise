@@ -104,6 +104,8 @@ public final class Bridge {
             } catch (Nextcloud.ApiException e) {
                 result = error(e.getMessage(), e.status);
                 if (e.status == 401) {
+                    // App password revoked in Nextcloud: forget it, back to the login screen
+                    Store.clear(activity);
                     activity.runOnUiThread(activity::loggedOut);
                 }
             }

@@ -48,8 +48,15 @@ adb install app/build/outputs/apk/debug/app-debug.apk   # phone connected with U
 **C. On GitHub (no SDK on your Mac)**
 
 Push this folder to a private GitHub repository. The workflow in
-`.github/workflows/android.yml` builds the APK; download it from
-**Actions → Build APK → Artifacts**.
+`.github/workflows/android.yml` builds the APK on every push and publishes it
+under **Releases → latest**.
+
+With your signing key as two repository secrets (Settings → Secrets and
+variables → Actions: `ANDROID_KEYSTORE_B64`, the keystore in base64, and
+`ANDROID_KEYSTORE_PASSWORD`), it builds the **release** version: signed with
+your key, not debuggable, and every update installs over the previous one
+(keeping your login). Without them it builds the debug version. Keep a backup
+of the key: Android only installs updates signed with the same key.
 
 `./gradlew` and Android Studio first copy Tracker's interface from
 `../tracker` (when that folder exists), like `npm start` does for the Mac app.

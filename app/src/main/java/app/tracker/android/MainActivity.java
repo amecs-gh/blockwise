@@ -237,7 +237,7 @@ public final class MainActivity extends Activity implements Tracking.Listener {
 
     // --- what the bridge asks for ------------------------------------------------------------
 
-    String publicState() {
+    JSONObject publicState() {
         JSONObject o = new JSONObject();
         try {
             String server = Store.server(this);
@@ -250,7 +250,7 @@ public final class MainActivity extends Activity implements Tracking.Listener {
         } catch (JSONException ignored) {
             // can't happen with these values
         }
-        return o.toString();
+        return o;
     }
 
     void openCalendar(Long ts) {

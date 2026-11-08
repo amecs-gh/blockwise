@@ -1,43 +1,71 @@
-# Builds the app on GitHub: every push runs the tests, builds the APK and
-# publishes it as the "latest" release, so you can download it on your phone
-# (Releases → latest → app-debug.apk).
+# Builds the app on GitHub: every push runs the tests and Android's checks,
+# builds the APK and publishes it as the "latest" release, so you can download
+# it on your phone (Releases → latest).
+#
+# With the secrets ANDROID_KEYSTORE_B64 and ANDROID_KEYSTORE_PASSWORD set
+# (Settings → Secrets and variables → Actions), it builds the release version,
+# signed with your key: not debuggable, and each update installs over the last.
+# Without them it builds the debug version.
 name: Build APK
 on:
   push:
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # only to publish the release
     steps:
       - uses: actions/checkout@v4
+      # The Gradle wrapper jar in the repository is the official one
+      - uses: gradle/actions/wrapper-validation@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
       # GitHub's Ubuntu machines come with the Android SDK (ANDROID_HOME is set);
       # Gradle downloads the exact platform and build tools it needs.
-      - name: Test and build
-        run: ./gradlew --no-daemon --stacktrace :core:coreTest :app:assembleDebug :app:lintDebug
+      - name: Signing key from secrets
+        id: key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/tracker.keystore"
+            echo "TRACKER_KEYSTORE=$RUNNER_TEMP/tracker.keystore" >> "$GITHUB_ENV"
+            echo "variant=release" >> "$GITHUB_OUTPUT"
+          else
+            echo "No signing key: building the debug version"
+            echo "variant=debug" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Test, check and build
+        env:
+          TRACKER_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          VARIANT: ${{ steps.key.outputs.variant }}
+        run: |
+          if [ "$VARIANT" = release ]; then
+            ./gradlew --no-daemon --stacktrace :core:coreTest :app:lintRelease :app:assembleRelease
+            cp app/build/outputs/apk/release/app-release.apk Tracker.apk
+          else
+            ./gradlew --no-daemon --stacktrace :core:coreTest :app:lintDebug :app:assembleDebug
+            cp app/build/outputs/apk/debug/app-debug.apk Tracker-debug.apk
+          fi
+      - name: Remove the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/tracker.keystore"
       - name: Lint findings
         if: always()
-        run: cat app/build/reports/lint-results-debug.txt || true
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: lint-report
-          path: app/build/reports/lint-results-debug.*
-      - uses: actions/upload-artifact@v4
-        with:
-          name: tracker-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+        run: cat app/build/reports/lint-results-*.txt || true
       - name: Publish as the "latest" release
         env:
           GH_TOKEN: ${{ github.token }}
+          VARIANT: ${{ steps.key.outputs.variant }}
         run: |
+          APK=$( [ "$VARIANT" = release ] && echo Tracker.apk || echo Tracker-debug.apk )
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest app/build/outputs/apk/debug/app-debug.apk \
+          gh release create latest "$APK" \
             --title "Tracker for Android (latest build)" \
-            --notes "Built from ${GITHUB_SHA::7}. Download app-debug.apk on your phone and open it to install." \
+            --notes "Built from ${GITHUB_SHA::7} ($VARIANT). Download $APK on your phone and open it to install." \
             --prerelease

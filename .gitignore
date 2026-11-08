@@ -4,3 +4,7 @@ local.properties
 .idea/
 *.iml
 app/release/
+*.keystore
+*.jks
+*.p12
+signing/
