@@ -49,7 +49,8 @@ jobs:
             ./gradlew --no-daemon --stacktrace :core:coreTest :app:lintRelease :app:assembleRelease
             cp app/build/outputs/apk/release/app-release.apk Tracker.apk
           else
-            ./gradlew --no-daemon --stacktrace :core:coreTest :app:lintDebug :app:assembleDebug
+            # The release version is built too (unsigned, not published), so it's known to work
+            ./gradlew --no-daemon --stacktrace :core:coreTest :app:lintDebug :app:assembleDebug :app:lintRelease :app:assembleRelease
             cp app/build/outputs/apk/debug/app-debug.apk Tracker-debug.apk
           fi
       - name: Remove the signing key
