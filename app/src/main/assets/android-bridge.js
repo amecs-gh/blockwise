@@ -117,7 +117,9 @@
 		async events(from, to, urls) {
 			const onPhone = urls.filter((u) => phoneCals.some((p) => samePath(p.url, u)))
 			const rest = urls.filter((u) => !onPhone.includes(u))
-			const out = onPhone.length ? ((await call('events', from, to, onPhone).catch(() => [])) || []) : []
+			let incomplete = false
+			const out = onPhone.length ? ((await call('events', from, to, onPhone).catch(() => { incomplete = true; return [] })) || []) : []
+			if (rest.length && !serverCals) incomplete = true
 			if (rest.length && serverCals) {
 				try {
 					const { blocks } = await remote('GET', `blocks?from=${Math.floor(from)}&to=${Math.ceil(to)}`)
@@ -126,8 +128,10 @@
 						const url = cal && rest.find((u) => samePath(u, cal.url))
 						if (url) out.push({ uid: b.uid, title: b.title, start: b.start, end: b.end, url })
 					}
-				} catch (e) { /* offline: the phone's calendars only */ }
+				} catch (e) { incomplete = true /* offline: the phone's calendars only */ }
 			}
+			// Some blocks may be missing: the engine shows what it has, but doesn't count blocks as ended
+			if (incomplete) out.incomplete = true
 			return out
 		},
 		/** A new block in the commitment's calendar on the phone (DAVx5 uploads it) */
@@ -150,8 +154,11 @@
 					push: (records) => remote('POST', 'sync', { records }),
 				},
 				calendar,
-				onChange: () => { snapshotSoon(); syncSoon(3000) },
+				// A change here: send it soon. After a sync: only update the notification.
+				onChange: (db, info) => { snapshotSoon(); if (!(info && info.sync)) syncSoon(3000) },
 			})
+			// Could not open the data (e.g. the Keystore was busy): try again on the next request
+			enginePromise.catch(() => { enginePromise = null; firstSync = null })
 		}
 		return enginePromise
 	}
@@ -174,6 +181,16 @@
 				if (box && box.length) { e.importLocal(box); await call('outboxDone', box); always = true }
 				const r = await e.sync()
 				pulled = r.pulled || 0
+				if (r.refused && r.refused.length) {
+					// Changes the server refused were undone here: say so (once per sync)
+					const reasons = [...new Set(r.refused.map((x) => x.reason))].join(' · ')
+					const it = /^it\b/i.test(navigator.language || '')
+					const msg = /clock is too far ahead/.test(reasons)
+						? (it ? 'Data e ora del telefono sembrano sbagliate: alcune modifiche non sono state sincronizzate. Controlla le impostazioni di data e ora.' : 'Your phone\'s date and time look wrong, so some changes could not be synced. Check the date and time settings.')
+						: (it ? 'Alcune modifiche non sono state sincronizzate e sono state annullate: ' : 'Some changes could not be synced and were undone: ') + reasons
+					try { window.OC.Notification.showTemporary(msg, { type: 'error' }) } catch (x) { /* no page */ }
+					always = true
+				}
 			} catch (err) { /* offline: the changes wait */ }
 			snapshotSoon()
 			if (always || pulled) fire('changed')
