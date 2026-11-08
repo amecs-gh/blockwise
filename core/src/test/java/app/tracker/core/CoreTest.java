@@ -79,15 +79,42 @@ public final class CoreTest {
         check(!ServerUrl.sameOrigin("https://cloud.example.com", "https://cloud.example.com.evil.com/"), "look-alike host is not the server");
         check(!ServerUrl.sameOrigin("https://cloud.example.com", "http://cloud.example.com/"), "http is not https");
 
-        // --- only Tracker's API ---
-        for (String p : new String[] {"state", "tasks-order", "tasks/12/subtasks-order", "sessions/start", "sessions/1", "blocks?from=1&to=2", "tasks?commitmentId=1&status=open"}) {
-            check(ApiGuard.allowed("GET", p), "allowed " + p);
+        // --- only the sync endpoints (and read-only calendar fallback) ---
+        for (String[] p : new String[][] {{"GET", "sync?since=0&limit=1000"}, {"GET", "sync?since=123456&limit=7"}, {"POST", "sync"}, {"GET", "state"}, {"GET", "blocks?from=1&to=2"}}) {
+            check(ApiGuard.allowed(p[0], p[1]), "allowed " + p[0] + " " + p[1]);
         }
-        for (String p : new String[] {"../../remote.php/dav", "tasks/1/../../x", "tasks//1", "ocs/v2.php", "x?y=a%2F", "/state", ""}) {
-            check(!ApiGuard.allowed("GET", p), "refused " + p);
+        for (String[] p : new String[][] {{"POST", "tasks"}, {"PUT", "settings"}, {"DELETE", "sessions/1"}, {"GET", "tasks"}, {"GET", "sync?since=0&limit=1000&x=1"},
+                {"GET", "sync?since=-1&limit=1"}, {"GET", "../../remote.php/dav"}, {"GET", "state/../x"}, {"POST", "state"}, {"GET", "sync"}, {"PROPFIND", "sync"}, {null, "state"}, {"GET", ""}}) {
+            check(!ApiGuard.allowed(p[0], p[1]), "refused " + p[0] + " " + p[1]);
         }
-        check(!ApiGuard.allowed("PROPFIND", "tasks"), "odd method refused");
-        check(!ApiGuard.allowed(null, "tasks"), "no method refused");
+
+        // --- clocks for changes made from the notification ---
+        eq(Hlc.next(null, 1700000000000L, "dabc-n"), "1700000000000-0000-dabc-n", "first clock");
+        eq(Hlc.next("1700000000000-0000-srv", 1700000000000L, "p"), "1700000000000-0001-p", "same ms: counter goes up");
+        eq(Hlc.next("1700000005000-00ff-srv", 1700000000000L, "p"), "1700000005000-0100-p", "clock behind: stays after the last one");
+        eq(Hlc.next("1700000000000-0003-srv", 1700000009000L, "p"), "1700000009000-0000-p", "later time: new ms");
+        check(Hlc.next("1700000000000-0003-srv", 1700000000000L, "p").compareTo("1700000000000-0003-srv") > 0, "always after prev");
+        eq(Hlc.next("garbage", 5L, "p"), "0000000000005-0000-p", "invalid prev ignored");
+        eq(Hlc.max("1700000000000-0001-a", "1700000000000-0002-b"), "1700000000000-0002-b", "max");
+        eq(Hlc.max(null, "bad"), null, "max of nothing");
+        boolean threw = false;
+        try {
+            Hlc.next(null, 1, "bad node!");
+        } catch (IllegalArgumentException e) {
+            threw = true;
+        }
+        check(threw, "invalid node refused");
+
+        // --- phone calendars <-> Nextcloud calendars ---
+        eq(CalendarPath.of("https://cloud.example.com/nc/remote.php/dav/calendars/manuel/thesis/"), "/remote.php/dav/calendars/manuel/thesis/", "DAVx5 address");
+        eq(CalendarPath.of("/remote.php/dav/calendars/a%40b.ch/my%20cal/"), "/remote.php/dav/calendars/a@b.ch/my cal/", "decoded");
+        check(CalendarPath.same("https://x.ts.net/remote.php/dav/calendars/m/work-2/", "/remote.php/dav/calendars/m/work-2/"), "same calendar");
+        check(!CalendarPath.same("https://x/remote.php/dav/calendars/m/work/", "/remote.php/dav/calendars/m/work-2/"), "different calendar");
+        eq(CalendarPath.of("https://x/remote.php/dav/calendars/m/"), null, "no calendar");
+        eq(CalendarPath.of("https://x/remote.php/dav/calendars/m/a/b/"), null, "too deep");
+        eq(CalendarPath.of("https://x/remote.php/dav/calendars/m/a%2Fb/"), null, "slash inside refused");
+        eq(CalendarPath.of("local"), null, "local calendar");
+        eq(CalendarPath.of(null), null, "nothing");
 
         // --- Pomodoro phases: 25 focus, 5 break, ... 4 rounds, long break at 115 min ---
         Dash.Settings s = new Dash.Settings();

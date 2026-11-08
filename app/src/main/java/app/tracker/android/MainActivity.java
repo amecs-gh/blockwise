@@ -133,9 +133,51 @@ public final class MainActivity extends Activity implements Tracking.Listener {
     }
 
     @Override
-    public void onDash(Dash dash, boolean loggedOut) {
+    public void onDash(Dash dash, boolean loggedOut, boolean changedElsewhere) {
         if (loggedOut) {
             loggedOut();
+        } else if (changedElsewhere && appPage) {
+            // Timer stopped from the notification, or changed on another device: the page syncs
+            emit("changed", null);
+        }
+    }
+
+    // --- calendar permission ---------------------------------------------------------------
+
+    interface Granted {
+        void done(boolean granted);
+    }
+
+    private static final int REQ_CALENDAR = 2;
+    private final java.util.List<Granted> calendarWaiting = new java.util.ArrayList<>();
+
+    /** Asks for calendar access once (blocks come from the phone's calendars, offline too). */
+    void askForCalendar(Granted cb) {
+        if (Calendars.canRead(this) && Calendars.canWrite(this)) {
+            cb.done(true);
+            return;
+        }
+        calendarWaiting.add(cb);
+        if (calendarWaiting.size() == 1) {
+            requestPermissions(new String[] {Manifest.permission.READ_CALENDAR, Manifest.permission.WRITE_CALENDAR}, REQ_CALENDAR);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode != REQ_CALENDAR) {
+            return;
+        }
+        boolean granted = Calendars.canRead(this) && Calendars.canWrite(this);
+        java.util.List<Granted> waiting = new java.util.ArrayList<>(calendarWaiting);
+        calendarWaiting.clear();
+        for (Granted g : waiting) {
+            g.done(granted);
+        }
+        if (granted) {
+            emit("changed", null);
+            Tracking.refresh(this, null);
         }
     }
 
@@ -463,6 +505,11 @@ public final class MainActivity extends Activity implements Tracking.Listener {
         }
     }
 
+    private boolean pendingChanges() {
+        JSONObject snap = Local.snapshot(this);
+        return (snap != null && snap.optInt("pending", 0) > 0) || !Local.outboxEmpty(this);
+    }
+
     /** Account sheet: who you are, notifications, exact reminders, log out. */
     void showAccount() {
         final I18n t = Tracking.i18n();
@@ -495,7 +542,8 @@ public final class MainActivity extends Activity implements Tracking.Listener {
     private void confirmLogout(String host) {
         final I18n t = Tracking.i18n();
         new AlertDialog.Builder(this)
-                .setMessage(t.t("Log out of {host}? The app password is removed from Nextcloud.", Vars.of("host", host)))
+                .setMessage(t.t("Log out of {host}? The app password is removed from Nextcloud.", Vars.of("host", host))
+                        + (pendingChanges() ? "\n\n" + t.t("Some changes on this phone are not synced yet and will be lost.") : ""))
                 .setPositiveButton(t.t("Log out"), (d, w) -> {
                     final Nextcloud client = Store.client(this);
                     Tracking.IO.execute(() -> {
@@ -503,6 +551,9 @@ public final class MainActivity extends Activity implements Tracking.Listener {
                             client.revoke();
                         }
                         Store.clear(this);
+                        // Logging out removes Tracker's data from this phone (it is on the server)
+                        Vault.wipe(this);
+                        Local.saveSnapshot(this, null);
                         runOnUiThread(this::loggedOut);
                     });
                 })

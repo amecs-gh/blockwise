@@ -106,3 +106,20 @@ reminders too. Turn one of them off if you get both: person icon → Notificatio
 | `app/src/main/assets/` | The page: `app.html`, `android-bridge.js`, `android.css`; `web/` is copied from `../tracker` |
 | `test/ui.test.js` | The page at phone size in Chromium against a Nextcloud test server |
 | `tools/android_stubs.py` | Type-checks the app's Java without the Android SDK |
+
+## Local-first
+
+Tracker runs on the phone: the interface talks to the engine (`web/engine.js`, from the
+Nextcloud app's `js/engine.js`), which keeps your data on the phone and syncs with
+Nextcloud (`/api/sync`, Tracker 0.4.0 or later) whenever it can. Per field, the latest
+change wins; deleted stays deleted.
+
+- **Your data on the phone** is encrypted with its own Android Keystore key, in the
+  no-backup folder. Logging out removes it; another account starts empty.
+- **Blocks** come from the phone's calendars (your Nextcloud calendars, synced by
+  DAVx⁵), so they work offline, and "Plan a block" adds one there. Calendars the phone
+  doesn't have are read from the server while online.
+- **The app password** reaches only `GET/POST sync`, `GET state` and `GET blocks`
+  (`core/ApiGuard`).
+- **Stop in the notification** works offline: the change is kept (encrypted), sent to
+  the server when possible and handed to the engine when the app opens.

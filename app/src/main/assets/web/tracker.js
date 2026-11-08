@@ -208,6 +208,9 @@
 		state.settings = s.settings
 		state.running = s.running
 		state.longBreakUntil = s.longBreakUntil
+		// Apps with Tracker on the device: blocks can be planned here, data syncs later
+		state.features = s.features || {}
+		state.sync = s.sync || null
 	}
 
 	// ---------------------------------------------------------------------------
@@ -2047,6 +2050,8 @@
 					? h('ul', { class: 'imp-cpage__next' }, next.map((b) => h('li', null, blockTime(b), b.title ? h('span', { class: 'imp-muted' }, ` · ${b.title}`) : null)))
 					: h('span', { class: 'imp-muted' }, tr('No blocks planned.')))))))
 
+		if (state.features.createBlocks) page.append(newBlockForm(c))
+
 		// 3. Hours committed (for work or university)
 		const rows = []
 		for (let o = -4; o <= 4; o++) rows.push({ o, ...weekAt(o) })
@@ -2414,6 +2419,55 @@
 		document.addEventListener('visibilitychange', () => {
 			if (document.visibilityState === 'visible' && state.route === 'now') render()
 		})
+	}
+
+	/**
+	 * Plan a block (apps with the phone's calendar): a timed event in the
+	 * commitment's calendar, which syncs to Nextcloud with the calendar.
+	 */
+	function newBlockForm(c) {
+		const wrap = h('section', { class: 'imp-cpage__section imp-newblock' })
+		const pad = (n) => String(n).padStart(2, '0')
+		const closed = () => wrap.replaceChildren(h('button', { class: 'imp-button', type: 'button', onclick: open }, tr('Plan a block')))
+		function open() {
+			const start = new Date()
+			start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15, 0, 0)
+			const end = new Date(start.getTime() + 3600e3)
+			const day = h('input', { type: 'date', required: true, value: `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`, 'aria-label': tr('Day') })
+			const from = h('input', { type: 'time', required: true, value: `${pad(start.getHours())}:${pad(start.getMinutes())}`, 'aria-label': tr('From') })
+			const until = h('input', { type: 'time', required: true, value: `${pad(end.getHours())}:${pad(end.getMinutes())}`, 'aria-label': tr('Until') })
+			const title = h('input', { type: 'text', placeholder: c.name, maxlength: '255', 'aria-label': tr('Title') })
+			const at = (t) => {
+				const [y, mo, d] = day.value.split('-').map(Number)
+				const [hh, mm] = t.split(':').map(Number)
+				return Math.floor(new Date(y, mo - 1, d, hh, mm).getTime() / 1000)
+			}
+			const save = async (e) => {
+				e.preventDefault()
+				const s = at(from.value)
+				let en = at(until.value)
+				if (!Number.isFinite(s) || !Number.isFinite(en)) return
+				if (en <= s) en += 86400 // ends after midnight
+				try {
+					await api('POST', 'blocks', { commitmentId: c.id, start: s, end: en, title: title.value.trim() || null })
+				} catch (err) { return }
+				toast(tr('Block planned'))
+				await render()
+			}
+			wrap.replaceChildren(
+				h('h2', null, tr('Plan a block')),
+				h('form', { class: 'imp-newblock__form', onsubmit: save },
+					h('label', null, h('span', null, tr('Day')), day),
+					h('label', null, h('span', null, tr('From')), from),
+					h('label', null, h('span', null, tr('Until')), until),
+					h('label', { class: 'imp-newblock__title' }, h('span', null, tr('Title')), title),
+					h('div', { class: 'imp-newblock__actions' },
+						h('button', { class: 'imp-button', type: 'button', onclick: closed }, tr('Cancel')),
+						h('button', { class: 'imp-button imp-button--primary', type: 'submit' }, tr('Save')))))
+			day.focus()
+		}
+		closed()
+		return wrap
 	}
 
 	if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot)

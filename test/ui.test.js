@@ -1,5 +1,7 @@
 // The Android app's page (app.html, setup.html) in Chromium at phone size, with a
-// stand-in for the Java bridge that forwards to the test Nextcloud.
+// stand-in for the Java bridge: the engine's data in memory (the app keeps it
+// encrypted), sync requests forwarded to the test Nextcloud, no phone calendars
+// (so blocks come from the server), and an "offline" switch.
 const { chromium } = require('playwright')
 const path = require('node:path')
 const assert = require('node:assert/strict')
@@ -19,6 +21,9 @@ const THEME = (dark, dynamic) => ({
 		: null,
 })
 
+const device = { db: null, snapshot: null, offline: false, remoteCalls: [] }
+const GUARD = /^(sync\?since=\d{1,18}&limit=\d{1,5}|state|blocks\?from=\d{1,12}&to=\d{1,12})$/ // = core ApiGuard
+
 async function phone(browser, file, { dark = false, locale = 'en-US', hash = '', dynamic = false } = {}) {
 	const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2.75, isMobile: true, hasTouch: true, colorScheme: dark ? 'dark' : 'light', locale })
 	const page = await ctx.newPage()
@@ -32,8 +37,17 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		let env
 		try {
 			if (channel === 'state') env = { data: { platform: 'android', locale } }
-			else if (channel === 'api') {
+			else if (channel === 'dbLoad') env = { data: device.db }
+			else if (channel === 'dbSave') { device.db = args[0]; env = { data: null } }
+			else if (channel === 'snapshot') { device.snapshot = args[0]; env = { data: null } }
+			else if (channel === 'outbox' || channel === 'calendars' || channel === 'events') env = { data: [] }
+			else if (channel === 'calendarAccess') env = { data: false }
+			else if (channel === 'createEvent') env = { error: 'This commitment\'s calendar is not on this phone. Turn it on in DAVx5.', status: 0 }
+			else if (channel === 'remote') {
 				const [method, p, body] = args
+				device.remoteCalls.push(`${method} ${p}`)
+				if (!(method === 'GET' ? GUARD.test(p) : method === 'POST' && p === 'sync')) throw new Error('refused by ApiGuard: ' + method + ' ' + p)
+				if (device.offline) throw new Error('offline')
 				const r = await fetch(`${SERVER}/index.php/apps/tracker/api/${p}`, { method, headers: { Authorization: AUTH, 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }, body: body === null ? undefined : JSON.stringify(body) })
 				const d = await r.json().catch(() => null)
 				env = r.ok ? { data: d } : { error: (d && d.message) || `HTTP ${r.status}`, status: r.status }
@@ -59,7 +73,8 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		const a = await phone(browser, 'app.html', { dark, locale, hash: '#now', dynamic })
 		await a.page.waitForSelector('.imp-page', { timeout: 15000 })
 		const tag = `${dark ? 'dark' : 'light'}-${locale.slice(0, 2)}${dynamic ? '-you' : ''}`
-		for (const pg of ['now', 'tasks', 'done', 'time', 'settings', 'c/1']) {
+		const firstC = await a.page.evaluate(() => document.querySelector('.imp-nav__commitments a')?.getAttribute('href')?.slice(1))
+		for (const pg of ['now', 'tasks', 'done', 'time', 'settings', firstC]) {
 			await a.page.evaluate((h) => { location.hash = h }, '#' + pg)
 			// wait until the page has loaded (some make several requests)
 			await a.page.waitForFunction((pg) => { const h = document.querySelector('.imp-page h1'); const want = { now: null, tasks: 'Tasks|Task', done: 'Done|Fatto', time: 'Time|Tempo', settings: 'Settings|Impostazioni' }[pg]; return pg === 'now' ? !!document.querySelector('.imp-timer') : pg === 'tasks' ? !!document.querySelector('.imp-tq__top') : pg.startsWith('c/') ? !!document.querySelector('.imp-cpage') : !!h && new RegExp('^(' + want + ')$').test(h.textContent.trim()) }, pg, { timeout: 15000 })
@@ -76,6 +91,13 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 			assert.ok(!info.failed, `page ${pg} loads`)
 			if (!dark || pg === 'now' || pg === 'tasks') await a.page.screenshot({ path: `${shots}/${tag}-${pg.replace('/', '')}.png` })
 		}
+		assert.ok(await a.page.$('.imp-newblock button'), 'Plan a block on the commitment page')
+		await a.page.click('.imp-newblock button')
+		await a.page.locator('.imp-newblock').scrollIntoViewIfNeeded()
+		await a.page.screenshot({ path: `${shots}/${tag}-newblock.png` })
+		await a.page.click('.imp-newblock__form button[type=submit]')
+		await a.page.waitForTimeout(400)
+		await a.page.click('.imp-newblock__actions button[type=button]')
 		// Account and Calendar reach the app
 		await a.page.click('.imp-nav__apps a[title="Account"], .imp-nav__apps a[title="Account"]')
 		await a.page.click('.imp-nav__apps a >> nth=0')
@@ -85,6 +107,45 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		console.log(tag, 'ok')
 		await a.ctx.close()
 	}
+	// Everything came from the phone's engine; the server only saw sync requests
+	assert.ok(device.remoteCalls.every((c) => /^(GET sync|POST sync|GET state|GET blocks)/.test(c)), 'only sync endpoints')
+	assert.ok(device.snapshot && Array.isArray(device.snapshot.commitments) && device.snapshot.node, 'snapshot for the notifications')
+
+	console.log('offline')
+	device.offline = true
+	const o = await phone(browser, 'app.html', { hash: '#tasks' })
+	await o.page.waitForSelector('.imp-tq__top', { timeout: 15000 })
+	const before = JSON.parse(device.db)
+	const pendingBefore = Object.keys(before.dirty).length
+	// a task added offline, in the composer at the bottom
+	const title = 'Offline task ' + Date.now()
+	await o.page.click('.imp-tq__composer, .imp-compose, [class*="compose"] >> nth=0').catch(() => {})
+	const added = await o.page.evaluate(async (title) => {
+		const st = await window.trackerApp.api('GET', 'state')
+		return window.trackerApp.api('POST', 'tasks', { commitmentId: st.commitments[0].id, title: title + ' 20m' })
+	}, title)
+	assert.equal(added.estimate, 20)
+	await o.page.waitForTimeout(600)
+	assert.ok(Object.keys(JSON.parse(device.db).dirty).length > pendingBefore, 'change saved on the phone, waiting to sync')
+	assert.deepEqual(o.errors.filter((e) => !/offline/.test(e)), [], 'no console errors offline')
+	await o.ctx.close()
+	console.log('  ✔ works offline from the phone\'s data')
+
+	device.offline = false
+	const back = await phone(browser, 'app.html', { hash: '#tasks' })
+	await back.page.waitForSelector('.imp-tq__top', { timeout: 15000 })
+	await back.page.waitForFunction(() => true)
+	await back.page.waitForTimeout(1500)
+	const r = await fetch(`${SERVER}/index.php/apps/tracker/api/sync?since=0&limit=1000`, { headers: { Authorization: AUTH, 'OCS-APIRequest': 'true' } })
+	const all = (await r.json()).records
+	const onServer = all.find((x) => x.type === 'task' && x.id === added.uuid)
+	assert.ok(onServer && onServer.fields.title === title, 'the offline task reached the server when back online')
+	assert.equal(Object.keys(JSON.parse(device.db).dirty).length, 0, 'nothing left to sync')
+	await back.page.evaluate((id) => window.trackerApp.api('DELETE', 'tasks/' + id), added.id)
+	await back.page.waitForTimeout(3500)
+	await back.ctx.close()
+	console.log('  ✔ synced when back online')
+
 	await browser.close()
 	console.log('✔ android ui ok')
 })().catch((e) => { console.error('✘', e.message); process.exit(1) })

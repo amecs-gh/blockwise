@@ -546,7 +546,7 @@ body.android .imp-now {
 /* --- form controls ------------------------------------------------------------------------- */
 
 /* Outlined text fields */
-body.android :is(input[type="text"], input[type="number"], input[type="email"], input[type="url"], input:not([type]), select, textarea) {
+body.android :is(input[type="text"], input[type="number"], input[type="email"], input[type="url"], input[type="date"], input[type="time"], input:not([type]), select, textarea) {
 	min-height: 48px;
 	padding: 8px 14px;
 	border: 1px solid var(--md-outline);
@@ -557,7 +557,7 @@ body.android :is(input[type="text"], input[type="number"], input[type="email"], 
 	box-shadow: none;
 	outline: none;
 }
-body.android :is(input[type="text"], input[type="number"], input[type="email"], input[type="url"], input:not([type]), select, textarea):focus {
+body.android :is(input[type="text"], input[type="number"], input[type="email"], input[type="url"], input[type="date"], input[type="time"], input:not([type]), select, textarea):focus {
 	border-color: var(--md-primary);
 	box-shadow: inset 0 0 0 1px var(--md-primary);
 }
@@ -764,3 +764,8 @@ body.android .imp-composer {
 	background: var(--md-errorContainer);
 	color: var(--md-onErrorContainer);
 }
+
+/* Plan a block: date and time pickers follow light/dark */
+body.android .imp-newblock h2 { margin: 0 0 12px; }
+body.android :is(input[type="date"], input[type="time"]) { color-scheme: light; }
+html.m3-dark body.android :is(input[type="date"], input[type="time"]) { color-scheme: dark; }

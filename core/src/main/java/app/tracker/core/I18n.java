@@ -14,6 +14,12 @@ public final class I18n {
     static {
         String[][] it = {
             {"Tracker", "Tracker"},
+            {"Something went wrong.", "Qualcosa è andato storto."},
+            {"Tracker may not write to your calendar.", "Tracker non può scrivere nel tuo calendario."},
+            {"This commitment's calendar is not on this phone. Turn it on in DAVx5.", "Il calendario di questo impegno non è su questo telefono. Attivalo in DAVx5."},
+            {"This calendar is read-only.", "Questo calendario è di sola lettura."},
+            {"Could not add the block.", "Impossibile aggiungere il blocco."},
+            {"Some changes on this phone are not synced yet and will be lost.", "Alcune modifiche su questo telefono non sono ancora sincronizzate e andranno perse."},
             {"Unplanned", "Non pianificato"},
             {"Tracking", "Registrazione in corso"},
             {"Stop", "Ferma"},
