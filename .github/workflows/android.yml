@@ -16,7 +16,8 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
+      # GitHub's Ubuntu machines come with the Android SDK (ANDROID_HOME is set);
+      # Gradle downloads the exact platform and build tools it needs.
       - name: Test and build
         run: ./gradlew --no-daemon --stacktrace :core:coreTest :app:assembleDebug
       - uses: actions/upload-artifact@v4
