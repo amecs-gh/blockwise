@@ -290,6 +290,12 @@ final class Tracking {
                 .setStyle(new Notification.BigTextStyle().bigText(body))
                 .setAutoCancel(true)
                 .setCategory(Notification.CATEGORY_REMINDER)
+                .setVisibility(Notification.VISIBILITY_PRIVATE)
+                .setPublicVersion(new Notification.Builder(c, CH_ALERTS)
+                        .setSmallIcon(R.drawable.ic_stat_tracker)
+                        .setContentTitle(i18n().t("Tracker"))
+                        .setContentText(i18n().t("Reminders"))
+                        .build())
                 .setContentIntent(openApp(c))
                 .build();
         c.getSystemService(NotificationManager.class).notify(("alert-" + key).hashCode(), n);

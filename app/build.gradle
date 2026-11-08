@@ -14,11 +14,34 @@ android {
         versionName '0.1.0'
     }
 
+    // Release builds are signed with your own key, given to the build as
+    // environment variables (GitHub secrets, never in the repository). Without
+    // them only the debug build is possible.
+    def keystore = System.getenv('TRACKER_KEYSTORE')
+    signingConfigs {
+        if (keystore) {
+            release {
+                storeFile file(keystore)
+                storePassword System.getenv('TRACKER_KEYSTORE_PASSWORD')
+                keyAlias 'tracker'
+                keyPassword System.getenv('TRACKER_KEYSTORE_PASSWORD')
+                enableV1Signing false
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Not debuggable: no inspecting the app or its data over USB
+            debuggable false
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (keystore) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 
