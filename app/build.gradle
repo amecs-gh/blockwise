@@ -59,3 +59,15 @@ tasks.register('syncWeb') {
     }
 }
 tasks.named('preBuild') { dependsOn 'syncWeb' }
+
+android {
+    lint {
+        // Calls that don't exist on older Android versions, missing permissions etc. fail the build
+        abortOnError true
+        checkReleaseBuilds true
+        textReport true
+        textOutput 'stdout'
+        // Newer library versions or SDK levels are suggestions, not errors
+        disable 'GradleDependency', 'OldTargetApi', 'AndroidGradlePluginVersion', 'NewerVersionAvailable'
+    }
+}
