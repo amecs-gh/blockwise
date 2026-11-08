@@ -2446,3 +2446,12 @@
 		padding-left: 0;
 	}
 }
+
+/* Plan a block (apps with the phone's calendar) */
+.tracker .imp-newblock__form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; align-items: end; }
+.tracker .imp-newblock__form label { display: flex; flex-direction: column; gap: 4px; font-size: .85em; color: var(--color-text-maxcontrast); }
+.tracker .imp-newblock__form input { width: 100%; margin: 0; min-height: 40px; }
+.tracker .imp-newblock__title, .tracker .imp-newblock__actions { grid-column: 1 / -1; }
+.tracker .imp-newblock h2 { margin-top: 0; }
+.tracker .imp-newblock__actions { display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 420px) { .tracker .imp-newblock__form { grid-template-columns: 1fr 1fr; } .tracker .imp-newblock__form label:first-child { grid-column: 1 / -1; } }

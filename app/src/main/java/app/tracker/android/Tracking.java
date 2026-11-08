@@ -17,12 +17,18 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import app.tracker.core.Alerts;
+import app.tracker.core.CalendarPath;
 import app.tracker.core.Dash;
 import app.tracker.core.I18n;
 
@@ -38,17 +44,19 @@ final class Tracking {
     static final String ACTION_STOP = "app.tracker.android.STOP";
     static final String ACTION_CHECK = "app.tracker.android.CHECK";
 
-    /** One background thread for all network work, so requests stay in order. */
+    /** One background thread for all background work, so changes stay in order. */
     static final ExecutorService IO = Executors.newSingleThreadExecutor();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
     /** Told after each refresh (MainActivity, to reload the page when something changed elsewhere). */
     interface Listener {
-        void onDash(Dash dash, boolean loggedOut);
+        void onDash(Dash dash, boolean loggedOut, boolean changedElsewhere);
     }
 
     static volatile Listener listener;
     private static volatile Dash last;
+    /** Blocks of calendars the phone doesn't have, as the server gave them last time */
+    private static volatile List<Calendars.Event> serverEvents = new ArrayList<>();
 
     private Tracking() {
     }
@@ -72,20 +80,53 @@ final class Tracking {
     // --- refresh -------------------------------------------------------------------------
 
     /**
-     * Fetches /api/dashboard in the background, updates the notification, shows
-     * due reminders, stops at the long break, and schedules the next check.
+     * Updates the notification, shows due reminders, stops at the long break,
+     * and schedules the next check, from what the phone knows (local-first):
+     * the page engine's snapshot and the phone's calendars. When online and
+     * nothing waits to be synced, the server's state is used, so a timer
+     * started on the Mac or in the browser shows here too.
      * `done` (may be null) runs on the main thread afterwards.
      */
     static void refresh(Context context, Runnable done) {
+        refresh(context, done, true);
+    }
+
+    /** @param askServer false after a change on the phone (its data is the newest then) */
+    static void refresh(Context context, Runnable done, boolean askServer) {
         final Context c = context.getApplicationContext();
         IO.execute(() -> {
             boolean loggedOut = false;
+            boolean elsewhere = false;
             Dash d = null;
             Nextcloud client = Store.client(c);
             if (client != null) {
                 I18n t = i18n();
                 try {
-                    d = parse(new JSONObject(client.api("GET", "dashboard", null, t)));
+                    if (askServer) {
+                        pushOutbox(c, client, t);
+                    }
+                    JSONObject snap = Local.snapshot(c);
+                    boolean localChanges = (snap != null && snap.optInt("pending", 0) > 0) || !Local.outboxEmpty(c);
+                    JSONObject server = null;
+                    if (askServer || snap == null) {
+                        try {
+                            server = new JSONObject(client.api("GET", "state", null, t));
+                        } catch (Nextcloud.ApiException e) {
+                            if (e.status == 401) {
+                                throw e;
+                            }
+                            // offline: the phone's own data
+                        }
+                    }
+                    JSONObject view = snap;
+                    if (server != null && (snap == null || !localChanges)) {
+                        view = server;
+                        if (snap != null) {
+                            view.put("hlc", snap.optString("hlc", ""));
+                            elsewhere = !sameState(snap, server);
+                        }
+                    }
+                    d = build(c, view, server, client, t);
                     long now = System.currentTimeMillis() / 1000;
                     Set<String> seen = Store.seen(c);
                     Alerts.Result a = Alerts.check(d, now, seen, t);
@@ -97,25 +138,21 @@ final class Tracking {
                     }
                     if (a.stopAt != null) {
                         // Pomodoro long break: stop exactly at its start
-                        try {
-                            client.api("POST", "sessions/stop", new JSONObject().put("at", a.stopAt).put("longBreak", true).toString(), t);
-                        } catch (Nextcloud.ApiException ignored) {
-                            // tried again at the next check
+                        if (Local.stop(c, view, a.stopAt, true) != null) {
+                            pushOutbox(c, client, t);
+                            elsewhere = true;
                         }
-                        d = parse(new JSONObject(client.api("GET", "dashboard", null, t)));
+                        d = build(c, Local.snapshot(c) != null && view == snap ? Local.snapshot(c) : stopped(view, a.stopAt), server, client, t);
                     } else if (a.clearLongBreak) {
-                        d = parse(new JSONObject(client.api("GET", "dashboard", null, t)));
+                        d.longBreakUntil = null;
                     }
                 } catch (Nextcloud.ApiException e) {
-                    if (e.status == 401) {
-                        // App password revoked in Nextcloud: back to the login screen
-                        Store.clear(c);
-                        loggedOut = true;
-                        if (Store.notifications(c)) {
-                            notifyText(c, "relogin", t.t("Log in again"), t.t("Nextcloud rejected the app password. Log in again."));
-                        }
+                    // App password revoked in Nextcloud: back to the login screen (data not yet synced stays)
+                    Store.clear(c);
+                    loggedOut = true;
+                    if (Store.notifications(c)) {
+                        notifyText(c, "relogin", t.t("Log in again"), t.t("Nextcloud rejected the app password. Log in again."));
                     }
-                    d = last; // offline: keep showing what we know
                 } catch (JSONException e) {
                     d = last;
                 }
@@ -125,10 +162,11 @@ final class Tracking {
             schedule(c, client == null || loggedOut ? null : d);
             final Dash result = d;
             final boolean out = loggedOut;
+            final boolean changed = elsewhere;
             MAIN.post(() -> {
                 Listener l = listener;
                 if (l != null) {
-                    l.onDash(result, out);
+                    l.onDash(result, out, changed);
                 }
                 if (done != null) {
                     done.run();
@@ -137,27 +175,192 @@ final class Tracking {
         });
     }
 
-    /** Stop tracking from the notification. */
+    /** Did the timer or the long break change somewhere else (Mac, browser)? */
+    private static boolean sameState(JSONObject snap, JSONObject server) {
+        JSONObject a = snap.optJSONObject("running");
+        JSONObject b = server.optJSONObject("running");
+        String ua = a == null ? "" : a.optString("uuid", "") + "/" + a.optLong("start");
+        String ub = b == null ? "" : b.optString("uuid", "") + "/" + b.optLong("start");
+        return ua.equals(ub) && snap.optLong("longBreakUntil", 0) == server.optLong("longBreakUntil", 0);
+    }
+
+    private static JSONObject stopped(JSONObject view, long at) throws JSONException {
+        JSONObject v = new JSONObject(view.toString());
+        v.put("running", JSONObject.NULL);
+        JSONObject s = v.optJSONObject("settings");
+        v.put("longBreakUntil", at + 60L * (s == null ? 15 : s.optInt("longBreakMinutes", 15)));
+        return v;
+    }
+
+    /** Sends changes made from the notification (when online; kept for the page either way). */
+    private static void pushOutbox(Context c, Nextcloud client, I18n t) throws Nextcloud.ApiException {
+        JSONArray recs = Local.pending(c, "pushed");
+        if (recs.length() == 0) {
+            return;
+        }
+        try {
+            client.api("POST", "sync", new JSONObject().put("records", recs).toString(), t);
+            // Accepted, or refused for good (e.g. a timer the server doesn't know yet: the page sends it whole)
+            Local.mark(c, recs, "pushed");
+        } catch (Nextcloud.ApiException e) {
+            if (e.status == 401) {
+                throw e;
+            }
+            // offline: tried again at the next check
+        } catch (JSONException ignored) {
+            // cannot happen with records we made
+        }
+    }
+
+    /** Stop tracking from the notification (works offline; syncs when it can). */
     static void stop(Context context, Runnable done) {
         final Context c = context.getApplicationContext();
         IO.execute(() -> {
             Nextcloud client = Store.client(c);
             if (client != null) {
                 try {
-                    client.api("POST", "sessions/stop", "{}", i18n());
-                } catch (Nextcloud.ApiException ignored) {
+                    Dash shown = last;
+                    JSONObject snap = Local.snapshot(c);
+                    JSONObject view = snap;
+                    // The notification may show a timer started elsewhere: stop that one
+                    if (shown != null && shown.running != null && shown.running.uuid != null
+                            && (snap == null || snap.optJSONObject("running") == null || !shown.running.uuid.equals(snap.optJSONObject("running").optString("uuid")))) {
+                        view = new JSONObject().put("running", new JSONObject().put("uuid", shown.running.uuid).put("start", shown.running.start))
+                                .put("hlc", snap == null ? "" : snap.optString("hlc", ""));
+                    }
+                    Local.stop(c, view, System.currentTimeMillis() / 1000, false);
+                    pushOutbox(c, client, i18n());
+                } catch (JSONException | Nextcloud.ApiException ignored) {
                     // the refresh shows the real state
                 }
             }
-            refresh(c, done);
+            refresh(c, () -> {
+                Listener l = listener;
+                if (l != null) {
+                    l.onDash(last, false, true);
+                }
+                if (done != null) {
+                    done.run();
+                }
+            });
         });
     }
 
     static void clearAll(Context context) {
         Context c = context.getApplicationContext();
         last = null;
+        serverEvents = new ArrayList<>();
         c.getSystemService(NotificationManager.class).cancelAll();
         schedule(c, null);
+    }
+
+    // --- what the notification shows -----------------------------------------------------------
+
+    /**
+     * @param view the snapshot or the server's state: running, settings, longBreakUntil, commitments
+     * @param server the server's state if online (its calendar list, for blocks the phone doesn't have)
+     */
+    static Dash build(Context c, JSONObject view, JSONObject server, Nextcloud client, I18n t) throws JSONException {
+        if (view == null) {
+            return null;
+        }
+        Dash d = parse(view);
+        long now = System.currentTimeMillis() / 1000;
+        long from = now - 86400;
+        long to = now + 14 * 86400;
+        JSONArray list = view.optJSONArray("commitments");
+        List<String> urls = new ArrayList<>();
+        Map<Long, String> urlOf = new HashMap<>();
+        for (int i = 0; list != null && i < list.length(); i++) {
+            JSONObject o = list.getJSONObject(i);
+            String u = o.optString("calendarUrl", "");
+            if (!u.isEmpty() && !"null".equals(u)) {
+                urls.add(u);
+                urlOf.put(o.getLong("id"), u);
+            }
+        }
+        List<Calendars.Event> events = Calendars.events(c, from, to, urls);
+        // Calendars not on the phone (no DAVx5): the server's blocks, when online
+        List<String> missing = new ArrayList<>();
+        List<Calendars.Cal> phone = Calendars.list(c);
+        for (String u : urls) {
+            boolean found = false;
+            for (Calendars.Cal cal : phone) {
+                found |= CalendarPath.same(cal.url, u);
+            }
+            if (!found) {
+                missing.add(u);
+            }
+        }
+        if (!missing.isEmpty() && (server == null || client == null)) {
+            // offline, or right after a change here: the server's blocks fetched last time
+            for (Calendars.Event ev : serverEvents) {
+                for (String m : missing) {
+                    if (CalendarPath.same(ev.url, m)) {
+                        events.add(ev);
+                    }
+                }
+            }
+        }
+        if (!missing.isEmpty() && server != null && client != null) {
+            Map<Long, String> calUrl = new HashMap<>();
+            JSONArray cals = server.optJSONArray("calendars");
+            for (int i = 0; cals != null && i < cals.length(); i++) {
+                JSONObject cal = cals.getJSONObject(i);
+                calUrl.put(cal.getLong("id"), cal.optString("url", ""));
+            }
+            try {
+                JSONArray blocks = new JSONObject(client.api("GET", "blocks?from=" + from + "&to=" + to, null, t)).optJSONArray("blocks");
+                List<Calendars.Event> fetched = new ArrayList<>();
+                for (int i = 0; blocks != null && i < blocks.length(); i++) {
+                    JSONObject b = blocks.getJSONObject(i);
+                    String u = calUrl.get(b.optLong("calendarId"));
+                    for (String m : missing) {
+                        if (u != null && CalendarPath.same(u, m)) {
+                            Calendars.Event ev = new Calendars.Event();
+                            ev.uid = b.optString("uid", "");
+                            ev.title = b.optString("title", "");
+                            ev.start = b.getLong("start");
+                            ev.end = b.getLong("end");
+                            ev.url = m;
+                            events.add(ev);
+                            fetched.add(ev);
+                        }
+                    }
+                }
+                serverEvents = fetched;
+            } catch (Nextcloud.ApiException ignored) {
+                // offline: blocks from the phone only
+            }
+        }
+        Collections.sort(events, (a, b) -> Long.compare(a.start, b.start));
+        for (Dash.Entry e : d.commitments) {
+            String u = urlOf.get(e.commitmentId);
+            if (u == null) {
+                continue;
+            }
+            for (Calendars.Event ev : events) {
+                if (!CalendarPath.same(ev.url, u) || ev.end <= now) {
+                    continue;
+                }
+                if (ev.start <= now) {
+                    e.currentBlock = block(ev);
+                } else if (e.nextBlock == null) {
+                    e.nextBlock = block(ev);
+                    break;
+                }
+            }
+        }
+        return d;
+    }
+
+    private static Dash.Block block(Calendars.Event ev) {
+        Dash.Block b = new Dash.Block();
+        b.uid = ev.uid;
+        b.title = ev.title;
+        b.start = ev.start;
+        b.end = ev.end;
+        return b;
     }
 
     // --- JSON -> core model -------------------------------------------------------------------
@@ -175,7 +378,8 @@ final class Tracking {
         JSONObject r = j.optJSONObject("running");
         if (r != null) {
             d.running = new Dash.Running();
-            d.running.id = r.getLong("id");
+            d.running.id = r.optLong("id", 0);
+            d.running.uuid = r.optString("uuid", "").isEmpty() ? null : r.optString("uuid");
             d.running.commitmentId = r.isNull("commitmentId") ? null : r.getLong("commitmentId");
             d.running.start = r.getLong("start");
             d.running.pomodoro = r.optInt("pomodoro", 0) == 1 || r.optBoolean("pomodoro", false);
@@ -185,29 +389,15 @@ final class Tracking {
         if (list != null) {
             for (int i = 0; i < list.length(); i++) {
                 JSONObject o = list.getJSONObject(i);
-                JSONObject c = o.getJSONObject("commitment");
+                JSONObject c = o.has("commitment") ? o.getJSONObject("commitment") : o;
                 Dash.Entry e = new Dash.Entry();
                 e.commitmentId = c.getLong("id");
                 e.name = c.optString("name", "");
                 e.color = c.optString("color", "#0082c9");
-                e.currentBlock = block(o.optJSONObject("currentBlock"));
-                e.nextBlock = block(o.optJSONObject("nextBlock"));
                 d.commitments.add(e);
             }
         }
         return d;
-    }
-
-    private static Dash.Block block(JSONObject o) throws JSONException {
-        if (o == null) {
-            return null;
-        }
-        Dash.Block b = new Dash.Block();
-        b.uid = o.optString("uid", "");
-        b.title = o.optString("title", "");
-        b.start = o.getLong("start");
-        b.end = o.getLong("end");
-        return b;
     }
 
     // --- notifications ---------------------------------------------------------------------------

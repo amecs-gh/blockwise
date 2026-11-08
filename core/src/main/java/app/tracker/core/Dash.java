@@ -3,7 +3,7 @@ package app.tracker.core;
 import java.util.ArrayList;
 import java.util.List;
 
-/** The parts of /api/dashboard the reminders need (filled from JSON by the app). */
+/** What the reminders need: timer, settings, each commitment's current and next block (filled by the app). */
 public final class Dash {
     public static final class Settings {
         public int focusMinutes = 25;
@@ -15,6 +15,8 @@ public final class Dash {
 
     public static final class Running {
         public long id;
+        /** the session's uuid (to stop it from the notification) */
+        public String uuid;
         /** null = unplanned time */
         public Long commitmentId;
         public long start;

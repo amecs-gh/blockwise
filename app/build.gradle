@@ -68,11 +68,11 @@ def webDir = file('src/main/assets/web')
 tasks.register('syncWeb') {
     description = 'Copies Tracker\'s interface from ../tracker into the app.'
     onlyIf { new File(trackerDir, 'appinfo/info.xml').exists() }
-    inputs.files(new File(trackerDir, 'js/tracker.js'), new File(trackerDir, 'css/tracker.css'), new File(trackerDir, 'l10n/it.json'))
+    inputs.files(new File(trackerDir, 'js/tracker.js'), new File(trackerDir, 'js/engine.js'), new File(trackerDir, 'css/tracker.css'), new File(trackerDir, 'l10n/it.json'))
     outputs.dir(webDir)
     doLast {
         webDir.mkdirs()
-        ['js/tracker.js': 'tracker.js', 'css/tracker.css': 'tracker.css'].each { from, to ->
+        ['js/tracker.js': 'tracker.js', 'js/engine.js': 'engine.js', 'css/tracker.css': 'tracker.css'].each { from, to ->
             new File(webDir, to).bytes = new File(trackerDir, from).bytes
         }
         def italian = new groovy.json.JsonSlurper().parse(new File(trackerDir, 'l10n/it.json'), 'UTF-8').translations

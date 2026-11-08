@@ -61,6 +61,8 @@ final class Store {
 
     /** @return false if the Keystore failed and the password lives in memory only */
     static synchronized boolean saveLogin(Context c, String server, String loginName, String appPassword) {
+        // Another account: the phone's Tracker data starts empty
+        Vault.claim(c, server, loginName);
         SharedPreferences.Editor e = prefs(c).edit()
                 .putString("server", server)
                 .putString("loginName", loginName)
@@ -68,7 +70,7 @@ final class Store {
                 .remove("seen");
         boolean sealed;
         try {
-            e.putString("password", encrypt(appPassword));
+            e.putString("password", encrypt(KEY_ALIAS, appPassword));
             memoryPassword = null;
             sealed = true;
         } catch (Exception ex) {
@@ -89,7 +91,7 @@ final class Store {
             return null;
         }
         try {
-            return decrypt(stored);
+            return decrypt(KEY_ALIAS, stored);
         } catch (Exception ex) {
             return null;
         }
@@ -143,14 +145,14 @@ final class Store {
 
     // --- Android Keystore ---
 
-    private static SecretKey key() throws Exception {
+    private static SecretKey key(String alias) throws Exception {
         KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
         ks.load(null);
-        if (ks.containsAlias(KEY_ALIAS)) {
-            return ((KeyStore.SecretKeyEntry) ks.getEntry(KEY_ALIAS, null)).getSecretKey();
+        if (ks.containsAlias(alias)) {
+            return ((KeyStore.SecretKeyEntry) ks.getEntry(alias, null)).getSecretKey();
         }
         KeyGenerator kg = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
-        kg.init(new KeyGenParameterSpec.Builder(KEY_ALIAS, KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+        kg.init(new KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
                 .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
                 .setKeySize(256)
@@ -158,9 +160,9 @@ final class Store {
         return kg.generateKey();
     }
 
-    private static String encrypt(String plain) throws Exception {
+    static String encrypt(String alias, String plain) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.ENCRYPT_MODE, key());
+        cipher.init(Cipher.ENCRYPT_MODE, key(alias));
         byte[] iv = cipher.getIV();
         byte[] ct = cipher.doFinal(plain.getBytes(StandardCharsets.UTF_8));
         ByteBuffer b = ByteBuffer.allocate(1 + iv.length + ct.length);
@@ -168,13 +170,16 @@ final class Store {
         return Base64.getEncoder().encodeToString(b.array());
     }
 
-    private static String decrypt(String stored) throws Exception {
+    static String decrypt(String alias, String stored) throws Exception {
         byte[] all = Base64.getDecoder().decode(stored);
         int ivLen = all[0];
         byte[] iv = new byte[ivLen];
         System.arraycopy(all, 1, iv, 0, ivLen);
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        cipher.init(Cipher.DECRYPT_MODE, key(), new GCMParameterSpec(GCM_TAG_BITS, iv));
+        if (ivLen != 12 || all.length < 1 + ivLen + GCM_TAG_BITS / 8) {
+            throw new IllegalArgumentException("damaged");
+        }
+        cipher.init(Cipher.DECRYPT_MODE, key(alias), new GCMParameterSpec(GCM_TAG_BITS, iv));
         byte[] pt = cipher.doFinal(all, 1 + ivLen, all.length - 1 - ivLen);
         return new String(pt, StandardCharsets.UTF_8);
     }

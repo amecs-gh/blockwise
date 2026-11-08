@@ -7,6 +7,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -18,12 +20,19 @@ import app.tracker.core.ServerUrl;
 /**
  * What the app's own page may ask the app to do (window.TrackerAndroid, see
  * assets/android-bridge.js). Answers go back as {"data": ...} or
- * {"error": "...", "status": n}. The page never sees the password: API
- * requests are made here, and only to Tracker's own API.
+ * {"error": "...", "status": n}.
+ *
+ * Tracker runs in the page (local-first, js/engine.js); the app gives it
+ * encrypted storage, the phone's calendars, and the server's sync endpoints.
+ * The page never sees the password: server requests are made here, and only
+ * to the sync endpoints (ApiGuard).
  */
 public final class Bridge {
     /** The page's requests: a page loads several at once, so up to four run in parallel. */
     private static final ExecutorService PAGE_IO = Executors.newFixedThreadPool(4);
+    /** Saving the page's data: one at a time, in order. */
+    private static final ExecutorService SAVE = Executors.newSingleThreadExecutor();
+    private static final int MAX_DB = 50 * 1024 * 1024;
 
     private final MainActivity activity;
 
@@ -60,8 +69,45 @@ public final class Bridge {
             case "state":
                 reply(id, data(activity.publicState()));
                 break;
-            case "api":
-                api(id, args);
+            case "remote":
+                remote(id, args);
+                break;
+            case "dbLoad":
+                background(id, () -> {
+                    String db = Vault.read(activity, Vault.DB);
+                    return db == null ? null : db;
+                });
+                break;
+            case "dbSave":
+                dbSave(id, args.optString(0, ""));
+                break;
+            case "snapshot":
+                snapshot(id, args.optJSONObject(0));
+                break;
+            case "outbox":
+                background(id, () -> Local.pending(activity, "imported"));
+                break;
+            case "outboxDone": {
+                final JSONArray recs = args.optJSONArray(0);
+                background(id, () -> {
+                    if (recs != null) {
+                        Local.mark(activity, recs, "imported");
+                    }
+                    return null;
+                });
+                break;
+            }
+            case "calendars":
+                background(id, () -> Calendars.listJson(activity));
+                break;
+            case "events":
+                events(id, args);
+                break;
+            case "createEvent":
+                createEvent(id, args.optJSONObject(0));
+                break;
+            case "calendarAccess":
+                activity.askForCalendar(granted -> reply(id, data(granted)));
                 break;
             case "refresh":
                 Tracking.refresh(activity, null);
@@ -87,12 +133,33 @@ public final class Bridge {
         }
     }
 
-    private void api(String id, JSONArray args) {
+    interface Work {
+        Object run() throws Exception;
+    }
+
+    /** Runs `work` off the main thread and replies with its result. */
+    private void background(String id, Work work) {
+        PAGE_IO.execute(() -> {
+            String r;
+            try {
+                r = data(work.run());
+            } catch (Calendars.CalendarException e) {
+                r = error(i18n().t(e.getMessage()), 0);
+            } catch (Exception e) {
+                r = error(i18n().t("Something went wrong."), 0);
+            }
+            final String result = r;
+            activity.runOnUiThread(() -> reply(id, result));
+        });
+    }
+
+    /** The server's sync endpoints (and read-only calendar fallback), nothing else. */
+    private void remote(String id, JSONArray args) {
         final I18n t = i18n();
         final String method = args.optString(0, null);
         final String path = args.optString(1, null);
         final Object body = args.isNull(2) ? null : args.opt(2);
-        if (!ApiGuard.allowed(method, path) || (body != null && !(body instanceof JSONObject))) {
+        if (!ApiGuard.allowed(method, path) || (body != null && !(body instanceof JSONObject)) || ("POST".equals(method) && body == null)) {
             reply(id, error(t.t("Invalid request."), 0));
             return;
         }
@@ -109,17 +176,81 @@ public final class Bridge {
             } catch (Nextcloud.ApiException e) {
                 result = error(e.getMessage(), e.status);
                 if (e.status == 401) {
-                    // App password revoked in Nextcloud: forget it, back to the login screen
+                    // App password revoked in Nextcloud: back to the login screen (data not yet synced stays)
                     Store.clear(activity);
                     activity.runOnUiThread(activity::loggedOut);
                 }
             }
             final String r = result;
             activity.runOnUiThread(() -> reply(id, r));
-            if (!"GET".equals(method)) {
-                // Started, stopped or changed something: update the notification
-                Tracking.refresh(activity, null);
+        });
+    }
+
+    private void dbSave(String id, String json) {
+        if (json.isEmpty() || json.length() > MAX_DB || json.charAt(0) != '{') {
+            reply(id, error(i18n().t("Invalid request."), 0));
+            return;
+        }
+        SAVE.execute(() -> {
+            Vault.write(activity, Vault.DB, json);
+            activity.runOnUiThread(() -> reply(id, data(null)));
+        });
+    }
+
+    /** What the notification needs; saved, then the notification is updated. */
+    private void snapshot(String id, JSONObject snap) {
+        if (snap == null) {
+            reply(id, error(i18n().t("Invalid request."), 0));
+            return;
+        }
+        SAVE.execute(() -> {
+            Local.saveSnapshot(activity, snap);
+            Tracking.refresh(activity, null, false);
+            activity.runOnUiThread(() -> reply(id, data(null)));
+        });
+    }
+
+    private static List<String> strings(JSONArray a) {
+        List<String> out = new ArrayList<>();
+        for (int i = 0; a != null && i < a.length() && i < 500; i++) {
+            String s = a.optString(i, "");
+            if (!s.isEmpty() && s.length() < 2048) {
+                out.add(s);
             }
+        }
+        return out;
+    }
+
+    private void events(String id, JSONArray args) {
+        final long from = args.optLong(0, 0);
+        final long to = args.optLong(1, 0);
+        final List<String> urls = strings(args.optJSONArray(2));
+        if (to <= from || to - from > 450L * 86400) {
+            reply(id, error(i18n().t("Invalid request."), 0));
+            return;
+        }
+        background(id, () -> Calendars.eventsJson(activity, from, to, urls));
+    }
+
+    private void createEvent(String id, JSONObject ev) {
+        if (ev == null) {
+            reply(id, error(i18n().t("Invalid request."), 0));
+            return;
+        }
+        final String url = ev.optString("url", "");
+        final String title = ev.optString("title", "");
+        final long start = ev.optLong("start", 0);
+        final long end = ev.optLong("end", 0);
+        if (url.isEmpty() || title.length() > 255 || end <= start || end - start > 86400) {
+            reply(id, error(i18n().t("Invalid request."), 0));
+            return;
+        }
+        activity.askForCalendar(granted -> {
+            if (!granted) {
+                reply(id, error(i18n().t("Tracker may not write to your calendar."), 0));
+                return;
+            }
+            background(id, () -> new JSONObject().put("uid", Calendars.create(activity, url, title, start, end)));
         });
     }
 

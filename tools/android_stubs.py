@@ -12,7 +12,7 @@ def c(path, body): S[path] = textwrap.dedent(body)
 c('android/annotation/SuppressLint.java', '''package android.annotation;
 public @interface SuppressLint { String[] value(); }''')
 c('android/Manifest.java', '''package android;
-public final class Manifest { public static final class permission { public static final String POST_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS"; } }''')
+public final class Manifest { public static final class permission { public static final String POST_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS", READ_CALENDAR = "android.permission.READ_CALENDAR", WRITE_CALENDAR = "android.permission.WRITE_CALENDAR"; } }''')
 c('android/content/Context.java', '''package android.content;
 public abstract class Context {
   public static final int MODE_PRIVATE = 0;
@@ -24,6 +24,8 @@ public abstract class Context {
   public abstract android.content.res.Resources getResources();
   public final int getColor(int id) { return 0; }
   public abstract void startActivity(Intent intent);
+  public abstract ContentResolver getContentResolver();
+  public abstract java.io.File getNoBackupFilesDir();
 }''')
 c('android/content/ContextWrapper.java', '''package android.content;
 public class ContextWrapper extends Context {
@@ -33,6 +35,8 @@ public class ContextWrapper extends Context {
   public String getPackageName() { return null; }
   public android.content.res.Resources getResources() { return null; }
   public void startActivity(Intent intent) {}
+  public ContentResolver getContentResolver() { return null; }
+  public java.io.File getNoBackupFilesDir() { return null; }
 }''')
 c('android/content/res/Resources.java', '''package android.content.res;
 public class Resources { public Configuration getConfiguration() { return null; } public android.util.DisplayMetrics getDisplayMetrics() { return null; } }''')
@@ -113,6 +117,7 @@ public class Activity extends android.content.ContextWrapper {
   public void finish() {}
   public boolean isFinishing() { return false; }
   public final void requestPermissions(String[] permissions, int requestCode) {}
+  public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {}
   public android.window.OnBackInvokedDispatcher getOnBackInvokedDispatcher() { return null; }
 }''')
 c('android/view/Window.java', '''package android.view;
@@ -204,7 +209,8 @@ public final class Insets { public final int left = 0, top = 0, right = 0, botto
 c('android/graphics/drawable/Icon.java', '''package android.graphics.drawable;
 public final class Icon { public static Icon createWithResource(android.content.Context context, int resId) { return null; } }''')
 c('android/net/Uri.java', '''package android.net;
-public abstract class Uri { public static Uri parse(String uriString) { return null; } public abstract String getScheme(); public abstract String toString(); }''')
+public abstract class Uri { public static Uri parse(String uriString) { return null; } public abstract String getScheme(); public abstract String toString(); public abstract Builder buildUpon();
+  public static final class Builder { public Uri build() { return null; } } }''')
 c('android/os/Build.java', '''package android.os;
 public class Build { public static class VERSION { public static final int SDK_INT = 0; } }''')
 c('android/os/Bundle.java', '''package android.os;
@@ -346,6 +352,11 @@ public class JSONObject {
   public JSONObject optJSONObject(String name) { return null; }
   public JSONArray optJSONArray(String name) { return null; }
   public String optString(String name, String fallback) { return null; }
+  public String optString(String name) { return null; }
+  public long optLong(String name) { return 0; }
+  public long optLong(String name, long fallback) { return 0; }
+  public boolean optBoolean(String name) { return false; }
+  public java.util.Iterator<String> keys() { return null; }
   public int optInt(String name, int fallback) { return 0; }
   public boolean optBoolean(String name, boolean fallback) { return false; }
   public static String quote(String data) { return null; }
@@ -353,7 +364,12 @@ public class JSONObject {
 }''')
 c('org/json/JSONArray.java', '''package org.json;
 public class JSONArray {
+  public JSONArray() {}
   public JSONArray(String json) throws JSONException {}
+  public JSONArray put(Object value) { return this; }
+  public JSONObject optJSONObject(int index) { return null; }
+  public JSONArray optJSONArray(int index) { return null; }
+  public long optLong(int index, long fallback) { return 0; }
   public int length() { return 0; }
   public JSONObject getJSONObject(int index) throws JSONException { return null; }
   public boolean isNull(int index) { return false; }
@@ -367,6 +383,37 @@ c('app/tracker/android/R.java', '''package app.tracker.android;
 public final class R {
   public static final class drawable { public static final int ic_stat_tracker = 1, ic_stop = 2, ic_launcher_foreground = 3; }
   public static final class color { public static final int page = 4, accent = 5, icon_bg = 6; }
+}''')
+c('android/content/ContentResolver.java', '''package android.content;
+public abstract class ContentResolver {
+  public final android.database.Cursor query(android.net.Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) { return null; }
+  public final android.net.Uri insert(android.net.Uri url, ContentValues values) { return null; }
+}''')
+c('android/content/ContentValues.java', '''package android.content;
+public final class ContentValues { public void put(String key, String value) {} public void put(String key, Long value) {} public void put(String key, Integer value) {} }''')
+c('android/content/ContentUris.java', '''package android.content;
+public class ContentUris { public static android.net.Uri.Builder appendId(android.net.Uri.Builder builder, long id) { return builder; } }''')
+c('android/database/Cursor.java', '''package android.database;
+public interface Cursor extends java.io.Closeable { boolean moveToNext(); String getString(int i); long getLong(int i); int getInt(int i); boolean isNull(int i); void close(); }''')
+c('android/util/AtomicFile.java', '''package android.util;
+public class AtomicFile {
+  public AtomicFile(java.io.File baseName) {}
+  public void delete() {}
+  public java.io.FileOutputStream startWrite() throws java.io.IOException { return null; }
+  public void finishWrite(java.io.FileOutputStream str) {}
+  public void failWrite(java.io.FileOutputStream str) {}
+  public byte[] readFully() throws java.io.IOException { return null; }
+}''')
+c('android/provider/CalendarContract.java', '''package android.provider;
+public final class CalendarContract {
+  public static final class Calendars { public static final android.net.Uri CONTENT_URI = null;
+    public static final String _ID = "_id", NAME = "name", _SYNC_ID = "_sync_id", CALENDAR_DISPLAY_NAME = "calendar_displayName", CALENDAR_COLOR = "calendar_color", CALENDAR_ACCESS_LEVEL = "calendar_access_level";
+    public static final int CAL_ACCESS_CONTRIBUTOR = 500; }
+  public static final class Instances { public static final android.net.Uri CONTENT_URI = null;
+    public static final String EVENT_ID = "event_id", BEGIN = "begin", END = "end", TITLE = "title", CALENDAR_ID = "calendar_id", STATUS = "eventStatus", UID_2445 = "uid2445", ALL_DAY = "allDay"; }
+  public static final class Events { public static final android.net.Uri CONTENT_URI = null;
+    public static final String CALENDAR_ID = "calendar_id", DTSTART = "dtstart", DTEND = "dtend", TITLE = "title", EVENT_TIMEZONE = "eventTimezone", UID_2445 = "uid2445";
+    public static final int STATUS_CANCELED = 2; }
 }''')
 for p, body in S.items():
     f = os.path.join(out, p); os.makedirs(os.path.dirname(f), exist_ok=True); open(f, 'w').write(body)
