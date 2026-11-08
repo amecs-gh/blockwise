@@ -52,6 +52,26 @@
 		},
 	}
 
+	/*
+	 * Called by the app when the page has loaded (and when something changes):
+	 * light/dark, Material You colors from the wallpaper (Android 12+), and the
+	 * space taken by the status bar, notch and gesture bar, in CSS pixels.
+	 */
+	window.__trackerAndroidTheme = function (theme) {
+		const root = document.documentElement
+		root.classList.add('m3')
+		root.classList.toggle('m3-dark', !!theme.dark)
+		root.classList.toggle('m3-dynamic', !!theme.colors)
+		for (const [k, v] of Object.entries(theme.insets || {})) {
+			if (typeof v === 'number' && isFinite(v)) root.style.setProperty('--inset-' + k, Math.max(0, Math.round(v)) + 'px')
+		}
+		for (const [k, v] of Object.entries(theme.colors || {})) {
+			if (/^[a-zA-Z]+$/.test(k) && /^#[0-9a-fA-F]{6}$/.test(v)) root.style.setProperty('--md-' + k, v)
+		}
+	}
+	document.documentElement.classList.add('m3')
+	if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('m3-dark')
+
 	window.trackerApp = {
 		getState: () => call('state'),
 		onState: (cb) => listeners.state.push(cb),

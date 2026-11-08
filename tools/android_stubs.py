@@ -35,9 +35,17 @@ public class ContextWrapper extends Context {
   public void startActivity(Intent intent) {}
 }''')
 c('android/content/res/Resources.java', '''package android.content.res;
-public class Resources { public Configuration getConfiguration() { return null; } }''')
+public class Resources { public Configuration getConfiguration() { return null; } public android.util.DisplayMetrics getDisplayMetrics() { return null; } }''')
 c('android/content/res/Configuration.java', '''package android.content.res;
-public class Configuration { public android.os.LocaleList getLocales() { return null; } }''')
+public class Configuration { public static final int UI_MODE_NIGHT_MASK = 48, UI_MODE_NIGHT_YES = 32; public int uiMode; public android.os.LocaleList getLocales() { return null; } }''')
+c('android/util/DisplayMetrics.java', '''package android.util;
+public class DisplayMetrics { public float density; }''')
+c('android/R.java', '''package android;
+public final class R { public static final class color { public static final int
+  system_accent1_0=1, system_accent1_100=2, system_accent1_200=3, system_accent1_600=4, system_accent1_700=5, system_accent1_800=6, system_accent1_900=7,
+  system_accent2_100=8, system_accent2_700=9, system_accent2_900=10, system_accent3_100=11, system_accent3_700=12, system_accent3_900=13,
+  system_neutral1_10=14, system_neutral1_50=15, system_neutral1_100=16, system_neutral1_700=17, system_neutral1_800=18, system_neutral1_900=19,
+  system_neutral2_200=20, system_neutral2_400=21, system_neutral2_500=22, system_neutral2_700=23; } }''')
 c('android/os/LocaleList.java', '''package android.os;
 public final class LocaleList { public java.util.Locale get(int i) { return null; } }''')
 c('android/content/SharedPreferences.java', '''package android.content;
@@ -108,7 +116,7 @@ public class Activity extends android.content.ContextWrapper {
   public android.window.OnBackInvokedDispatcher getOnBackInvokedDispatcher() { return null; }
 }''')
 c('android/view/Window.java', '''package android.view;
-public abstract class Window { public void setDecorFitsSystemWindows(boolean decorFitsSystemWindows) {} }''')
+public abstract class Window { public void setDecorFitsSystemWindows(boolean decorFitsSystemWindows) {} public abstract void setStatusBarColor(int color); public abstract void setNavigationBarColor(int color); public void setNavigationBarContrastEnforced(boolean enforce) {} }''')
 c('android/app/AlertDialog.java', '''package android.app;
 import android.content.DialogInterface;
 public class AlertDialog implements DialogInterface {
@@ -190,7 +198,7 @@ public class Notification {
   }
 }''')
 c('android/graphics/Color.java', '''package android.graphics;
-public class Color { public static int parseColor(String colorString) { return 0; } }''')
+public class Color { public static final int TRANSPARENT = 0; public static int parseColor(String colorString) { return 0; } }''')
 c('android/graphics/Insets.java', '''package android.graphics;
 public final class Insets { public final int left = 0, top = 0, right = 0, bottom = 0; }''')
 c('android/graphics/drawable/Icon.java', '''package android.graphics.drawable;
@@ -287,6 +295,7 @@ c('android/webkit/RenderProcessGoneDetail.java', '''package android.webkit;
 public abstract class RenderProcessGoneDetail {}''')
 c('android/webkit/WebViewClient.java', '''package android.webkit;
 public class WebViewClient {
+  public void onPageFinished(WebView view, String url) {}
   public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) { return false; }
   public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) { return false; }
 }''')
@@ -328,6 +337,7 @@ public class JSONObject {
   public JSONObject put(String name, long value) throws JSONException { return this; }
   public JSONObject put(String name, boolean value) throws JSONException { return this; }
   public JSONObject put(String name, int value) throws JSONException { return this; }
+  public JSONObject put(String name, double value) throws JSONException { return this; }
   public boolean has(String name) { return false; }
   public boolean isNull(String name) { return false; }
   public String getString(String name) throws JSONException { return null; }
