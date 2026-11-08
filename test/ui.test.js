@@ -142,7 +142,11 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 	assert.ok(onServer && onServer.fields.title === title, 'the offline task reached the server when back online')
 	assert.equal(Object.keys(JSON.parse(device.db).dirty).length, 0, 'nothing left to sync')
 	await back.page.evaluate((id) => window.trackerApp.api('DELETE', 'tasks/' + id), added.id)
-	await back.page.waitForTimeout(3500)
+	await back.page.waitForTimeout(4500)
+	// Idle with the app open: no more requests (a sync must not schedule the next one)
+	const idleFrom = device.remoteCalls.length
+	await back.page.waitForTimeout(8000)
+	assert.deepEqual(device.remoteCalls.slice(idleFrom).filter((c) => /sync/.test(c)), [], 'no syncing while idle')
 	await back.ctx.close()
 	console.log('  ✔ synced when back online')
 

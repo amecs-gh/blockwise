@@ -110,7 +110,8 @@ public final class Alerts {
             }
             if (r.pomodoro) {
                 Phase p = pomodoroPhase(r.start, s, now);
-                String key = "pomo-" + r.id + "-" + p.kind.name().toLowerCase() + "-" + p.round;
+                // The session's uuid: the same whether the app shows the phone's data or the server's
+                String key = "pomo-" + (r.uuid != null ? r.uuid : String.valueOf(r.id)) + "-" + p.kind.name().toLowerCase(java.util.Locale.ROOT) + "-" + p.round;
                 if (p.kind == Kind.SHORT) {
                     once(out, seen, key, t.t("Short break"),
                             t.t("Step away for {minutes} min. The timer keeps running.", Vars.of("minutes", String.valueOf(s.shortBreakMinutes))));

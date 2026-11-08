@@ -75,7 +75,11 @@ public final class Bridge {
             case "dbLoad":
                 background(id, () -> {
                     String db = Vault.read(activity, Vault.DB);
-                    return db == null ? null : db;
+                    if (db == null && Vault.unreadable(Vault.DB)) {
+                        // Don't start empty (and overwrite unsynced changes): the page tries again
+                        throw new IllegalStateException("Keystore not available");
+                    }
+                    return db;
                 });
                 break;
             case "dbSave":

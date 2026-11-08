@@ -10,7 +10,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+
+import javax.crypto.AEADBadTagException;
 
 /**
  * Your Tracker data on the phone (local-first): the engine's database, the
@@ -42,7 +46,14 @@ final class Vault {
         return new File(dir, name + ".bin");
     }
 
-    /** null if missing or no longer readable (key gone, file damaged) */
+    /** Files the Keystore could not open this run: never replaced (see write). */
+    private static final Set<String> unreadable = new HashSet<>();
+
+    /**
+     * null if missing, damaged or the key is gone (then the data is deleted and
+     * comes again from the server), or if the Keystore can't be used right now
+     * (then the file is kept: see unreadable()).
+     */
     static synchronized String read(Context c, String name) {
         if (memory.containsKey(name)) {
             return memory.get(name);
@@ -52,20 +63,37 @@ final class Vault {
             return null;
         }
         AtomicFile af = new AtomicFile(f);
+        byte[] bytes;
         try {
-            byte[] bytes = af.readFully();
-            return Store.decrypt(KEY_ALIAS, new String(bytes, StandardCharsets.US_ASCII));
+            bytes = af.readFully();
         } catch (IOException e) {
             return null; // not written yet
-        } catch (Exception e) {
-            // Key gone (e.g. lock screen removed on some phones) or damaged: start over from the server
+        }
+        try {
+            String text = Store.decrypt(KEY_ALIAS, new String(bytes, StandardCharsets.US_ASCII));
+            unreadable.remove(name);
+            return text;
+        } catch (AEADBadTagException | IllegalArgumentException | IndexOutOfBoundsException e) {
+            // Damaged, or encrypted with a key that no longer exists: start over from the server
             af.delete();
+            return null;
+        } catch (Exception e) {
+            // The Keystore is not usable right now: keep the file, try again later
+            unreadable.add(name);
             return null;
         }
     }
 
+    /** Was this file there but not readable (Keystore problem)? */
+    static synchronized boolean unreadable(String name) {
+        return unreadable.contains(name);
+    }
+
     /** @param text null deletes */
     static synchronized void write(Context c, String name, String text) {
+        if (unreadable.contains(name)) {
+            return; // never replace data we could not read (it may hold changes not yet synced)
+        }
         File f = file(c, name);
         if (text == null) {
             memory.remove(name);
@@ -103,6 +131,7 @@ final class Vault {
     /** Everything, and the key (logging out, or another account logging in). */
     static synchronized void wipe(Context c) {
         memory.clear();
+        unreadable.clear();
         for (String name : new String[] {DB, SNAPSHOT, OUTBOX}) {
             File f = file(c, name);
             if (f != null) {

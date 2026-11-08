@@ -70,25 +70,36 @@ final class Calendars {
             if (cur == null) {
                 return out;
             }
-            Map<String, Boolean> seen = new HashMap<>();
+            String server = Store.server(c);
+            String host = server == null ? null : Nextcloud.host(server).toLowerCase(java.util.Locale.ROOT);
+            Map<String, Cal> byPath = new java.util.LinkedHashMap<>();
+            Map<String, Boolean> onServer = new HashMap<>();
             while (cur.moveToNext()) {
                 // DAVx5 keeps the calendar's address in _SYNC_ID or NAME
-                String url = CalendarPath.of(cur.getString(2));
+                String full = cur.getString(2);
+                String url = CalendarPath.of(full);
                 if (url == null) {
-                    url = CalendarPath.of(cur.getString(1));
+                    full = cur.getString(1);
+                    url = CalendarPath.of(full);
                 }
-                if (url == null || seen.containsKey(url)) {
-                    continue; // a local calendar, or the same calendar twice (two accounts)
+                if (url == null) {
+                    continue; // a local calendar
                 }
-                seen.put(url, true);
+                // The same calendar address on two servers (two accounts): prefer the one you are logged in to
+                boolean mine = host != null && full != null && full.toLowerCase(java.util.Locale.ROOT).contains("://" + host + "/");
+                if (byPath.containsKey(url) && (Boolean.TRUE.equals(onServer.get(url)) || !mine)) {
+                    continue;
+                }
+                onServer.put(url, mine);
                 Cal cal = new Cal();
                 cal.id = cur.getLong(0);
                 cal.url = url;
                 cal.name = cur.isNull(3) ? "" : cur.getString(3);
                 cal.color = String.format(java.util.Locale.ROOT, "#%06X", 0xFFFFFF & cur.getInt(4));
                 cal.writable = cur.getInt(5) >= CalendarContract.Calendars.CAL_ACCESS_CONTRIBUTOR;
-                out.add(cal);
+                byPath.put(url, cal);
             }
+            out.addAll(byPath.values());
         } catch (SecurityException e) {
             out.clear();
         }

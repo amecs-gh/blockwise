@@ -88,6 +88,20 @@ public final class CoreTest {
             check(!ApiGuard.allowed(p[0], p[1]), "refused " + p[0] + " " + p[1]);
         }
 
+        // --- reminders are remembered by the session's uuid (same from the phone's data and the server's) ---
+        {
+            Dash a = dash(true, 1L, false);
+            a.running.id = 7;
+            a.running.uuid = "11111111-1111-4111-8111-111111111111";
+            Dash b = dash(true, 1L, false);
+            b.running.id = 9001;
+            b.running.uuid = a.running.uuid;
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            long at = T0 + 26 * 60;
+            eq(Alerts.check(a, at, seen, en).notifications.size(), 1, "short break once");
+            eq(Alerts.check(b, at, seen, en).notifications.size(), 0, "not again with other local ids");
+        }
+
         // --- clocks for changes made from the notification ---
         eq(Hlc.next(null, 1700000000000L, "dabc-n"), "1700000000000-0000-dabc-n", "first clock");
         eq(Hlc.next("1700000000000-0000-srv", 1700000000000L, "p"), "1700000000000-0001-p", "same ms: counter goes up");

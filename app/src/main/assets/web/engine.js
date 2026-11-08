@@ -41,6 +41,8 @@
 		settings: [...Object.keys({ focusMinutes: 0, shortBreakMinutes: 0, longBreakMinutes: 0, sessionsBeforeLongBreak: 0, reminderMinutes: 0, defaultEstimate: 0 }), 'pomodoro', 'longBreakUntil'],
 	}
 	const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+	/** "Carried over" marks: a set, at most 500 (the newest), like the server */
+	const carriedSet = (list) => [...new Set(list.filter((x) => typeof x === 'string' && x !== '' && x.length <= 600))].slice(-500)
 	const okValue = (v) => v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))
 
 	class ApiError extends Error {
@@ -287,7 +289,8 @@
 			}
 		}
 		/** Blocks of the commitments in [from, to), sorted (like the server's CommitmentService::blocks). */
-		const blocks = async (from, to, onlyUuids = null) => {
+		/** @param {boolean} strict throw if the calendars could not (all) be read */
+		const blocks = async (from, to, onlyUuids = null, strict = false) => {
 			const byUrl = new Map()
 			for (const [u, r] of Object.entries(db.records.commitment)) {
 				if (r.f.calendarUrl && (!onlyUuids || onlyUuids.includes(u))) byUrl.set(r.f.calendarUrl, u)
@@ -297,8 +300,10 @@
 			try {
 				events = (await o.calendar.events(from, to, [...byUrl.keys()])) || []
 			} catch (e) {
+				if (strict) throw e
 				events = []
 			}
+			if (strict && events.incomplete) throw new Error('Calendars not readable')
 			const out = []
 			for (const ev of events) {
 				const cu = byUrl.get(ev.url)
@@ -326,9 +331,14 @@
 			let touched = false
 			for (const [cu, c] of Object.entries(db.records.commitment)) {
 				const since = Math.max(db.checked[cu] || (c.f.created || t), t - 14 * 86400)
+				if (!c.f.calendarUrl || since >= t) { db.checked[cu] = t; continue }
+				let ended
+				try {
+					ended = (await blocks(since - 86400, t, [cu], true)).filter((b) => b.end > since && b.end <= t)
+				} catch (e) {
+					continue // calendar not readable now (offline): try again next time
+				}
 				db.checked[cu] = t
-				if (!c.f.calendarUrl || since >= t) continue
-				const ended = (await blocks(since - 86400, t, [cu])).filter((b) => b.end > since && b.end <= t)
 				if (!ended.length) continue
 				const all = tasks(cu, null)
 				for (const b of ended) {
@@ -339,7 +349,7 @@
 						const rec = db.records.task[x.uuid]
 						const set = rec.f.carriedBlocks || []
 						if (!set.includes(mark)) {
-							write('task', x.uuid, { carriedBlocks: [...set, mark] })
+							write('task', x.uuid, { carriedBlocks: carriedSet([...set, mark]) })
 							touched = true
 						}
 					}
@@ -399,7 +409,7 @@
 					longBreakUntil: longBreakUntil(),
 					now: now(),
 					features: { createBlocks: typeof o.calendar.createEvent === 'function' },
-					sync: { pending: Object.keys(db.dirty).length, lastSync: db.lastSync, server: !!o.remote },
+					sync: { pending: Object.keys(db.dirty).length, lastSync: db.lastSync, server: !!o.remote, refused: db.refused || null },
 				}
 			}],
 			['GET', /^dashboard$/, async () => {
@@ -749,12 +759,20 @@
 			return out.sort((a, b) => order[a.type] - order[b.type])
 		}
 
-		const dropChildren = (type, u) => {
+		/** Removes a record's children here (the server deletes them too). `tombstone`: remember them as deleted. */
+		const dropChildren = (type, u, tombstone = true) => {
+			const drop = (t, id) => {
+				delete db.records[t][id]
+				delete db.dirty[t + ':' + id]
+				if (tombstone) db.deleted[id] = t
+			}
 			if (type === 'task') {
-				for (const [su, s] of Object.entries(db.records.subtask)) if (s.f.task === u) { delete db.records.subtask[su]; delete db.dirty['subtask:' + su]; db.deleted[su] = 'subtask' }
+				for (const [su, s] of Object.entries(db.records.subtask)) if (s.f.task === u) drop('subtask', su)
 			}
 			if (type === 'commitment') {
-				for (const [tu, t] of Object.entries(db.records.task)) if (t.f.commitment === u) { dropChildren('task', tu); delete db.records.task[tu]; delete db.dirty['task:' + tu]; db.deleted[tu] = 'task' }
+				for (const [tu, t] of Object.entries(db.records.task)) {
+					if (t.f.commitment === u) { dropChildren('task', tu, tombstone); drop('task', tu) }
+				}
 			}
 		}
 
@@ -783,8 +801,7 @@
 				const rc = rec.clock && typeof rec.clock[k] === 'string' && CLOCK_RE.test(rec.clock[k]) ? rec.clock[k] : ''
 				observe(rc)
 				if (k === 'carriedBlocks') {
-					const set = new Set([...(local.f[k] || []), ...(Array.isArray(v) ? v : [])])
-					local.f[k] = [...set]
+					local.f[k] = carriedSet([...(local.f[k] || []), ...v])
 					if (!local.c[k] || rc > local.c[k]) local.c[k] = rc
 					continue
 				}
@@ -801,46 +818,98 @@
 		}
 
 		/** Push local changes, then pull everyone's. Only one at a time. */
+		/** Every field of every record (and the settings) to send again: after the server lost data. */
+		const markAllDirty = () => {
+			for (const type of TYPES) {
+				for (const [u, r] of Object.entries(db.records[type])) {
+					const d = db.dirty[type + ':' + u] || (db.dirty[type + ':' + u] = {})
+					for (const k of Object.keys(r.f)) if (r.c[k]) d[k] = true
+				}
+			}
+			const d = db.dirty['settings:settings'] || (db.dirty['settings:settings'] = {})
+			for (const k of Object.keys(db.settings.f)) if (db.settings.c[k]) d[k] = true
+		}
+
+		/**
+		 * Sends local changes. A change the server refuses (invalid, or the phone's
+		 * clock is far off) is dropped here too, and the server's version is
+		 * fetched again, so the phone never keeps data the server doesn't have.
+		 * @return {object[]} refused: [{type, id, reason}]
+		 */
+		const pushDirty = async () => {
+			const pushed = dirtyRecords()
+			const refused = []
+			for (let i = 0; i < pushed.length; i += 2000) {
+				const chunk = pushed.slice(i, i + 2000)
+				const res = await o.remote.push(chunk)
+				const rejected = new Map((res && Array.isArray(res.rejected) ? res.rejected : []).map((r) => [String(r.id), String(r.reason || '')]))
+				for (const r of chunk) {
+					const key = r.type + ':' + r.id
+					const d = db.dirty[key]
+					if (!d) continue
+					if (r.deleted) { if (d.deleted) delete db.dirty[key]; continue }
+					if (rejected.has(r.id)) {
+						refused.push({ type: r.type, id: r.id, reason: rejected.get(r.id) })
+						delete db.dirty[key]
+						if (r.type === 'settings') {
+							for (const k of Object.keys(r.fields)) db.settings.c[k] = '' // the server's value wins on the next pull
+						} else if (db.records[r.type][r.id]) {
+							dropChildren(r.type, r.id, false)
+							delete db.records[r.type][r.id] // back from the server on the next pull, if it has it
+						}
+						continue
+					}
+					const rec = r.type === 'settings' ? db.settings : db.records[r.type][r.id]
+					// Accepted: forget the fields not changed again meanwhile
+					for (const k of Object.keys(r.fields)) {
+						if (!rec || rec.c[k] === r.clock[k]) delete d[k]
+					}
+					if (!Object.keys(d).length) delete db.dirty[key]
+				}
+			}
+			if (refused.length) db.cursor = 0 // fetch everything again: restores what the server has
+			return refused
+		}
+
+		const pullAll = async () => {
+			let more = true
+			let pages = 0
+			let pulled = 0
+			let reset = false
+			while (more && pages++ < 1000) {
+				const res = await o.remote.pull(db.cursor, 1000)
+				if (!res || typeof res !== 'object' || !Number.isFinite(res.cursor)) throw new Error('Invalid answer from the server')
+				if (res.reset) { db.cursor = 0; reset = true }
+				for (const rec of Array.isArray(res.records) ? res.records : []) merge(rec)
+				pulled += Array.isArray(res.records) ? res.records.length : 0
+				db.cursor = res.cursor
+				more = !!res.more
+			}
+			return { pulled, reset }
+		}
+
+		/** Push local changes, then pull everyone's. Only one at a time. */
 		async function sync() {
 			if (!o.remote) return { ok: false, reason: 'no server' }
 			if (syncing) return syncing
 			syncing = (async () => {
-				const pushed = dirtyRecords()
-				if (pushed.length) {
-					// at most 2000 records per request
-					for (let i = 0; i < pushed.length; i += 2000) {
-						const chunk = pushed.slice(i, i + 2000)
-						const res = await o.remote.push(chunk)
-						const rejected = new Set((res && res.rejected || []).map((r) => r.id))
-						for (const r of chunk) {
-							const key = r.type + ':' + r.id
-							const d = db.dirty[key]
-							if (!d) continue
-							if (r.deleted) { if (d.deleted) delete db.dirty[key]; continue }
-							const rec = r.type === 'settings' ? db.settings : db.records[r.type][r.id]
-							// Accepted (or refused for good): forget the fields not changed again since
-							for (const k of Object.keys(r.fields)) {
-								if (rejected.has(r.id) || !rec || rec.c[k] === r.clock[k]) delete d[k]
-							}
-							if (!Object.keys(d).length) delete db.dirty[key]
-						}
-					}
-				}
-				let more = true
-				let pages = 0
-				let pulled = 0
-				while (more && pages++ < 1000) {
-					const res = await o.remote.pull(db.cursor, 1000)
-					if (res.reset) db.cursor = 0
-					for (const rec of res.records || []) merge(rec)
-					pulled += (res.records || []).length
-					db.cursor = res.cursor
-					more = !!res.more
+				const before = Object.keys(db.dirty).length
+				const refused = await pushDirty()
+				let { pulled, reset } = await pullAll()
+				if (reset) {
+					// The server's data was restored from a backup (or recreated): send it ours again
+					markAllDirty()
+					refused.push(...await pushDirty())
+					pulled += (await pullAll()).pulled
 				}
 				db.lastSync = now()
+				if (refused.length) db.refused = { at: now(), reasons: [...new Set(refused.map((r) => r.reason))].slice(0, 5) }
 				persist()
-				changed()
-				return { ok: true, pushed: pushed.length, pulled }
+				// Tell the app (notifications, the page) without scheduling another sync
+				if (o.onChange) {
+					try { o.onChange(db, { sync: true }) } catch (e) { /* ignore */ }
+				}
+				return { ok: true, pushed: before, pulled, refused }
 			})()
 			try {
 				return await syncing
