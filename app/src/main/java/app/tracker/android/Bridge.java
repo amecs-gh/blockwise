@@ -8,6 +8,8 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import app.tracker.core.ApiGuard;
 import app.tracker.core.I18n;
@@ -20,6 +22,9 @@ import app.tracker.core.ServerUrl;
  * requests are made here, and only to Tracker's own API.
  */
 public final class Bridge {
+    /** The page's requests: a page loads several at once, so up to four run in parallel. */
+    private static final ExecutorService PAGE_IO = Executors.newFixedThreadPool(4);
+
     private final MainActivity activity;
 
     Bridge(MainActivity activity) {
@@ -96,7 +101,7 @@ public final class Bridge {
             reply(id, error(t.t("Not logged in."), 401));
             return;
         }
-        Tracking.IO.execute(() -> {
+        PAGE_IO.execute(() -> {
             String result;
             try {
                 String text = client.api(method, path, body == null ? null : body.toString(), t);

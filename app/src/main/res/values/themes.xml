@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Light: the page draws everything; bars blend with it -->
-    <style name="Theme.Tracker" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.Tracker" parent="android:Theme.DeviceDefault.Light.NoActionBar">
         <item name="android:windowBackground">@color/page</item>
         <item name="android:statusBarColor">@color/page</item>
         <item name="android:navigationBarColor">@color/page</item>

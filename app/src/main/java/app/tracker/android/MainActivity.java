@@ -7,6 +7,8 @@ import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
+import android.graphics.Color;
 import android.graphics.Insets;
 import android.net.Uri;
 import android.os.Build;
@@ -61,7 +63,7 @@ public final class MainActivity extends Activity implements Tracking.Listener {
         edgeToEdge(this);
         web = new WebView(this);
         web.setBackgroundColor(getColor(R.color.page));
-        fitBars(web);
+        watchInsets(web);
         configure(web);
         web.addJavascriptInterface(new Bridge(this), "TrackerAndroid");
         setContentView(web);
@@ -187,6 +189,13 @@ public final class MainActivity extends Activity implements Tracking.Listener {
             }
 
             @Override
+            public void onPageFinished(WebView view, String url) {
+                if (url != null && url.startsWith(ASSETS)) {
+                    applyTheme();
+                }
+            }
+
+            @Override
             public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
                 // The page's process crashed or was reclaimed: start fresh
                 recreate();
@@ -220,6 +229,10 @@ public final class MainActivity extends Activity implements Tracking.Listener {
     static void edgeToEdge(Activity a) {
         if (Build.VERSION.SDK_INT >= 30) {
             a.getWindow().setDecorFitsSystemWindows(false);
+            // The page paints the bars' background itself (top app bar, navigation bar)
+            a.getWindow().setStatusBarColor(Color.TRANSPARENT);
+            a.getWindow().setNavigationBarColor(Color.TRANSPARENT);
+            a.getWindow().setNavigationBarContrastEnforced(false);
         }
     }
 
@@ -233,6 +246,116 @@ public final class MainActivity extends Activity implements Tracking.Listener {
             }
             return insets;
         });
+    }
+
+    // --- Material 3: colors and bars for the page -----------------------------------------
+
+    /** Space taken by the status bar, notch and gesture bar, in CSS pixels. */
+    private final float[] insetsCss = new float[4]; // top, right, bottom, left
+
+    /**
+     * Android 11+: the page draws under the bars (edge to edge) and gets their
+     * sizes as CSS variables; only the keyboard pushes the page up.
+     */
+    private void watchInsets(View v) {
+        v.setOnApplyWindowInsetsListener((view, insets) -> {
+            if (Build.VERSION.SDK_INT >= 30) {
+                float d = getResources().getDisplayMetrics().density;
+                Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                Insets ime = insets.getInsets(WindowInsets.Type.ime());
+                boolean keyboard = ime.bottom > bars.bottom;
+                view.setPadding(0, 0, 0, keyboard ? ime.bottom : 0);
+                insetsCss[0] = bars.top / d;
+                insetsCss[1] = bars.right / d;
+                insetsCss[2] = keyboard ? 0 : bars.bottom / d;
+                insetsCss[3] = bars.left / d;
+                applyTheme();
+            }
+            return insets;
+        });
+    }
+
+    private boolean dark() {
+        return (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    private String hex(int colorRes) {
+        return String.format("#%06x", getColor(colorRes) & 0xffffff);
+    }
+
+    /**
+     * Material You (Android 12+): the color roles from your wallpaper's palette,
+     * following Material 3's mapping of tones to roles. Null before Android 12.
+     */
+    private JSONObject dynamicColors(boolean dark) throws JSONException {
+        if (Build.VERSION.SDK_INT < 31) {
+            return null;
+        }
+        JSONObject c = new JSONObject();
+        if (dark) {
+            c.put("primary", hex(android.R.color.system_accent1_200))
+                    .put("onPrimary", hex(android.R.color.system_accent1_800))
+                    .put("primaryContainer", hex(android.R.color.system_accent1_700))
+                    .put("onPrimaryContainer", hex(android.R.color.system_accent1_100))
+                    .put("secondaryContainer", hex(android.R.color.system_accent2_700))
+                    .put("onSecondaryContainer", hex(android.R.color.system_accent2_100))
+                    .put("tertiaryContainer", hex(android.R.color.system_accent3_700))
+                    .put("onTertiaryContainer", hex(android.R.color.system_accent3_100))
+                    .put("surface", hex(android.R.color.system_neutral1_900))
+                    .put("surfaceContainerLow", hex(android.R.color.system_neutral1_900))
+                    .put("surfaceContainer", hex(android.R.color.system_neutral1_800))
+                    .put("surfaceContainerHigh", hex(android.R.color.system_neutral1_800))
+                    .put("surfaceContainerHighest", hex(android.R.color.system_neutral1_700))
+                    .put("onSurface", hex(android.R.color.system_neutral1_100))
+                    .put("onSurfaceVariant", hex(android.R.color.system_neutral2_200))
+                    .put("outline", hex(android.R.color.system_neutral2_400))
+                    .put("outlineVariant", hex(android.R.color.system_neutral2_700))
+                    .put("inverseSurface", hex(android.R.color.system_neutral1_100))
+                    .put("inverseOnSurface", hex(android.R.color.system_neutral1_800));
+        } else {
+            c.put("primary", hex(android.R.color.system_accent1_600))
+                    .put("onPrimary", hex(android.R.color.system_accent1_0))
+                    .put("primaryContainer", hex(android.R.color.system_accent1_100))
+                    .put("onPrimaryContainer", hex(android.R.color.system_accent1_900))
+                    .put("secondaryContainer", hex(android.R.color.system_accent2_100))
+                    .put("onSecondaryContainer", hex(android.R.color.system_accent2_900))
+                    .put("tertiaryContainer", hex(android.R.color.system_accent3_100))
+                    .put("onTertiaryContainer", hex(android.R.color.system_accent3_900))
+                    .put("surface", hex(android.R.color.system_neutral1_10))
+                    .put("surfaceContainerLow", hex(android.R.color.system_neutral1_10))
+                    .put("surfaceContainer", hex(android.R.color.system_neutral1_50))
+                    .put("surfaceContainerHigh", hex(android.R.color.system_neutral1_100))
+                    .put("surfaceContainerHighest", hex(android.R.color.system_neutral1_100))
+                    .put("onSurface", hex(android.R.color.system_neutral1_900))
+                    .put("onSurfaceVariant", hex(android.R.color.system_neutral2_700))
+                    .put("outline", hex(android.R.color.system_neutral2_500))
+                    .put("outlineVariant", hex(android.R.color.system_neutral2_200))
+                    .put("inverseSurface", hex(android.R.color.system_neutral1_800))
+                    .put("inverseOnSurface", hex(android.R.color.system_neutral1_50));
+        }
+        return c;
+    }
+
+    /** Tells the page: light/dark, wallpaper colors, bar sizes (android-bridge.js). */
+    void applyTheme() {
+        if (web == null || !showsOwnPage()) {
+            return;
+        }
+        try {
+            boolean dark = dark();
+            JSONObject colors = dynamicColors(dark);
+            JSONObject theme = new JSONObject()
+                    .put("dark", dark)
+                    .put("colors", colors == null ? JSONObject.NULL : colors)
+                    .put("insets", new JSONObject()
+                            .put("top", (double) insetsCss[0])
+                            .put("right", (double) insetsCss[1])
+                            .put("bottom", (double) insetsCss[2])
+                            .put("left", (double) insetsCss[3]));
+            evaluate("window.__trackerAndroidTheme&&window.__trackerAndroidTheme(" + theme + ")");
+        } catch (JSONException ignored) {
+            // can't happen with these values
+        }
     }
 
     // --- what the bridge asks for ------------------------------------------------------------
