@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Same as the page background (--md-surface) in android.css -->
+    <!-- Same as the page background (md-surface) in android.css -->
     <color name="page">#F9F9FF</color>
     <color name="accent">#0B67C9</color>
     <color name="icon_bg">#E2513A</color>
