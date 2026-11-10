@@ -3,5 +3,5 @@
     <!-- Same as the page background (md-surface) in android.css -->
     <color name="page">#F9F9FF</color>
     <color name="accent">#0B67C9</color>
-    <color name="icon_bg">#E2513A</color>
+    <color name="icon_bg">#1E2A44</color>
 </resources>
