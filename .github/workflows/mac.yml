@@ -1,0 +1,51 @@
+# Builds the Mac app on GitHub's Apple silicon machines: tests, the Apple
+# Calendar helper, Blockwise.app (signed ad hoc), uploaded as a build artifact
+# (Actions → the run → Artifacts). Not notarized: see mac/README.md.
+#
+# Dropbox and Google Drive appear in the app when these repository variables
+# are set (Settings → Secrets and variables → Actions → Variables; they are app
+# ids, not secrets): DROPBOX_APP_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.
+name: Mac
+on:
+  push:
+    paths: ['mac/**', 'nextcloud/js/**', 'nextcloud/css/**', 'nextcloud/l10n/**', 'nextcloud/appinfo/info.xml', '.github/workflows/mac.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    working-directory: mac
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install
+        run: npm install --no-audit --no-fund
+      - name: Tests
+        run: npm test
+      - name: App keys for Dropbox and Google Drive
+        env:
+          DROPBOX_APP_KEY: ${{ vars.DROPBOX_APP_KEY }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ vars.GOOGLE_CLIENT_SECRET }}
+        run: |
+          node -e 'const e=process.env; require("fs").writeFileSync("config/providers.json", JSON.stringify({dropboxAppKey: e.DROPBOX_APP_KEY||"", googleClientId: e.GOOGLE_CLIENT_ID||"", googleClientSecret: e.GOOGLE_CLIENT_SECRET||""}))'
+      - name: Build
+        run: npm run build
+      - name: Check the app
+        run: |
+          APP=dist/mac-arm64/Blockwise.app
+          test -x "$APP/Contents/Resources/blockwise-calendar"
+          /usr/libexec/PlistBuddy -c 'Print :NSCalendarsFullAccessUsageDescription' "$APP/Contents/Info.plist"
+          codesign --verify --deep "$APP"
+          npx --yes @electron/fuses@1.8.0 read --app "$APP"
+          ditto -c -k --keepParent "$APP" Blockwise-mac.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Blockwise-mac
+          path: mac/Blockwise-mac.zip
+          retention-days: 30

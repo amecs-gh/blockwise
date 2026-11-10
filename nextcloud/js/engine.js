@@ -244,7 +244,16 @@
 			weeklyGoal: r.f.goal ?? null,
 			calendarUrl: r.f.calendarUrl ?? null,
 		})
+		/**
+		 * A record shows once it has what it needs (and its parent exists): from a
+		 * drive, another device's change can arrive before the record itself.
+		 */
+		const REQUIRED = { commitment: ['name'], task: ['commitment', 'title'], subtask: ['task', 'title'], note: ['commitment', 'text'], session: ['start'] }
+		const complete = (type, r) => !!r && REQUIRED[type].every((k) => r.f[k] !== undefined && r.f[k] !== null && r.f[k] !== '')
+			&& (type === 'task' || type === 'note' ? complete('commitment', db.records.commitment[r.f.commitment])
+				: type === 'subtask' ? complete('task', db.records.task[r.f.task]) : true)
 		const commitments = () => Object.entries(db.records.commitment)
+			.filter(([, r]) => complete('commitment', r))
 			.sort(([ua, a], [ub, b]) => (a.f.position || 0) - (b.f.position || 0) || lid(ua) - lid(ub))
 			.map(([u, r]) => commitmentJson(u, r))
 
@@ -253,7 +262,7 @@
 			done: !!r.f.done, doneAt: r.f.doneAt ?? null, estimate: r.f.estimate ?? null,
 		})
 		const subtasksOf = (taskUuid) => Object.entries(db.records.subtask)
-			.filter(([, r]) => r.f.task === taskUuid)
+			.filter(([, r]) => r.f.task === taskUuid && complete('subtask', r))
 			.sort(([ua, a], [ub, b]) => (a.f.position || 0) - (b.f.position || 0) || lid(ua) - lid(ub))
 		const taskJson = (u, r) => {
 			const subs = subtasksOf(u).map(([su, sr]) => subtaskJson(su, sr))
@@ -266,7 +275,7 @@
 			}
 		}
 		const tasks = (commitmentUuid = null, done = null) => Object.entries(db.records.task)
-			.filter(([, r]) => (commitmentUuid === null || r.f.commitment === commitmentUuid) && (done === null || !!r.f.done === done))
+			.filter(([, r]) => (commitmentUuid === null || r.f.commitment === commitmentUuid) && (done === null || !!r.f.done === done) && complete('task', r))
 			.sort(([ua, a], [ub, b]) => (a.f.position || 0) - (b.f.position || 0) || lid(ua) - lid(ub))
 			.map(([u, r]) => taskJson(u, r))
 		const sessionJson = (u, r) => ({
@@ -278,10 +287,10 @@
 			done: !!r.f.done, doneAt: r.f.doneAt ?? null, created: r.f.created || 0,
 		})
 		const notesOf = (commitmentUuid = null, done = null) => Object.entries(db.records.note)
-			.filter(([, r]) => (commitmentUuid === null || r.f.commitment === commitmentUuid) && (done === null || !!r.f.done === done))
+			.filter(([, r]) => (commitmentUuid === null || r.f.commitment === commitmentUuid) && (done === null || !!r.f.done === done) && complete('note', r))
 			.sort(([ua, a], [ub, b]) => (a.f.position || 0) - (b.f.position || 0) || lid(ua) - lid(ub))
 		const runningEntry = () => {
-			const run = Object.entries(db.records.session).filter(([, r]) => r.f.end === null || r.f.end === undefined)
+			const run = Object.entries(db.records.session).filter(([, r]) => (r.f.end === null || r.f.end === undefined) && complete('session', r))
 			run.sort(([, a], [, b]) => b.f.start - a.f.start)
 			return run[0] || null
 		}
@@ -502,6 +511,10 @@
 				name = text(name, 255)
 				const u = uuid4()
 				// Without a calendar, the server creates one on the next sync
+				if (url === null && typeof o.calendar.createCalendar === 'function') {
+					// Without Nextcloud (a drive), the app makes the calendar (Apple Calendar on the Mac)
+					try { url = (await o.calendar.createCalendar({ name, color })) || null } catch (e) { url = null }
+				}
 				write('commitment', u, { name, color, calendarUrl: url, position: Object.keys(db.records.commitment).length, goal: null, created: now() })
 				db.checked[u] = now()
 				changed()
@@ -744,12 +757,12 @@
 				for (const [su, s] of Object.entries(db.records.subtask)) {
 					if (!s.f.done || s.f.doneAt === null || s.f.doneAt === undefined || s.f.doneAt < from || s.f.doneAt >= to) continue
 					const t = db.records.task[s.f.task]
-					if (!t) continue
+					if (!t || !complete('subtask', s)) continue
 					items.push({ kind: 'subtask', id: lid(su), title: s.f.title, task: t.f.title, taskId: lid(s.f.task), commitmentId: lid(t.f.commitment), doneAt: s.f.doneAt })
 				}
 				for (const [nu, n] of Object.entries(db.records.note)) {
 					if (!n.f.done || n.f.doneAt === null || n.f.doneAt === undefined || n.f.doneAt < from || n.f.doneAt >= to) continue
-					if (!db.records.commitment[n.f.commitment]) continue
+					if (!complete('note', n)) continue
 					items.push({ kind: 'note', id: lid(nu), title: noteTitle(n.f.text), task: null, taskId: null, commitmentId: lid(n.f.commitment), doneAt: n.f.doneAt })
 				}
 				const kindOrder = (k) => (k === 'note' ? 0 : 1) // same order as the server (by kind name)
@@ -761,7 +774,7 @@
 			['GET', /^sessions$/, async (m, q) => {
 				const [from, to] = range(q)
 				return Object.entries(db.records.session)
-					.filter(([, r]) => r.f.start < to && (r.f.end === null || r.f.end === undefined || r.f.end > from))
+					.filter(([, r]) => complete('session', r) && r.f.start < to && (r.f.end === null || r.f.end === undefined || r.f.end > from))
 					.sort(([, a], [, b]) => a.f.start - b.f.start)
 					.map(([u, r]) => sessionJson(u, r))
 			}],
@@ -903,6 +916,16 @@
 			if (dirty && !Object.keys(dirty).length) delete db.dirty[key]
 		}
 
+		/** Two devices started a timer offline: older ones end where the newest started. @return true if any changed */
+		const oneRunning = () => {
+			const run = Object.entries(db.records.session).filter(([, r]) => (r.f.end === null || r.f.end === undefined) && complete('session', r))
+			if (run.length < 2) return false
+			run.sort(([, a], [, b]) => b.f.start - a.f.start)
+			const newest = run[0][1].f.start
+			for (const [u, r] of run.slice(1)) write('session', u, { end: Math.max(r.f.start, newest) })
+			return true
+		}
+
 		/** Push local changes, then pull everyone's. Only one at a time. */
 		/** Every field of every record (and the settings) to send again: after the server lost data. */
 		const markAllDirty = () => {
@@ -988,6 +1011,8 @@
 					refused.push(...await pushDirty())
 					pulled += (await pullAll()).pulled
 				}
+				// One timer runs at a time (Nextcloud does this itself; a drive can't): the newest keeps running
+				if (oneRunning()) changed()
 				db.lastSync = now()
 				if (refused.length) db.refused = { at: now(), reasons: [...new Set(refused.map((r) => r.reason))].slice(0, 5) }
 				persist()
@@ -1039,6 +1064,8 @@
 			/** What the native side needs for notifications: running timer, settings, commitments, calendars */
 			snapshot: () => ({ node: db.node, hlc: db.hlc, pending: Object.keys(db.dirty).length, running: running(), settings: settings(), longBreakUntil: longBreakUntil(), commitments: commitments().map((c) => ({ id: c.id, uuid: c.uuid, name: c.name, color: c.color, calendarUrl: c.calendarUrl })) }),
 			flush: () => o.storage.save(db),
+			/** Send everything again (to a new sync: from "this Mac only" to a drive or Nextcloud) */
+			resendAll: () => { markAllDirty(); return o.storage.save(db) },
 			_db: () => db,
 		}
 	}

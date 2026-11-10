@@ -29,7 +29,16 @@ privately. You'll get an answer within a week.
   secrets, never in this repository.
 
 **Mac app**
-- The app password is encrypted with a key in the macOS Keychain.
+- Secrets (the Nextcloud app password, the drive token, the sync key) and your
+  data on the Mac are encrypted with a key in the macOS Keychain.
+- **Dropbox and Google Drive:** end-to-end encrypted. Each file is encrypted on
+  the Mac with AES-256-GCM, using a key derived from your passphrase (PBKDF2-
+  SHA256, 600,000 rounds, random salt) and bound to its file name; a changed,
+  swapped or foreign file is refused. The passphrase is never stored. Blockwise
+  can only see its own folder (Dropbox app folder, Google `drive.appdata`).
+- Drive logins use OAuth with PKCE and a random `state`, answered on
+  `127.0.0.1` only; tokens never appear in URLs and are revoked on disconnect.
+- Choosing or switching the sync is only possible from the first-run screen.
 - The app is built with Electron's security fuses on (no Node from the
   outside, cookie encryption, integrity checks); its pages can only reach its
   own API.

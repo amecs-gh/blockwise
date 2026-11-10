@@ -1,20 +1,22 @@
 {
-  "name": "tracker-mac",
+  "name": "blockwise-mac",
   "productName": "Blockwise",
-  "version": "0.1.0",
-  "description": "Blockwise from your Nextcloud as a Mac app, with a menu bar timer.",
+  "version": "0.5.1",
+  "description": "Blockwise for the Mac: time blocks, tasks and a menu bar timer, synced with Nextcloud, Dropbox or Google Drive.",
   "private": true,
   "main": "src/main.js",
   "license": "AGPL-3.0-or-later",
   "scripts": {
     "start": "node scripts/sync-web.js && electron .",
-    "test": "node test/alerts.test.js",
-    "build": "node scripts/sync-web.js && electron-builder --mac dir",
-    "dmg": "node scripts/sync-web.js && electron-builder --mac dmg"
+    "helper": "mkdir -p helper/build && swiftc -O -target arm64-apple-macos13 -framework EventKit -o helper/build/blockwise-calendar helper/BlockwiseCalendar.swift",
+    "test": "node scripts/sync-web.js && node test/alerts.test.js && node test/drives.test.js && node test/providers.test.js",
+    "test:ui": "node scripts/sync-web.js && node test/setup.test.js && node test/app.test.js",
+    "build": "node scripts/sync-web.js && npm run helper && electron-builder --mac dir",
+    "dmg": "node scripts/sync-web.js && npm run helper && electron-builder --mac dmg"
   },
   "devDependencies": {
-    "electron": "^45.2.3",
-    "electron-builder": "^26.15.4"
+    "electron": "45.2.3",
+    "electron-builder": "26.15.4"
   },
   "build": {
     "appId": "app.tracker.nextcloud",
@@ -23,6 +25,7 @@
       "src/**",
       "renderer/**",
       "assets/**",
+      "config/providers.json",
       "package.json"
     ],
     "mac": {
@@ -33,8 +36,13 @@
         "dir"
       ],
       "extendInfo": {
-        "NSAppleEventsUsageDescription": "Blockwise opens Apple Calendar on the day you choose."
-      }
+        "NSAppleEventsUsageDescription": "Blockwise opens Apple Calendar on the day you choose.",
+        "NSCalendarsFullAccessUsageDescription": "Blockwise shows your calendar's time blocks and adds the blocks you plan.",
+        "NSCalendarsUsageDescription": "Blockwise shows your calendar's time blocks and adds the blocks you plan."
+      },
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
     },
     "electronFuses": {
       "runAsNode": false,
@@ -45,6 +53,12 @@
       "onlyLoadAppFromAsar": true,
       "resetAdHocDarwinSignature": true
     },
-    "asar": true
+    "asar": true,
+    "extraResources": [
+      {
+        "from": "helper/build/blockwise-calendar",
+        "to": "blockwise-calendar"
+      }
+    ]
   }
 }

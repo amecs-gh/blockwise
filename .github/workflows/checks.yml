@@ -27,4 +27,6 @@ jobs:
       - name: Markdown parser
         run: node nextcloud/tests/markdown.test.js
       - name: Encrypted file sync
-        run: if [ -f nextcloud/tests/filesync.test.js ]; then node nextcloud/tests/filesync.test.js; fi
+        run: node nextcloud/tests/filesync.test.js
+      - name: Dropbox and Google Drive (stand-in servers)
+        run: node mac/test/drives.test.js

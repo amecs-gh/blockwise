@@ -8,15 +8,36 @@
 </head>
 <body class="setup">
 	<main class="u-card">
-		<img src="../assets/icon.png" alt="" class="u-logo" width="72" height="72">
+		<img src="../assets/icon.png" alt="" class="u-logo" width="64" height="64">
 		<h1 id="title"></h1>
 		<p id="intro" class="u-muted"></p>
-		<form id="form">
+
+		<!-- 1. Where your data lives -->
+		<div id="step-choose" class="u-choices" role="list"></div>
+
+		<!-- 2a. Nextcloud -->
+		<form id="step-nextcloud" hidden>
 			<label for="server" id="server-label"></label>
 			<input id="server" type="text" autocomplete="url" spellcheck="false" autocapitalize="off" required>
-			<p id="error" class="u-error" role="alert" hidden></p>
 			<button type="submit" id="submit" class="u-primary"></button>
+			<button type="button" class="u-link js-back"></button>
 		</form>
+
+		<!-- 2b. Passphrase for a drive -->
+		<form id="step-passphrase" hidden>
+			<label for="pass" id="pass-label"></label>
+			<input id="pass" type="password" autocomplete="new-password" spellcheck="false" required>
+			<div id="confirm-row">
+				<label for="pass2" id="pass2-label"></label>
+				<input id="pass2" type="password" autocomplete="new-password" spellcheck="false">
+			</div>
+			<p id="pass-hint" class="u-hint"></p>
+			<button type="submit" id="pass-submit" class="u-primary"></button>
+			<button type="button" class="u-link js-back"></button>
+		</form>
+
+		<p id="error" class="u-error" role="alert" hidden></p>
+
 		<div id="waiting" hidden>
 			<p id="waiting-text"></p>
 			<button type="button" id="cancel" class="u-secondary"></button>

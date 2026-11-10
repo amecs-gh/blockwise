@@ -1,104 +1,146 @@
 # Blockwise for Mac
 
-A Mac app for the **Blockwise** Nextcloud app:
+Blockwise as a Mac app:
 
-- **Window** with Blockwise's pages (Now, Tasks, Done, Time, Settings) in a Mac
-  window with a sidebar: no browser, no Nextcloud page around it. **Calendar**
-  in the sidebar (and "Open in Calendar" on a day) opens **Apple Calendar**.
+- **Window** with Blockwise's pages (Now, Tasks, Notes, Done, Time, Settings) in a
+  Mac window with a sidebar. **Calendar** in the sidebar opens **Apple Calendar**.
 - **Menu bar item** with the running time next to the icon. Click it for a panel
   with the timer, the current block's subtasks to check off, a quick "add
   subtask" field (`Check figures 20m` works like in Blockwise), and a play button
-  for each commitment. Right-click for settings, log out and quit.
-- **Notifications** before a block ends and for Pomodoro breaks; at the long break
-  tracking stops on its own, like in the web app.
+  for each commitment. Right-click for sync, settings, log out and quit.
+- **Notifications** before a block ends and for Pomodoro breaks.
+- **Works offline.** Your data lives on this Mac; changes sync when you're online.
 
-Needs Blockwise 0.3.2 or newer on your Nextcloud.
+## Where your data lives
 
-## Apple Calendar
+The first time, Blockwise asks where to keep your data. You can change it later
+(right-click the menu bar icon → Log out / Disconnect).
 
-Add your Nextcloud calendars to Apple Calendar once: System Settings → Internet
-Accounts → Add Other Account → CalDAV account. Account type "Manual", your
-Nextcloud user name, an app password (Nextcloud → Settings → Security → "Create
-new app password"), and as server address
-`https://<your nextcloud>/remote.php/dav`. Commitment calendars then appear in
-Apple Calendar, and blocks you add or move there are picked up by Tracker.
+| Choice | Sync | Calendar blocks come from |
+| --- | --- | --- |
+| **Nextcloud** | With the Blockwise app on your Nextcloud (0.5.1 or newer) and the Android app | Nextcloud's calendars |
+| **Dropbox** | Through `Apps/Blockwise` in your Dropbox, end-to-end encrypted | Apple Calendar |
+| **Google Drive** | Through Blockwise's hidden app folder in your Drive, end-to-end encrypted | Apple Calendar |
+| **This Mac only** | None; connect a sync later and your data comes along | Apple Calendar |
 
-The first time Blockwise opens Apple Calendar on a specific day, macOS asks
-whether Blockwise may control Calendar: allow it.
+Apple Calendar shows every calendar you added to macOS (iCloud, Google, Exchange,
+Nextcloud via CalDAV). macOS asks once whether Blockwise may use your calendars.
+
+### Dropbox and Google Drive: end-to-end encrypted
+
+With a drive, Blockwise asks for a **passphrase** (at least 10 characters) the
+first time; your other Macs use the same one. Everything is encrypted on your
+Mac before it is uploaded (AES-256-GCM, key from your passphrase with
+PBKDF2-SHA256, 600,000 rounds). Dropbox or Google see only encrypted files named
+`log-…bwx` and a `blockwise.json` with the salt. **Keep the passphrase in your
+password manager**: without it nobody, not even you, can read the synced data
+(the copy on each Mac stays readable).
+
+Blockwise can only see its own folder: in Dropbox the app folder, in Google
+Drive the hidden app data folder (scope `drive.appdata`), not your other files.
+
+## Set up Dropbox and Google Drive (once, for your build)
+
+Every build needs its own app keys from Dropbox and Google; Blockwise doesn't
+ship any. They are not secret (the login uses PKCE), but they are yours.
+Copy `config/providers.example.json` to `config/providers.json` (not committed)
+and fill in what you set up. A choice without a key is hidden.
+
+**Dropbox** (<https://www.dropbox.com/developers/apps>):
+
+1. Create app → Scoped access → **App folder** → name it, e.g. "Blockwise".
+2. Permissions: tick `files.metadata.read`, `files.content.read`,
+   `files.content.write`, then Submit.
+3. Settings → OAuth 2 → Redirect URIs: add `http://127.0.0.1:53682/dropbox`.
+4. Copy the **App key** into `dropboxAppKey`. (The app secret is not needed.)
+
+While the app is in "development" status, up to 500 Dropbox accounts can use it,
+which is plenty for yourself.
+
+**Google Drive** (<https://console.cloud.google.com/>):
+
+1. Create a project, then APIs & Services → Library → enable **Google Drive API**.
+2. OAuth consent screen: External, add yourself as a test user, add the scope
+   `https://www.googleapis.com/auth/drive.appdata`.
+3. Credentials → Create credentials → OAuth client ID → **Desktop app**.
+4. Copy the client ID into `googleClientId` and the client secret into
+   `googleClientSecret` (for desktop apps Google doesn't treat it as secret).
+
+While the consent screen is in "Testing", Google asks you to log in again
+every 7 days; publish it to avoid that (Google may ask you to verify the app first).
 
 ## Run it
 
 ```bash
-cd ~/Projects/tracker-mac
+cd mac
 npm install        # once; downloads Electron (~100 MB)
 npm start
 ```
 
-The first time, enter your Nextcloud address (your Tailscale name works) and
+**Nextcloud:** enter your Nextcloud address (your Tailscale name works) and
 click **Log in**. A window with your Nextcloud login opens: log in and click
 **Grant access**. The app receives its own app password (shown in Nextcloud under
 Settings → Security, where you can revoke it), stored encrypted with your
-macOS Keychain. You stay logged in until you choose **Log out**.
+macOS Keychain.
 
-macOS asks once whether Blockwise may send notifications: allow it.
+**Dropbox / Google Drive:** your browser opens; log in there and allow
+Blockwise (the app never sees your password). Then choose or enter the passphrase.
 
 ## Build the app
 
+Needs Xcode's command line tools (`xcode-select --install`) for the small
+Apple Calendar helper.
+
 ```bash
-npm run build      # creates dist/mac-arm64/Tracker.app
+npm run build      # creates dist/mac-arm64/Blockwise.app
 ```
 
-Drag `Tracker.app` into Applications. It isn't signed with an Apple developer
+Drag `Blockwise.app` into Applications. It isn't signed with an Apple developer
 certificate, only "ad hoc", which is fine for your own Mac. If macOS says the
 app is damaged or can't be opened, run:
 
 ```bash
-codesign --force --deep --sign - dist/mac-arm64/Tracker.app
-xattr -cr dist/mac-arm64/Tracker.app
+xattr -cr dist/mac-arm64/Blockwise.app
 ```
 
 To start it with your Mac, right-click the menu bar icon → **Open at login**.
-Started that way, it stays in the menu bar without opening the window.
 
 ## How it works
 
 | File | What it does |
 | --- | --- |
-| `src/main.js` | App, windows, menu bar item, notifications |
-| `src/nextcloud.js` | Login flow and Blockwise API (app password, Basic auth) |
+| `src/main.js` | App, windows, menu bar item, notifications, sync |
+| `renderer/web/engine.js` | Your data on this Mac and the Blockwise API, offline (shared with Android) |
+| `renderer/web/filesync.js` | Encrypted sync through a drive folder |
+| `src/nextcloud.js` | Nextcloud login flow and requests (app password) |
+| `src/drives.js`, `src/oauth.js` | Dropbox and Google Drive: browser login (PKCE), files |
+| `src/calendar.js`, `helper/` | Apple Calendar (a small Swift helper using EventKit) or Nextcloud's calendars |
+| `src/vault.js` | Secrets and your data, encrypted with a key in your Keychain |
 | `src/alerts.js` | When to notify, Pomodoro phases, menu bar text |
-| `src/preload.js` | Bridge to the windows (they never see the password) |
-| `renderer/app.html` | The window: Blockwise's interface with Mac styling (`desktop.css`) |
-| `renderer/web/` | Blockwise's interface code, copied from `../tracker` |
-| `renderer/popover.*`, `setup.*` | Menu bar panel and first-run screen |
-| `scripts/sync-web.js` | Copies the interface from `../tracker` before start/build |
-
-The window runs the same interface code as the Nextcloud app, so changes there
-show up here too: `npm start` and `npm run build` copy it from `../tracker`
-first. Requests go through the app with the app password; nothing is loaded from
-the web. The app sends the notifications, so the window doesn't.
-
-If you also use the Nextcloud desktop client, it shows Nextcloud's own
-notifications. Blockwise's server-side reminders can then appear twice; turn off
-**Desktop notifications** in Blockwise's menu if that bothers you.
+| `src/preload.js` | Bridge to the windows (they never see passwords or tokens) |
+| `renderer/` | The window, menu bar panel and first-run screen |
+| `scripts/sync-web.js` | Copies the interface from `../nextcloud` before start/build |
 
 ## Security
 
-- The app password is stored only encrypted with a key in your Keychain
-  (`config.json`, readable by you only). Without the Keychain it is kept in
-  memory and revoked when you quit.
-- Requests and the login page use in-memory sessions: no Nextcloud cookies on disk.
-- Only `https://` addresses (plain `http://` only for this Mac and Tailscale).
-  Redirects are never followed with the password attached, and the login flow's
-  URLs are pinned to the address you entered.
-- The windows can only call Blockwise's own API (not WebDAV or other endpoints),
-  never open other windows or navigate away, and only open web links, in your browser.
+- Secrets (app password, drive token, sync key) and your data on this Mac are
+  stored only encrypted with a key in your Keychain, in files readable by you
+  only. Without the Keychain nothing is saved.
+- Your passphrase is never stored: only the key made from it, in the Keychain.
+- Drive logins: PKCE and a random `state`, answered on `127.0.0.1` only; tokens
+  are sent in headers and bodies, never in URLs. Disconnecting revokes the token.
+- Files from a drive are checked: each is authenticated (AES-GCM, bound to its
+  name), so a changed, swapped or foreign file is refused, not merged.
+- Requests and the Nextcloud login use in-memory sessions: no cookies on disk.
+  Only `https://` addresses (plain `http://` only for this Mac and Tailscale).
+- The windows can only call Blockwise's own API, never open other windows or
+  navigate away, and only open web links, in your browser.
 - The built app has Electron's fuses set (no "run as Node", no inspector, asar
   integrity checked), so other programs can't use Blockwise's Keychain access.
-  Check with `npx @electron/fuses read --app dist/mac-arm64/Tracker.app`.
 
 ## Tests
 
-`npm test` checks the reminder and Pomodoro logic. `test/app.test.js` runs the
-real main process with a stand-in for Electron and the real windows in Chromium
-against a Nextcloud test server (it expects one on `localhost:8080`).
+```bash
+npm test           # reminders, Pomodoro, Dropbox and Google Drive (stand-in servers)
+npm run test:ui    # first-run screen; the whole app against a test Nextcloud on localhost:8080
+```
