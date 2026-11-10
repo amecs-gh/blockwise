@@ -35,7 +35,7 @@ import app.tracker.core.I18n;
 import app.tracker.core.Vars;
 
 /**
- * The app: Tracker's interface (the same code as in Nextcloud and the Mac app)
+ * The app: Blockwise's interface (the same code as in Nextcloud and the Mac app)
  * in a WebView, loaded from the app itself. It talks to Nextcloud only through
  * the bridge, never directly, and can't navigate anywhere else.
  */
@@ -452,8 +452,8 @@ public final class MainActivity extends Activity implements Tracking.Listener {
                     LoginActivity.closeAll();
                     if (!sealed) {
                         new AlertDialog.Builder(this)
-                                .setTitle(t.t("Tracker could not use the Android Keystore"))
-                                .setMessage(t.t("You stay logged in until you close Tracker; the password is not saved."))
+                                .setTitle(t.t("Blockwise could not use the Android Keystore"))
+                                .setMessage(t.t("You stay logged in until you close Blockwise; the password is not saved."))
                                 .setPositiveButton(t.t("Close"), null)
                                 .show();
                     }
@@ -551,7 +551,7 @@ public final class MainActivity extends Activity implements Tracking.Listener {
                             client.revoke();
                         }
                         Store.clear(this);
-                        // Logging out removes Tracker's data from this phone (it is on the server)
+                        // Logging out removes Blockwise's data from this phone (it is on the server)
                         Vault.wipe(this);
                         Local.saveSnapshot(this, null);
                         runOnUiThread(this::loggedOut);

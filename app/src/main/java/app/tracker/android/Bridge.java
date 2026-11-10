@@ -22,7 +22,7 @@ import app.tracker.core.ServerUrl;
  * assets/android-bridge.js). Answers go back as {"data": ...} or
  * {"error": "...", "status": n}.
  *
- * Tracker runs in the page (local-first, js/engine.js); the app gives it
+ * Blockwise runs in the page (local-first, js/engine.js); the app gives it
  * encrypted storage, the phone's calendars, and the server's sync endpoints.
  * The page never sees the password: server requests are made here, and only
  * to the sync endpoints (ApiGuard).
@@ -251,7 +251,7 @@ public final class Bridge {
         }
         activity.askForCalendar(granted -> {
             if (!granted) {
-                reply(id, error(i18n().t("Tracker may not write to your calendar."), 0));
+                reply(id, error(i18n().t("Blockwise may not write to your calendar."), 0));
                 return;
             }
             background(id, () -> new JSONObject().put("uid", Calendars.create(activity, url, title, start, end)));

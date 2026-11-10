@@ -1,5 +1,5 @@
 /*
- * Tracker engine: Tracker running on the device (local-first).
+ * Blockwise engine: Blockwise running on the device (local-first).
  *
  * Keeps a copy of your commitments, tasks, subtasks, tracked time and settings,
  * answers the interface's API requests from it (same paths and same answers

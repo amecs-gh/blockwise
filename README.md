@@ -1,8 +1,8 @@
-# Tracker for Android
+# Blockwise for Android
 
-The **Tracker** Nextcloud app on your phone, like the Mac app:
+The **Blockwise** Nextcloud app on your phone, like the Mac app:
 
-- **The app:** Tracker's pages (Now, Tasks, Done, Time, Settings, each
+- **The app:** Blockwise's pages (Now, Tasks, Done, Time, Settings, each
   commitment) with a bottom tab bar and your commitments as chips on top. It's
   the same interface code as in Nextcloud and on the Mac, so all three stay identical.
 - **Timer notification:** while you track time, an ongoing notification shows
@@ -12,7 +12,7 @@ The **Tracker** Nextcloud app on your phone, like the Mac app:
 - **Calendar** opens your phone's calendar app on that day; the **person icon**
   shows your account (notifications on/off, log out).
 
-Needs Tracker 0.3.3 or newer on your Nextcloud, and Android 8 or newer.
+Needs Blockwise 0.5.1 or newer on your Nextcloud (the Nextcloud app's folder and id stay `tracker`), and Android 8 or newer.
 
 ## Build and install
 
@@ -58,7 +58,7 @@ your key, not debuggable, and every update installs over the previous one
 (keeping your login). Without them it builds the debug version. Keep a backup
 of the key: Android only installs updates signed with the same key.
 
-`./gradlew` and Android Studio first copy Tracker's interface from
+`./gradlew` and Android Studio first copy Blockwise's interface from
 `../tracker` (when that folder exists), like `npm start` does for the Mac app.
 
 ## First start
@@ -71,7 +71,7 @@ revoke it). Allow notifications when asked.
 For reminders on the minute, allow exact alarms: person icon → **Allow exact
 reminders**. Without it, Android can deliver them a few minutes late.
 
-If the Nextcloud app is also on your phone, it shows Tracker's server-side
+If the Nextcloud app is also on your phone, it shows Blockwise's server-side
 reminders too. Turn one of them off if you get both: person icon → Notifications.
 
 ## Security
@@ -86,7 +86,7 @@ reminders too. Turn one of them off if you get both: person icon → Notificatio
   are pinned to the address you entered.
 - The interface runs from the app's own files in a WebView that can't navigate
   anywhere else, open windows, or read files. It reaches Nextcloud only through
-  the app, and only **Tracker's own API** (never WebDAV, your files, or other
+  the app, and only **Blockwise's own API** (never WebDAV, your files, or other
   endpoints). Links open only if they're `https`/`http`, in your browser.
 - Nextcloud's login page runs without access to the app; its cookies are deleted
   afterwards.
@@ -99,7 +99,7 @@ reminders too. Turn one of them off if you get both: person icon → Notificatio
 | `core/` | Plain Java, no Android: address rules, API filter, reminders and Pomodoro (`./gradlew :core:coreTest`) |
 | `app/.../MainActivity.java` | The window: WebView with the interface, account sheet, login |
 | `app/.../Bridge.java` | What the page may ask the app to do |
-| `app/.../Nextcloud.java` | Login flow v2 and the Tracker API (app password, Basic auth) |
+| `app/.../Nextcloud.java` | Login flow v2 and the Blockwise API (app password, Basic auth) |
 | `app/.../Store.java` | Login and settings; the app password encrypted with the Keystore |
 | `app/.../Tracking.java` | Timer notification, reminders, scheduled checks |
 | `app/.../LoginActivity.java` | Nextcloud's login page |
@@ -109,9 +109,9 @@ reminders too. Turn one of them off if you get both: person icon → Notificatio
 
 ## Local-first
 
-Tracker runs on the phone: the interface talks to the engine (`web/engine.js`, from the
+Blockwise runs on the phone: the interface talks to the engine (`web/engine.js`, from the
 Nextcloud app's `js/engine.js`), which keeps your data on the phone and syncs with
-Nextcloud (`/api/sync`, Tracker 0.4.0 or later) whenever it can. Per field, the latest
+Nextcloud (`/api/sync`, Blockwise 0.4.0 or later) whenever it can. Per field, the latest
 change wins; deleted stays deleted.
 
 - **Your data on the phone** is encrypted with its own Android Keystore key, in the

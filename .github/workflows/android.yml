@@ -47,11 +47,11 @@ jobs:
         run: |
           if [ "$VARIANT" = release ]; then
             ./gradlew --no-daemon --stacktrace :core:coreTest :app:lintRelease :app:assembleRelease
-            cp app/build/outputs/apk/release/app-release.apk Tracker.apk
+            cp app/build/outputs/apk/release/app-release.apk Blockwise.apk
           else
             # The release version is built too (unsigned, not published), so it's known to work
             ./gradlew --no-daemon --stacktrace :core:coreTest :app:lintDebug :app:assembleDebug :app:lintRelease :app:assembleRelease
-            cp app/build/outputs/apk/debug/app-debug.apk Tracker-debug.apk
+            cp app/build/outputs/apk/debug/app-debug.apk Blockwise-debug.apk
           fi
       - name: Remove the signing key
         if: always()
@@ -64,9 +64,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VARIANT: ${{ steps.key.outputs.variant }}
         run: |
-          APK=$( [ "$VARIANT" = release ] && echo Tracker.apk || echo Tracker-debug.apk )
+          APK=$( [ "$VARIANT" = release ] && echo Blockwise.apk || echo Blockwise-debug.apk )
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest "$APK" \
-            --title "Tracker for Android (latest build)" \
+            --title "Blockwise for Android (latest build)" \
             --notes "Built from ${GITHUB_SHA::7} ($VARIANT). Download $APK on your phone and open it to install." \
             --prerelease
