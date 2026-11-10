@@ -222,7 +222,8 @@ async function connect() {
 		? nc.createClient({ server: config.server, loginName: config.loginName, appPassword: await openPassword(config), fetch: apiFetch })
 		: null
 	const helper = helperPath()
-	const calendar = client ? cal.nextcloudCalendar({ api: client.api }) : helper ? cal.appleCalendar({ helperPath: helper }) : cal.noCalendar
+	// Apple Calendar only when you turned it on (menu bar icon → Use Apple Calendar)
+	const calendar = client ? cal.nextcloudCalendar({ api: client.api }) : helper && config.appleCalendar ? cal.appleCalendar({ helperPath: helper }) : cal.noCalendar
 
 	let inner = null
 	if (client) inner = { pull: (since, limit) => client.api('GET', `sync?since=${since}&limit=${limit}`), push: (records) => client.api('POST', 'sync', { records }) }
@@ -250,14 +251,45 @@ async function connect() {
 		})
 	}
 	remote = config.provider === 'local' ? null : lazy
-	if (calendar.access) calendar.access().catch(() => {}) // macOS asks once
+}
+
+/**
+ * Apple Calendar on or off. Blockwise reads the events of the calendars you link
+ * to commitments (your time blocks) and adds the blocks you plan. macOS can only
+ * allow full calendar access, so Blockwise explains first and asks only now.
+ */
+async function setAppleCalendar(on) {
+	const helper = helperPath()
+	if (on) {
+		const { response } = await dialog.showMessageBox({
+			type: 'question',
+			buttons: [t('Continue'), t('Cancel')],
+			defaultId: 0,
+			message: t('Use Apple Calendar for your time blocks?'),
+			detail: t('Blockwise reads the events in the calendars you link to a commitment: they are your planned time blocks. It adds a block when you plan one, and a calendar for a new commitment. It never sends calendar data anywhere, except the blocks to your sync.\n\nmacOS only offers full access to calendars, so it will ask you next. Without it, everything else in Blockwise works: commitments, tasks, notes, the timer and your time.'),
+		})
+		if (response !== 0) return
+		let granted = false
+		try { granted = helper ? (await cal.appleCalendar({ helperPath: helper }).access()).granted === true : false } catch (e) { granted = false }
+		if (!granted) {
+			dialog.showMessageBox({ type: 'info', buttons: [t('OK')], message: t('Blockwise may not use your calendars.'), detail: t('You can allow it later in System Settings → Privacy & Security → Calendars, then turn on Use Apple Calendar again.') })
+			return
+		}
+	}
+	config.appleCalendar = !!on
+	saveConfig(config)
+	await engine.flush().catch(() => {})
+	await connect()
+	refresh()
+	notifyChanged()
 }
 
 /**
  * Log out / disconnect. `keepData`: the data on this Mac stays (Nextcloud
  * refused the app password: changes not synced yet are not lost).
  */
-async function disconnect({ revoke, keepData = false }) {
+async function disconnect({ revoke, keepData = false, carry = false }) {
+	if (carry) keepData = true
 	clearInterval(refreshTimer)
 	clearTimeout(syncTimer)
 	if (revoke && client) await client.revoke()
@@ -267,6 +299,11 @@ async function disconnect({ revoke, keepData = false }) {
 		vault.remove('data')
 		vault.remove('drivestate')
 		try { fs.unlinkSync(ownerPath()) } catch (e) { /* none */ }
+	}
+	if (carry) {
+		// Like "this Mac only" until you choose: the next sync gets everything
+		if (vault) vault.remove('drivestate')
+		writeOwner('local')
 	}
 	client = null
 	engine = null
@@ -283,6 +320,7 @@ async function disconnect({ revoke, keepData = false }) {
 	popover = null
 	if (tray) tray.destroy()
 	tray = null
+	setAppMenu()
 	showSetup()
 }
 
@@ -427,6 +465,7 @@ function contextMenu() {
 		{ type: 'separator' },
 		{ label: t('Open at login'), type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: (i) => app.setLoginItemSettings({ openAtLogin: i.checked }) },
 		{ label: t('Desktop notifications'), type: 'checkbox', checked: config.notifications !== false, click: (i) => { config.notifications = i.checked; saveConfig(config); broadcast() } },
+		...(config.provider !== 'nextcloud' ? [{ label: t('Use Apple Calendar'), type: 'checkbox', checked: !!config.appleCalendar, click: (i) => setAppleCalendar(i.checked) }] : []),
 		{ type: 'separator' },
 		config.provider === 'nextcloud'
 			? { label: t('Logged in as {user} on {host}', { user: config.loginName, host: new URL(config.server).host }), enabled: false }
@@ -434,11 +473,41 @@ function contextMenu() {
 				? { label: t('Your data is on this Mac only'), enabled: false }
 				: { label: t('Syncing with {drive}, end-to-end encrypted', { drive: PROVIDER_NAMES[config.provider] }), enabled: false },
 		...(remote ? [{ label: syncError ? t('Sync now (last try failed)') : t('Sync now'), click: () => syncNow() }] : []),
-		{ label: config.provider === 'local' ? t('Sync with Nextcloud or a drive…') : config.provider === 'nextcloud' ? t('Log out') : t('Disconnect {drive}', { drive: PROVIDER_NAMES[config.provider] }), click: confirmLogout },
+		{ label: syncMenuLabel(), click: confirmLogout },
 		{ label: t('Quit Blockwise'), role: 'quit' },
 	])
 }
 
+const syncMenuLabel = () => (config.provider === 'local' ? t('Sync with Nextcloud or a drive…') : t('Log out or switch sync…'))
+
+/** The menu at the top of the screen (while a Blockwise window is in front) */
+function setAppMenu() {
+	const connected = !!(config && engine)
+	Menu.setApplicationMenu(Menu.buildFromTemplate([
+		{ label: 'Blockwise', submenu: [
+			{ role: 'about', label: t('About Blockwise') },
+			{ type: 'separator' },
+			{ label: t('Settings…'), accelerator: 'Cmd+,', enabled: connected, click: () => showMain('settings') },
+			...(connected && remote ? [{ label: t('Sync now'), accelerator: 'Cmd+R', click: () => syncNow() }] : []),
+			...(connected ? [{ label: syncMenuLabel(), click: confirmLogout }] : []),
+			{ type: 'separator' },
+			{ role: 'hide', label: t('Hide Blockwise') }, { role: 'hideOthers' }, { role: 'unhide' },
+			{ type: 'separator' },
+			{ role: 'quit', label: t('Quit Blockwise') },
+		] },
+		// Copy, paste and undo in text fields
+		{ role: 'editMenu' },
+		{ role: 'windowMenu' },
+	]))
+}
+
+const syncName = () => (config.provider === 'nextcloud' ? new URL(config.server).host : t(PROVIDER_NAMES[config.provider]))
+
+/**
+ * Change where your data lives. "Switch" takes your data on this Mac along to
+ * the sync you choose next (a drive, Nextcloud or this Mac only); "remove"
+ * leaves it only where it is synced now.
+ */
 async function confirmLogout() {
 	if (config.provider === 'local') {
 		// Your data comes along to the sync you choose
@@ -446,17 +515,21 @@ async function confirmLogout() {
 		return
 	}
 	const pending = engine ? engine.pending() : 0
-	const message = config.provider === 'nextcloud'
-		? t('Log out of {host}? The app password is removed from Nextcloud.', { host: new URL(config.server).host })
-		: t('Disconnect {drive}? Blockwise stops syncing and forgets the drive and your passphrase on this Mac. Your data on the drive stays.', { drive: PROVIDER_NAMES[config.provider] })
+	const isNc = config.provider === 'nextcloud'
 	const { response } = await dialog.showMessageBox({
-		type: pending ? 'warning' : 'question',
-		buttons: [config.provider === 'nextcloud' ? t('Log out') : t('Disconnect'), t('Cancel')],
-		defaultId: 1,
-		message,
-		detail: pending ? t('Some changes on this Mac are not synced yet and will be lost.') : undefined,
+		type: 'question',
+		buttons: [t('Switch and take my data'), isNc ? t('Log out and remove it from this Mac') : t('Disconnect and remove it from this Mac'), t('Cancel')],
+		defaultId: 0,
+		cancelId: 2,
+		message: isNc ? t('Stop syncing with {host}?', { host: syncName() }) : t('Stop syncing with {drive}?', { drive: syncName() }),
+		detail: [
+			isNc ? t('The app password is removed from Nextcloud.') : t('Blockwise forgets the drive and your passphrase on this Mac. Your encrypted data on the drive stays.'),
+			t('"Switch" keeps your data on this Mac and takes it to the sync you choose next (Nextcloud, Dropbox, Google Drive or this Mac only).'),
+			pending ? t('Some changes on this Mac are not synced yet: "Switch" keeps them, "remove" loses them.') : '',
+		].filter(Boolean).join('\n\n'),
 	})
-	if (response === 0) disconnect({ revoke: true })
+	if (response === 0) disconnect({ revoke: true, carry: true })
+	else if (response === 1) disconnect({ revoke: true })
 }
 
 function createPopover() {
@@ -771,6 +844,7 @@ ipcMain.on('popover:height', (e, h) => {
 // --- start ------------------------------------------------------------------------------------------
 
 function startApp() {
+	setAppMenu()
 	if (!tray) createTray()
 	refresh()
 	clearInterval(refreshTimer)
@@ -825,6 +899,7 @@ app.whenReady().then(async () => {
 	session.defaultSession.clearStorageData({ storages: ['cookies'] }).catch(() => {})
 	t = i18n.make(app.getLocale())
 	loadProviderKeys()
+	setAppMenu()
 	config = loadConfig()
 	if (config) {
 		try {

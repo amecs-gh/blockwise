@@ -386,7 +386,7 @@
 					h('a', { href: `#c/${c.id}`, title: c.name, class: state.route === 'commitment' && state.commitmentId === c.id ? 'active' : '', 'aria-current': state.route === 'commitment' && state.commitmentId === c.id ? 'page' : null },
 						h('span', { class: 'imp-dot', style: { background: c.color } }),
 						h('span', { class: 'imp-nav__name' }, c.name),
-						c.calendarId === null ? h('span', { class: 'imp-nav__warn', title: tr('No calendar linked') }, '!') : null))),
+						c.calendarId === null && state.features.calendars !== false ? h('span', { class: 'imp-nav__warn', title: tr('No calendar linked') }, '!') : null))),
 				h('li', null, h('a', { href: '#settings', class: 'imp-nav__add' }, '+ ', tr('New commitment')))),
 		)
 	}

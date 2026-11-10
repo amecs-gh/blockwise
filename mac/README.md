@@ -13,8 +13,10 @@ Blockwise as a Mac app:
 
 ## Where your data lives
 
-The first time, Blockwise asks where to keep your data. You can change it later
-(right-click the menu bar icon → Log out / Disconnect).
+The first time, Blockwise asks where to keep your data. To change it later:
+**Blockwise → Log out or switch sync…** (also when you right-click the menu
+bar icon). **Switch and take my data** keeps everything on this Mac and sends
+it to the sync you choose next; **remove** leaves it only where it is synced now.
 
 | Choice | Sync | Calendar blocks come from |
 | --- | --- | --- |
@@ -23,8 +25,13 @@ The first time, Blockwise asks where to keep your data. You can change it later
 | **Google Drive** | Through Blockwise's hidden app folder in your Drive, end-to-end encrypted | Apple Calendar |
 | **This Mac only** | None; connect a sync later and your data comes along | Apple Calendar |
 
-Apple Calendar shows every calendar you added to macOS (iCloud, Google, Exchange,
-Nextcloud via CalDAV). macOS asks once whether Blockwise may use your calendars.
+**Apple Calendar is optional** (right-click the menu bar icon → **Use Apple
+Calendar**). With it, the events in the calendars you link to a commitment are
+your planned time blocks, and Blockwise adds the blocks you plan. It shows every
+calendar you added to macOS (iCloud, Google, Exchange, Nextcloud via CalDAV).
+macOS only offers full calendar access, so Blockwise explains first and asks
+only when you turn it on. Without it, everything else works: commitments,
+tasks, notes, the timer and your time.
 
 ### Dropbox and Google Drive: end-to-end encrypted
 

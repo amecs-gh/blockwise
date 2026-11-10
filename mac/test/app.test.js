@@ -268,7 +268,8 @@ async function openWindow(browser, file, winName, opts = {}) {
 	mock.Tray.last.popUpContextMenu = (m) => { T.lastMenu = m }
 	await call('menu')
 	console.log('  menu:', T.lastMenu.items.map((i) => i.label || '—').join(' | '))
-	T.lastMenu.items.find((i) => i.label === 'Log out').click()
+	mock.dialog.response = 1 // log out and remove the data
+	T.lastMenu.items.find((i) => i.label === 'Log out or switch sync…').click()
 	await sleep(1500)
 	assert.ok(!fs.existsSync(path.join(T.userData, 'config.json')), 'config removed')
 	const revoked = await fetch(`${SERVER}/index.php/apps/tracker/api/state`, { headers: { Authorization: auth, 'OCS-APIRequest': 'true' } })

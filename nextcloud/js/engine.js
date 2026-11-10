@@ -444,7 +444,7 @@
 					running: running(),
 					longBreakUntil: longBreakUntil(),
 					now: now(),
-					features: { createBlocks: typeof o.calendar.createEvent === 'function' },
+					features: { createBlocks: typeof o.calendar.createEvent === 'function', calendars: o.calendar.kind !== 'none' },
 					sync: { pending: Object.keys(db.dirty).length, lastSync: db.lastSync, server: !!o.remote, refused: db.refused || null },
 				}
 			}],
@@ -1064,8 +1064,8 @@
 			/** What the native side needs for notifications: running timer, settings, commitments, calendars */
 			snapshot: () => ({ node: db.node, hlc: db.hlc, pending: Object.keys(db.dirty).length, running: running(), settings: settings(), longBreakUntil: longBreakUntil(), commitments: commitments().map((c) => ({ id: c.id, uuid: c.uuid, name: c.name, color: c.color, calendarUrl: c.calendarUrl })) }),
 			flush: () => o.storage.save(db),
-			/** Send everything again (to a new sync: from "this Mac only" to a drive or Nextcloud) */
-			resendAll: () => { markAllDirty(); return o.storage.save(db) },
+			/** Moving to a new sync (data taken along): send everything, read the new one from the start */
+			resendAll: () => { markAllDirty(); db.cursor = 0; return o.storage.save(db) },
 			_db: () => db,
 		}
 	}

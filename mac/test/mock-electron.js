@@ -72,7 +72,7 @@ Object.defineProperty(session, 'defaultSession', { get: () => session.fromPartit
 
 module.exports = {
 	app, BrowserWindow, WebContentsView, Tray, Notification, session,
-	Menu: { buildFromTemplate: (items) => ({ items }) },
+	Menu: { buildFromTemplate: (items) => ({ items }), setApplicationMenu: (m) => { module.exports.__test.appMenu = m } },
 	nativeImage: { createFromPath: (p) => ({ path: p, setTemplateImage() {} }) },
 	ipcMain: { handle: (c, fn) => { handlers[c] = fn }, on: (c, fn) => { listeners[c] = fn } },
 	// Electron 45: only the async API (the sync one is deprecated)
@@ -85,7 +85,7 @@ module.exports = {
 	net: { fetch: (u, o) => fetch(u, o) },
 	screen: { getDisplayMatching: () => ({ workArea: { x: 0, y: 25, width: 1440, height: 875 } }) },
 	powerMonitor: { on() {} },
-	dialog: { showMessageBox: async (o) => { record('dialog', o.message); return { response: 0 } } },
+	dialog: { response: 0, showMessageBox: async (o) => { record('dialog', o.message); return { response: module.exports.dialog.response } } },
 	// test helpers
 	__test: { log, handlers, listeners, sent, sessions, userData, ready: () => readyResolve(), BrowserWindow, Tray },
 }

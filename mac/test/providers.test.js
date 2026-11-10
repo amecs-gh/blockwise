@@ -128,7 +128,8 @@ fs.writeFileSync(keysFile, JSON.stringify({ dropboxAppKey: 'dbxtestkey12', googl
 
 	await menu()
 	assert.ok(T.lastMenu.items.some((i) => i.label === 'Syncing with Dropbox, end-to-end encrypted'))
-	T.lastMenu.items.find((i) => i.label === 'Disconnect Dropbox').click()
+	mock.dialog.response = 1 // disconnect and remove
+	T.lastMenu.items.find((i) => i.label === 'Log out or switch sync…').click()
 	await sleep(1000)
 	assert.ok(!fs.existsSync(path.join(T.userData, 'config.json')))
 	assert.ok(!fs.existsSync(dataFile), 'data on this Mac removed (it is on Dropbox)')
@@ -143,6 +144,24 @@ fs.writeFileSync(keysFile, JSON.stringify({ dropboxAppKey: 'dbxtestkey12', googl
 	await sleep(1500)
 	assert.ok((await call('api', 'GET', 'state')).commitments.some((x) => x.name === 'From the other Mac'))
 	ok('connecting again: wrong passphrase refused; the right one brings everything back')
+
+	console.log('Switching, data taken along')
+	const st0 = await call('api', 'GET', 'state')
+	assert.equal(st0.features.calendars, false, 'Apple Calendar off until you turn it on')
+	assert.ok(!T.log.some((l) => /blockwise-calendar|access/.test(l) && /helper/.test(l)), 'macOS was never asked for calendar access')
+	const top = T.appMenu.items[0].submenu.map((i) => i.label)
+	assert.ok(top.includes('Log out or switch sync…') && top.includes('Sync now'), 'also in the Blockwise menu at the top')
+	mock.dialog.response = 0 // switch and take my data
+	await menu()
+	T.lastMenu.items.find((i) => i.label === 'Log out or switch sync…').click()
+	await sleep(1000)
+	assert.ok(fs.existsSync(dataFile), 'data kept')
+	assert.ok(!fs.existsSync(path.join(T.userData, 'config.json')))
+	await call('useThisMac')
+	await sleep(300)
+	const st1 = await call('api', 'GET', 'state')
+	assert.ok(st1.commitments.some((x) => x.name === 'From the other Mac') && st1.commitments.some((x) => x.name === 'Made offline'))
+	ok('"Switch and take my data": Dropbox → this Mac only, everything kept')
 
 	p.server.close()
 	restore()
