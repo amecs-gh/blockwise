@@ -17,7 +17,7 @@ import java.util.Set;
 import javax.crypto.AEADBadTagException;
 
 /**
- * Your Tracker data on the phone (local-first): the engine's database, the
+ * Your Blockwise data on the phone (local-first): the engine's database, the
  * snapshot the notifications use, and changes made from the notification.
  *
  * Each file is encrypted with its own AES key in the Android Keystore (not

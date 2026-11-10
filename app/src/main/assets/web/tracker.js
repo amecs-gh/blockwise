@@ -1,5 +1,5 @@
 /**
- * Tracker for Nextcloud — frontend.
+ * Blockwise for Nextcloud — frontend.
  * Plain JavaScript, no build step. Rendered into #tracker-app.
  */
 (function () {

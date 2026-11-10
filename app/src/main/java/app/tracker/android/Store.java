@@ -61,7 +61,7 @@ final class Store {
 
     /** @return false if the Keystore failed and the password lives in memory only */
     static synchronized boolean saveLogin(Context c, String server, String loginName, String appPassword) {
-        // Another account: the phone's Tracker data starts empty
+        // Another account: the phone's Blockwise data starts empty
         Vault.claim(c, server, loginName);
         SharedPreferences.Editor e = prefs(c).edit()
                 .putString("server", server)

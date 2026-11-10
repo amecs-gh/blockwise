@@ -9,8 +9,8 @@
 		$('title').textContent = t('Connect to your Nextcloud')
 		const android = s.platform === 'android'
 		$('intro').textContent = android
-			? t('Tracker uses your commitments, tasks and calendar from Nextcloud. You log in once; the app gets its own password, stored encrypted on this phone.')
-			: t('Tracker uses your commitments, tasks and calendar from Nextcloud. You log in once; the app gets its own password, stored in your Keychain.')
+			? t('Blockwise uses your commitments, tasks and calendar from Nextcloud. You log in once; the app gets its own password, stored encrypted on this phone.')
+			: t('Blockwise uses your commitments, tasks and calendar from Nextcloud. You log in once; the app gets its own password, stored in your Keychain.')
 		$('server-label').textContent = t('Nextcloud address')
 		$('server').placeholder = t('e.g. cloud.example.com or your Tailscale name')
 		$('submit').textContent = t('Log in')

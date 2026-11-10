@@ -1,4 +1,4 @@
-/* The few Nextcloud page features Tracker's interface uses, for the Mac app:
+/* The few Nextcloud page features Blockwise's interface uses, for the Mac app:
  * translations (t, n), the locale, toasts, and the bridge to the app. */
 ;(function () {
 	'use strict'

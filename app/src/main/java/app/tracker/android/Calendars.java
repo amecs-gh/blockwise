@@ -213,7 +213,7 @@ final class Calendars {
     /** Adds a block; the calendar app (DAVx5) uploads it to Nextcloud. @return its uid */
     static String create(Context c, String url, String title, long start, long end) throws CalendarException {
         if (!canWrite(c)) {
-            throw new CalendarException("Tracker may not write to your calendar.");
+            throw new CalendarException("Blockwise may not write to your calendar.");
         }
         Cal cal = byUrl(list(c), url);
         if (cal == null) {

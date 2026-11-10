@@ -19,12 +19,12 @@ import app.tracker.core.Vars;
 import app.tracker.core.ServerUrl;
 
 /**
- * Talking to Nextcloud: login flow v2 (gives an app password) and the Tracker
+ * Talking to Nextcloud: login flow v2 (gives an app password) and the Blockwise
  * API with Basic auth. Redirects are never followed, so the password never
  * goes to another address. Blocking calls: run them off the main thread.
  */
 final class Nextcloud {
-    static final String USER_AGENT = "Tracker for Android";
+    static final String USER_AGENT = "Blockwise for Android";
     private static final int TIMEOUT_MS = 20000;
     private static final int MAX_BODY = 8 * 1024 * 1024;
 
@@ -137,7 +137,7 @@ final class Nextcloud {
                 // not JSON
             }
             if (message == null && r.status == 404) {
-                message = t.t("The Tracker app is not enabled on this Nextcloud.");
+                message = t.t("The Blockwise app is not enabled on this Nextcloud.");
             }
             throw new ApiException(message != null ? message : t.t("Request failed (HTTP {status}).", Vars.of("status", String.valueOf(r.status))), r.status);
         }

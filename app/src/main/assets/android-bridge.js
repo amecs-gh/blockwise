@@ -3,7 +3,7 @@
  * preload gives its windows (so setup.js and nextcloud-shim.js are shared),
  * implemented over the app's Java bridge (window.TrackerAndroid).
  *
- * Tracker runs here, on the phone (local-first): the interface's API requests
+ * Blockwise runs here, on the phone (local-first): the interface's API requests
  * go to the engine (web/engine.js), which keeps your data on the phone
  * (encrypted by the app), reads blocks from the phone's calendars, and syncs
  * with Nextcloud whenever it can.
