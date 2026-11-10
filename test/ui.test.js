@@ -74,10 +74,10 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		await a.page.waitForSelector('.imp-page', { timeout: 15000 })
 		const tag = `${dark ? 'dark' : 'light'}-${locale.slice(0, 2)}${dynamic ? '-you' : ''}`
 		const firstC = await a.page.evaluate(() => document.querySelector('.imp-nav__commitments a')?.getAttribute('href')?.slice(1))
-		for (const pg of ['now', 'tasks', 'done', 'time', 'settings', firstC]) {
+		for (const pg of ['now', 'tasks', 'notes', 'done', 'time', 'settings', firstC]) {
 			await a.page.evaluate((h) => { location.hash = h }, '#' + pg)
 			// wait until the page has loaded (some make several requests)
-			await a.page.waitForFunction((pg) => { const h = document.querySelector('.imp-page h1'); const want = { now: null, tasks: 'Tasks|Task', done: 'Done|Fatto', time: 'Time|Tempo', settings: 'Settings|Impostazioni' }[pg]; return pg === 'now' ? !!document.querySelector('.imp-timer') : pg === 'tasks' ? !!document.querySelector('.imp-tq__top') : pg.startsWith('c/') ? !!document.querySelector('.imp-cpage') : !!h && new RegExp('^(' + want + ')$').test(h.textContent.trim()) }, pg, { timeout: 15000 })
+			await a.page.waitForFunction((pg) => { const h = document.querySelector('.imp-page h1'); const want = { now: null, tasks: 'Tasks|Task', done: 'Done|Fatto', time: 'Time|Tempo', settings: 'Settings|Impostazioni' }[pg]; return pg === 'now' ? !!document.querySelector('.imp-timer') : pg === 'tasks' ? !!document.querySelector('.imp-tq__top') : pg === 'notes' ? !!document.querySelector('#imp-note-new') : pg.startsWith('c/') ? !!document.querySelector('.imp-cpage') : !!h && new RegExp('^(' + want + ')$').test(h.textContent.trim()) }, pg, { timeout: 15000 })
 			await a.page.waitForTimeout(400)
 			const info = await a.page.evaluate(() => {
 				const m = document.querySelector('.imp-main')
@@ -89,7 +89,22 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 			assert.equal(info.apps, 2, 'Calendar and Account buttons')
 			assert.ok(info.chips >= 2, 'commitment chips')
 			assert.ok(!info.failed, `page ${pg} loads`)
-			if (!dark || pg === 'now' || pg === 'tasks') await a.page.screenshot({ path: `${shots}/${tag}-${pg.replace('/', '')}.png` })
+			if (!dark || pg === 'now' || pg === 'tasks' || pg === 'notes') await a.page.screenshot({ path: `${shots}/${tag}-${pg.replace('/', '')}.png` })
+		}
+		if (tag === 'light-en') {
+			await a.page.evaluate(() => { location.hash = '#notes' })
+			await a.page.waitForSelector('#imp-note-new')
+			await a.page.fill('#imp-note-new', 'Phone note ' + Date.now())
+			await a.page.keyboard.press('Enter')
+			await a.page.waitForSelector('.imp-note__text:has-text("Phone note")')
+			await a.page.screenshot({ path: `${shots}/${tag}-notes-added.png` })
+			await a.page.locator('.imp-note:has-text("Phone note") input[type=checkbox]').first().check()
+			await a.page.waitForSelector('.imp-notes__ticked')
+			const note = await a.page.evaluate(async () => (await window.trackerApp.api('GET', 'notes')).find((n) => /^Phone note/.test(n.text)))
+			assert.ok(note && note.done, 'note ticked on the phone')
+			await a.page.evaluate((id) => window.trackerApp.api('DELETE', 'notes/' + id), note.id)
+			await a.page.evaluate((h) => { location.hash = h }, '#' + firstC)
+			await a.page.waitForSelector('.imp-cpage')
 		}
 		assert.ok(await a.page.$('.imp-newblock button'), 'Plan a block on the commitment page')
 		await a.page.click('.imp-newblock button')

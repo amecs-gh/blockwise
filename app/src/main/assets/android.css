@@ -769,3 +769,6 @@ body.android .imp-composer {
 body.android .imp-newblock h2 { margin: 0 0 12px; }
 body.android :is(input[type="date"], input[type="time"]) { color-scheme: light; }
 html.m3-dark body.android :is(input[type="date"], input[type="time"]) { color-scheme: dark; }
+
+/* Notes: the field grows by itself, no resize grip */
+body.android .imp-note__new { resize: none; }
