@@ -1,25 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Status bar icon: white on transparent -->
+<!-- Status bar icon: the two blocks, white on transparent -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
+    android:viewportWidth="100"
+    android:viewportHeight="100">
     <path
-        android:pathData="M12,4.5 A8,8 0 1,1 11.99,4.5 Z"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2"
-        android:fillColor="#00000000" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M25 10 H56 A18 18 0 0 1 74 28 A18 18 0 0 1 56 46 H25 A5 5 0 0 1 20 41 V15 A5 5 0 0 1 25 10 Z" />
     <path
-        android:pathData="M8.5,12.5 L11,15 L15.5,9.8"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="2"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:fillColor="#00000000" />
-    <path
-        android:pathData="M10,2.5 L14,2.5"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M25 53 H63.5 A18.5 18.5 0 0 1 82 71.5 A18.5 18.5 0 0 1 63.5 90 H25 A5 5 0 0 1 20 85 V58 A5 5 0 0 1 25 53 Z" />
 </vector>
