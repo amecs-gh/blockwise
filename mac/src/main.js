@@ -1,7 +1,12 @@
 'use strict'
 /**
  * Blockwise for Mac: Blockwise's interface in a Mac window, a menu bar item with the
- * running timer and quick actions, and Apple Calendar for the calendar.
+ * running timer and quick actions, notifications.
+ *
+ * Local-first: Blockwise runs here (the engine, nextcloud/js/engine.js, in this
+ * process), keeps your data encrypted on this Mac and syncs it, when it can, with
+ * Nextcloud, Dropbox or Google Drive (end-to-end encrypted there), or not at all.
+ * Blocks come from Nextcloud's calendars, or from Apple Calendar.
  */
 const {
 	app, BrowserWindow, Tray, Menu, nativeImage, Notification,
@@ -12,6 +17,11 @@ const fs = require('node:fs')
 const { execFile } = require('node:child_process')
 const { pathToFileURL } = require('node:url')
 const nc = require('./nextcloud')
+const { createEngine } = require('../renderer/web/engine.js')
+const FileSync = require('../renderer/web/filesync.js')
+const drives = require('./drives')
+const cal = require('./calendar')
+const { createVault } = require('./vault')
 const { checkAlerts, trayTitle } = require('./alerts')
 const i18n = require('../renderer/i18n.js')
 
@@ -24,8 +34,22 @@ const POPOVER_WIDTH = 360
 const PAGES = ['now', 'tasks', 'done', 'time', 'settings']
 
 let t = (s) => s
-let config = null // { server, loginName, appPassword (encrypted, base64), encrypted, notifications }
-let client = null
+/**
+ * { provider: nextcloud | dropbox | gdrive | local, notifications,
+ *   nextcloud: server, loginName, appPassword (encrypted), encrypted, format,
+ *   drives: driveToken (encrypted refresh token), driveAccount, syncKey (encrypted) }
+ */
+let config = null
+let client = null // Nextcloud
+let engine = null // Blockwise on this Mac
+let remote = null // where it syncs (null: this Mac only)
+let driveStoreNow = null // the drive, to revoke the token when you disconnect
+let vault = null
+let syncTimer = null
+let syncError = null
+let refreshSoonTimer = null
+let pendingDrive = null // a drive being connected (setup)
+const PROVIDER_NAMES = { nextcloud: 'Nextcloud', dropbox: 'Dropbox', gdrive: 'Google Drive', local: 'This Mac' }
 let tray = null
 let popover = null
 let popoverHiddenAt = 0
@@ -46,7 +70,7 @@ app.setPath('userData', path.join(app.getPath('appData'), 'Tracker'))
 if (!app.requestSingleInstanceLock()) {
 	app.quit()
 } else {
-	app.on('second-instance', () => (client ? showMain() : showSetup()))
+	app.on('second-instance', () => (engine ? showMain() : showSetup()))
 }
 
 // --- config ---------------------------------------------------------------------------
@@ -56,11 +80,35 @@ const configPath = () => path.join(app.getPath('userData'), 'config.json')
 function loadConfig() {
 	try {
 		const c = JSON.parse(fs.readFileSync(configPath(), 'utf8'))
-		return c.server && c.loginName && c.appPassword ? c : null
+		if (!c.provider && c.server) c.provider = 'nextcloud' // earlier versions
+		if (c.provider === 'nextcloud') return c.server && c.loginName && c.appPassword ? c : null
+		if (c.provider === 'dropbox' || c.provider === 'gdrive') return c.driveToken && c.syncKey ? c : null
+		return c.provider === 'local' ? c : null
 	} catch (e) {
 		return null
 	}
 }
+
+/** Whose data is on this Mac: another account starts empty (from "this Mac only" it moves along) */
+const ownerPath = () => path.join(app.getPath('userData'), 'owner')
+const readOwner = () => { try { return fs.readFileSync(ownerPath(), 'utf8') } catch (e) { return null } }
+const writeOwner = (o) => fs.writeFileSync(ownerPath(), o, { mode: 0o600 })
+
+/** App keys for Dropbox and Google (not secret: PKCE protects the login), from the build */
+let providerKeys = {}
+function loadProviderKeys() {
+	try {
+		const k = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config', 'providers.json'), 'utf8'))
+		providerKeys = {
+			dropboxAppKey: typeof k.dropboxAppKey === 'string' ? k.dropboxAppKey : '',
+			googleClientId: typeof k.googleClientId === 'string' ? k.googleClientId : '',
+			googleClientSecret: typeof k.googleClientSecret === 'string' ? k.googleClientSecret : '',
+		}
+	} catch (e) {
+		providerKeys = {}
+	}
+}
+const availableProviders = () => ['nextcloud', providerKeys.dropboxAppKey && 'dropbox', providerKeys.googleClientId && 'gdrive', 'local'].filter(Boolean)
 
 function saveConfig(c) {
 	fs.mkdirSync(path.dirname(configPath()), { recursive: true })
@@ -117,14 +165,74 @@ async function openPassword(c) {
 /** fetch without the default session, so cookies Nextcloud sets stay in memory */
 const apiFetch = (u, o) => session.fromPartition(API_PARTITION).fetch(u, o)
 
-async function connect() {
-	client = nc.createClient({ server: config.server, loginName: config.loginName, appPassword: await openPassword(config), fetch: apiFetch })
+function driveStore(provider, refreshToken) {
+	return provider === 'dropbox'
+		? drives.dropboxStore({ appKey: providerKeys.dropboxAppKey, refreshToken, fetch: apiFetch })
+		: drives.googleStore({ clientId: providerKeys.googleClientId, clientSecret: providerKeys.googleClientSecret, refreshToken, fetch: apiFetch })
 }
 
-async function disconnect({ revoke }) {
+/** The Apple Calendar helper inside the app (mac/helper) */
+function helperPath() {
+	const p = app.isPackaged ? path.join(process.resourcesPath, 'blockwise-calendar') : path.join(__dirname, '..', 'helper', 'build', 'blockwise-calendar')
+	return fs.existsSync(p) ? p : null
+}
+
+async function connect() {
+	vault = createVault({ safeStorage, dir: app.getPath('userData') })
+	client = config.provider === 'nextcloud'
+		? nc.createClient({ server: config.server, loginName: config.loginName, appPassword: await openPassword(config), fetch: apiFetch })
+		: null
+	const helper = helperPath()
+	const calendar = client ? cal.nextcloudCalendar({ api: client.api }) : helper ? cal.appleCalendar({ helperPath: helper }) : cal.noCalendar
+
+	let inner = null
+	if (client) inner = { pull: (since, limit) => client.api('GET', `sync?since=${since}&limit=${limit}`), push: (records) => client.api('POST', 'sync', { records }) }
+	const lazy = { pull: (since, limit) => inner.pull(since, limit), push: (records) => inner.push(records) }
+	// A Keychain that can't open the data throws here: nothing is started empty over it
+	const stored = await vault.read('data')
+	engine = await createEngine({
+		storage: { load: async () => (stored ? JSON.parse(stored) : null), save: (db) => vault.write('data', JSON.stringify(db)) },
+		remote: config.provider === 'local' ? null : lazy,
+		calendar,
+		onChange: (db, info) => {
+			if (!(info && info.sync)) syncSoon(2500)
+			refreshSoon()
+		},
+	})
+	if (config.provider === 'dropbox' || config.provider === 'gdrive') {
+		const refreshToken = await vault.unseal(config.driveToken)
+		const key = Buffer.from(await vault.unseal(config.syncKey), 'base64')
+		driveStoreNow = driveStore(config.provider, refreshToken)
+		inner = await FileSync.createRemote({
+			store: driveStoreNow,
+			key: new Uint8Array(key),
+			node: engine.node(),
+			state: { load: async () => JSON.parse((await vault.read('drivestate')) || 'null'), save: (st) => vault.write('drivestate', JSON.stringify(st)) },
+		})
+	}
+	remote = config.provider === 'local' ? null : lazy
+	if (calendar.access) calendar.access().catch(() => {}) // macOS asks once
+}
+
+/**
+ * Log out / disconnect. `keepData`: the data on this Mac stays (Nextcloud
+ * refused the app password: changes not synced yet are not lost).
+ */
+async function disconnect({ revoke, keepData = false }) {
 	clearInterval(refreshTimer)
+	clearTimeout(syncTimer)
 	if (revoke && client) await client.revoke()
+	if (revoke && driveStoreNow) await driveStoreNow.revoke()
+	if (engine) await engine.flush().catch(() => {})
+	if (!keepData && vault) {
+		vault.remove('data')
+		vault.remove('drivestate')
+		try { fs.unlinkSync(ownerPath()) } catch (e) { /* none */ }
+	}
 	client = null
+	engine = null
+	remote = null
+	driveStoreNow = null
 	config = null
 	memoryPassword = null
 	dash = null
@@ -151,10 +259,10 @@ function weekBounds() {
 }
 
 async function refresh() {
-	if (!client) return
+	if (!engine) return
 	try {
 		const [from, to] = weekBounds()
-		const [d, sessions] = await Promise.all([client.api('GET', 'dashboard'), client.api('GET', `sessions?from=${from}&to=${to}`)])
+		const [d, sessions] = await Promise.all([engine.api('GET', 'dashboard'), engine.api('GET', `sessions?from=${from}&to=${to}`)])
 		const now = Math.floor(Date.now() / 1000)
 		d.weekTracked = {}
 		for (const s of sessions) {
@@ -165,30 +273,63 @@ async function refresh() {
 		dashError = null
 	} catch (e) {
 		dashError = e.message
-		if (e.status === 401) {
-			notify(t('Log in again'), t('Nextcloud rejected the app password. Log in again.'))
-			disconnect({ revoke: false })
-			return
-		}
 	}
 	broadcast()
-	scheduleRefresh()
 }
 
-function scheduleRefresh() {
-	clearTimeout(refreshTimer)
-	// More often while tracking, so changes made in the browser show up soon
-	refreshTimer = setTimeout(refresh, dash && dash.running ? 15000 : 45000)
+function refreshSoon() {
+	clearTimeout(refreshSoonTimer)
+	refreshSoonTimer = setTimeout(refresh, 150)
+}
+
+// --- sync -------------------------------------------------------------------------------------
+
+function syncSoon(ms) {
+	clearTimeout(syncTimer)
+	syncTimer = setTimeout(syncNow, ms)
+}
+
+/** Sends this Mac's changes and gets the others'; then again in a while (sooner while tracking). */
+async function syncNow() {
+	clearTimeout(syncTimer)
+	if (!engine || !remote) return
+	try {
+		const r = await engine.sync()
+		syncError = null
+		if (r && (r.pulled || (r.refused && r.refused.length))) notifyChanged()
+		if (r && r.refused && r.refused.length) {
+			const reasons = [...new Set(r.refused.map((x) => x.reason))].join(' · ')
+			notify(t('Some changes could not be synced'), /too far ahead/.test(reasons) ? t('Check the date and time of this Mac.') : reasons)
+		}
+	} catch (e) {
+		if (e.status === 401 || e.revoked) {
+			if (config && config.provider === 'nextcloud') {
+				notify(t('Log in again'), t('Nextcloud rejected the app password. Log in again.'))
+				disconnect({ revoke: false, keepData: true })
+			} else {
+				syncError = t('{drive} no longer accepts Blockwise. Disconnect and connect it again.', { drive: PROVIDER_NAMES[config.provider] })
+			}
+			return
+		}
+		// Offline: the changes wait; anything else is shown in the menu
+		syncError = e.offline || e.status === 0 ? null : t(e.message)
+	}
+	refresh()
+	if (engine) syncTimer = setTimeout(syncNow, dash && dash.running ? 30000 : 120000)
 }
 
 function publicState() {
+	const provider = config ? config.provider : null
 	return {
 		dash,
-		error: dashError,
+		error: dashError || syncError,
 		now: Math.floor(Date.now() / 1000),
+		provider,
+		providers: availableProviders(),
 		server: config && config.server,
-		host: config && new URL(config.server).host,
+		host: provider === 'nextcloud' ? new URL(config.server).host : provider ? t(PROVIDER_NAMES[provider]) : null,
 		loginName: config && config.loginName,
+		sync: engine ? { pending: engine.pending(), lastSync: engine.lastSync(), error: syncError } : null,
 		locale: app.getLocale(),
 		notifications: !config || config.notifications !== false,
 		openAtLogin: app.getLoginItemSettings().openAtLogin,
@@ -215,12 +356,12 @@ function notify(title, body) {
 async function tick() {
 	const now = Math.floor(Date.now() / 1000)
 	if (tray) tray.setTitle(trayTitle(dash, now), { fontType: 'monospacedDigit' })
-	if (!dash || !client) return
+	if (!dash || !engine) return
 	const a = checkAlerts(dash, now, seenAlerts, t)
 	a.notifications.forEach((n) => notify(n.title, n.body))
 	if (a.stopAt) {
-		// Pomodoro long break: stop exactly at its start (the web page may do the same; that's harmless)
-		try { await client.api('POST', 'sessions/stop', { at: a.stopAt, longBreak: true }) } catch (e) { /* retried on next refresh */ }
+		// Pomodoro long break: stop exactly at its start (another device may do the same; that's harmless)
+		try { await engine.api('POST', 'sessions/stop', { at: a.stopAt, longBreak: true }) } catch (e) { /* retried on next tick */ }
 		refresh()
 		notifyChanged()
 	} else if (a.clearLongBreak) {
@@ -247,19 +388,33 @@ function contextMenu() {
 		{ label: t('Open at login'), type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: (i) => app.setLoginItemSettings({ openAtLogin: i.checked }) },
 		{ label: t('Desktop notifications'), type: 'checkbox', checked: config.notifications !== false, click: (i) => { config.notifications = i.checked; saveConfig(config); broadcast() } },
 		{ type: 'separator' },
-		{ label: t('Logged in as {user} on {host}', { user: config.loginName, host: new URL(config.server).host }), enabled: false },
-		{ label: t('Log out'), click: confirmLogout },
+		config.provider === 'nextcloud'
+			? { label: t('Logged in as {user} on {host}', { user: config.loginName, host: new URL(config.server).host }), enabled: false }
+			: config.provider === 'local'
+				? { label: t('Your data is on this Mac only'), enabled: false }
+				: { label: t('Syncing with {drive}, end-to-end encrypted', { drive: PROVIDER_NAMES[config.provider] }), enabled: false },
+		...(remote ? [{ label: syncError ? t('Sync now (last try failed)') : t('Sync now'), click: () => syncNow() }] : []),
+		{ label: config.provider === 'local' ? t('Sync with Nextcloud or a drive…') : config.provider === 'nextcloud' ? t('Log out') : t('Disconnect {drive}', { drive: PROVIDER_NAMES[config.provider] }), click: confirmLogout },
 		{ label: t('Quit Blockwise'), role: 'quit' },
 	])
 }
 
 async function confirmLogout() {
-	const host = new URL(config.server).host
+	if (config.provider === 'local') {
+		// Your data comes along to the sync you choose
+		await disconnect({ revoke: false, keepData: true })
+		return
+	}
+	const pending = engine ? engine.pending() : 0
+	const message = config.provider === 'nextcloud'
+		? t('Log out of {host}? The app password is removed from Nextcloud.', { host: new URL(config.server).host })
+		: t('Disconnect {drive}? Blockwise stops syncing and forgets the drive and your passphrase on this Mac. Your data on the drive stays.', { drive: PROVIDER_NAMES[config.provider] })
 	const { response } = await dialog.showMessageBox({
-		type: 'question',
-		buttons: [t('Log out'), t('Cancel')],
+		type: pending ? 'warning' : 'question',
+		buttons: [config.provider === 'nextcloud' ? t('Log out') : t('Disconnect'), t('Cancel')],
 		defaultId: 1,
-		message: t('Log out of {host}? The app password is removed from Nextcloud.', { host }),
+		message,
+		detail: pending ? t('Some changes on this Mac are not synced yet and will be lost.') : undefined,
 	})
 	if (response === 0) disconnect({ revoke: true })
 }
@@ -301,6 +456,7 @@ function togglePopover() {
 	popover.show()
 	popover.focus()
 	refresh()
+	syncSoon(300)
 }
 
 function positionPopover() {
@@ -316,7 +472,7 @@ function positionPopover() {
 
 /** @param {string|null} page now|tasks|done|time|settings, or "calendar" for Apple Calendar */
 function showMain(page = null) {
-	if (!client) return showSetup()
+	if (!engine) return showSetup()
 	if (page === 'calendar') return openCalendar()
 	const hash = PAGES.includes(page) ? `#${page}` : ''
 	if (!mainWin || mainWin.isDestroyed()) {
@@ -388,7 +544,7 @@ function showSetup() {
 	if (process.platform === 'darwin' && app.dock) app.dock.show()
 	setupWin = new BrowserWindow({
 		width: 480,
-		height: 560,
+		height: 640,
 		resizable: false,
 		title: 'Blockwise',
 		titleBarStyle: 'hiddenInset',
@@ -417,7 +573,7 @@ async function login(serverInput) {
 		const cred = await loginFlow.poll()
 		// Use the address you entered: the one Nextcloud reports can be an internal name
 		const sealed = await sealPassword(cred.appPassword)
-		config = { server, loginName: cred.loginName, appPassword: sealed ? sealed.appPassword : '-', encrypted: !!sealed, format: sealed && sealed.format, notifications: true }
+		config = { provider: 'nextcloud', server, loginName: cred.loginName, appPassword: sealed ? sealed.appPassword : '-', encrypted: !!sealed, format: sealed && sealed.format, notifications: true }
 		if (sealed) saveConfig(config)
 		else {
 			memoryPassword = cred.appPassword
@@ -433,10 +589,66 @@ async function login(serverInput) {
 		// The browser login session isn't needed any more: only the app password is
 		await session.fromPartition(LOGIN_PARTITION).clearStorageData().catch(() => {})
 	}
+	await finishSetup(`nextcloud:${server}\n${config.loginName}`)
+}
+
+/**
+ * After choosing where to sync: another account's data on this Mac is removed;
+ * coming from "this Mac only", your data moves along to the new sync.
+ */
+async function finishSetup(owner) {
+	const before = readOwner()
+	const fromLocal = before === 'local' && owner !== 'local'
+	if (before !== owner && !fromLocal) {
+		const v = createVault({ safeStorage, dir: app.getPath('userData') })
+		v.remove('data')
+		v.remove('drivestate')
+	}
+	writeOwner(owner)
 	await connect()
+	if (fromLocal) await engine.resendAll()
 	startApp()
+	syncNow()
 	if (setupWin) setupWin.close()
 	showMain('now')
+}
+
+/** Connect a drive: you allow Blockwise in your browser. @return {{exists: boolean}} a Blockwise folder is there already */
+async function connectDrive(provider) {
+	if (provider !== 'dropbox' && provider !== 'gdrive') throw new Error('Invalid request.')
+	if (pendingDrive && pendingDrive.cancel) pendingDrive.cancel()
+	const opts = { fetch: apiFetch, openBrowser: (u) => openLink(u) }
+	const flow = provider === 'dropbox'
+		? drives.connectDropbox({ appKey: providerKeys.dropboxAppKey, ...opts })
+		: drives.connectGoogle({ clientId: providerKeys.googleClientId, clientSecret: providerKeys.googleClientSecret, ...opts })
+	pendingDrive = { provider, cancel: flow.cancel }
+	const r = await flow
+	const store = driveStore(provider, r.refreshToken)
+	const account = r.account || (store.account ? await store.account().catch(() => null) : null)
+	const exists = !!(await store.read('blockwise.json'))
+	pendingDrive = { provider, refreshToken: r.refreshToken, account, store }
+	return { exists }
+}
+
+/** The passphrase: sets up the folder, or opens the one other devices made. */
+async function unlockDrive(passphrase) {
+	if (!pendingDrive || !pendingDrive.store) throw new Error('Connect a drive first.')
+	const key = await FileSync.unlock(pendingDrive.store, String(passphrase || ''))
+	const v = createVault({ safeStorage, dir: app.getPath('userData') })
+	const driveToken = await v.seal(pendingDrive.refreshToken)
+	const syncKey = await v.seal(Buffer.from(key).toString('base64'))
+	if (!driveToken || !syncKey) throw new Error(t('Blockwise could not use your Keychain, so it can\'t keep the connection. Quit Blockwise, open it again and retry.'))
+	const { provider, account } = pendingDrive
+	config = { provider, driveToken, syncKey, driveAccount: account, notifications: true }
+	saveConfig(config)
+	pendingDrive = null
+	await finishSetup(`${provider}:${account || ''}`)
+}
+
+async function useThisMac() {
+	config = { provider: 'local', notifications: true }
+	saveConfig(config)
+	await finishSetup('local')
 }
 
 // --- IPC from the windows ------------------------------------------------------------------------
@@ -447,10 +659,11 @@ function fromApp(e) {
 	return url.startsWith(RENDERER_URL)
 }
 
-function handle(channel, fn) {
+function handle(channel, fn, onlyPage) {
 	ipcMain.handle(channel, async (e, ...args) => {
 		try {
 			if (!fromApp(e)) throw new Error('Not allowed.')
+			if (onlyPage && e.senderFrame.url.slice(RENDERER_URL.length).split(/[?#]/)[0] !== onlyPage) throw new Error('Not allowed.')
 			return { data: await fn(...args) }
 		} catch (err) {
 			return { error: err.message || String(err), status: err.status }
@@ -469,11 +682,12 @@ const isPlainBody = (b) => b === undefined || (b !== null && typeof b === 'objec
 ipcMain.handle('api', async (e, method, apiPath, body) => {
 	try {
 		if (!fromApp(e)) throw new Error('Not allowed.')
-		if (!client) throw new Error('Not logged in.')
+		if (!engine) throw new Error('Not logged in.')
 		if (!API_METHODS.has(method) || typeof apiPath !== 'string' || !API_PATH.test(apiPath) || !isPlainBody(body)) throw new Error('Invalid request.')
-		const result = await client.api(method, apiPath, body)
+		// Answered here, from your data on this Mac
+		const result = await engine.api(method, apiPath, body)
 		if (method !== 'GET') {
-			refresh()
+			refreshSoon()
 			// The window reloads its data when the change came from elsewhere (menu bar)
 			notifyChanged(e.sender)
 		}
@@ -484,8 +698,25 @@ ipcMain.handle('api', async (e, method, apiPath, body) => {
 })
 handle('open', (page) => showMain(typeof page === 'string' ? page : null))
 handle('openCalendar', (ts) => openCalendar(typeof ts === 'number' ? ts : undefined))
-handle('login', (server) => login(String(server || '')))
-handle('cancelLogin', () => { if (loginFlow) loginFlow.cancel(); if (loginWin) loginWin.close() })
+// Choosing where your data lives: only from the first-run screen, and only while
+// nothing is connected (no other window can switch your sync or wipe your data)
+const setupOnly = (fn) => (...args) => {
+	if (engine) throw new Error('Not allowed.')
+	return fn(...args)
+}
+handle('login', setupOnly((server) => login(String(server || ''))), 'setup.html')
+handle('cancelLogin', () => {
+	if (loginFlow) loginFlow.cancel()
+	if (loginWin) loginWin.close()
+	if (pendingDrive && pendingDrive.cancel) pendingDrive.cancel()
+	// Connected but no passphrase given: the token is not kept, so it is ended at the provider
+	if (pendingDrive && pendingDrive.store) pendingDrive.store.revoke().catch(() => {})
+	pendingDrive = null
+})
+handle('connectDrive', setupOnly((provider) => connectDrive(String(provider || ''))), 'setup.html')
+handle('unlockDrive', setupOnly((passphrase) => unlockDrive(typeof passphrase === 'string' ? passphrase : '')), 'setup.html')
+handle('useThisMac', setupOnly(() => useThisMac()), 'setup.html')
+handle('syncNow', () => syncNow())
 handle('menu', () => tray && tray.popUpContextMenu(contextMenu()))
 handle('refresh', () => refresh())
 ipcMain.on('popover:height', (e, h) => {
@@ -500,6 +731,9 @@ ipcMain.on('popover:height', (e, h) => {
 function startApp() {
 	if (!tray) createTray()
 	refresh()
+	clearInterval(refreshTimer)
+	// The current block and the timer move on with the clock
+	refreshTimer = setInterval(refresh, 30000)
 }
 
 // --- hardening for every window -------------------------------------------------------------
@@ -538,6 +772,7 @@ function lockDownSession(ses) {
 app.on('before-quit', () => {
 	// An app password that only lived in memory would otherwise stay valid on the server
 	if (memoryPassword && client) client.revoke()
+	if (engine) engine.flush().catch(() => {})
 })
 
 app.whenReady().then(async () => {
@@ -547,12 +782,15 @@ app.whenReady().then(async () => {
 	session.fromPartition('persist:tracker').clearStorageData().catch(() => {})
 	session.defaultSession.clearStorageData({ storages: ['cookies'] }).catch(() => {})
 	t = i18n.make(app.getLocale())
+	loadProviderKeys()
 	config = loadConfig()
 	if (config) {
 		try {
 			await connect()
 		} catch (e) {
-			config = null // Keychain entry unreadable: log in again
+			// Keychain entry unreadable: log in again (the data file stays, for the same account)
+			config = null
+			engine = null
 		}
 	}
 	if (config) {
@@ -564,9 +802,10 @@ app.whenReady().then(async () => {
 		showSetup()
 	}
 	setInterval(tick, 1000)
-	powerMonitor.on('resume', () => refresh())
+	powerMonitor.on('resume', () => { refresh(); syncSoon(2000) })
+	if (engine) syncSoon(1000)
 })
 
-app.on('activate', () => (client ? showMain() : showSetup()))
+app.on('activate', () => (engine ? showMain() : showSetup()))
 // Keep running in the menu bar when windows are closed
 app.on('window-all-closed', () => {})

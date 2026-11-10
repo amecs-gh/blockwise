@@ -25,7 +25,7 @@ English and Italian.
 |---|---|---|
 | **Nextcloud** | [`nextcloud/`](nextcloud) | A Nextcloud app: the web interface, the sync server for the other apps, and calendars in Nextcloud Calendar. |
 | **Android** | [`android/`](android) | Blockwise on your phone, Material 3. Your data stays on the phone and syncs with Nextcloud; blocks come from the phone's calendars (Nextcloud calendars via DAVx⁵). |
-| **Mac** | [`mac/`](mac) | A Mac app with a menu bar timer and notifications. |
+| **Mac** | [`mac/`](mac) | A Mac app with a menu bar timer and notifications. Syncs with Nextcloud, or end-to-end encrypted through **Dropbox** or **Google Drive**, or keeps your data on the Mac only; blocks come from Apple Calendar. |
 
 All three show the same interface: it is written once, in `nextcloud/js` and
 `nextcloud/css`, and copied into the Android and Mac apps when they are built.
@@ -65,6 +65,8 @@ kept in the repository's secrets (`ANDROID_KEYSTORE_B64`,
 
 ```sh
 node nextcloud/tests/markdown.test.js          # Markdown parser (no server needed)
+node nextcloud/tests/filesync.test.js          # encrypted drive sync (no server needed)
+node mac/test/drives.test.js                   # Dropbox and Google Drive, stand-in servers
 cd android && ./gradlew :core:coreTest         # Android logic
 # With a Nextcloud test server on localhost:8080 (users admin and bob):
 node nextcloud/tests/sync.test.js

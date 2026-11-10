@@ -39,7 +39,7 @@ async function openWindow(browser, file, winName, opts = {}) {
 		window.trackerApp = {
 			getState: () => call('state'), onState: (cb) => { window.__onState = cb }, api: (m, p, b) => call('api', m, p, b),
 			refresh: () => call('refresh'), open: (v, h) => call('open', v, h), nav: (a) => call('nav', a), onNav: (cb) => { window.__onNav = cb },
-			login: (s) => call('login', s), cancelLogin: () => call('cancelLogin'), menu: () => call('menu'), setHeight: (h) => window.__send('popover:height', [h]),
+			login: (s) => call('login', s), cancelLogin: () => call('cancelLogin'), connectDrive: (p) => call('connectDrive', p), unlockDrive: (x) => call('unlockDrive', x), useThisMac: () => call('useThisMac'), syncNow: () => call('syncNow'), menu: () => call('menu'), setHeight: (h) => window.__send('popover:height', [h]),
 			openCalendar: (ts) => call('openCalendar', ts), onChanged: (cb) => { window.__onChanged = cb },
 		}
 	})
@@ -66,9 +66,13 @@ async function openWindow(browser, file, winName, opts = {}) {
 	T.ready()
 	await sleep(300)
 	assert.ok(T.log.some((l) => l === 'loadFile win1 setup.html'), 'setup window')
-	const setup = await openWindow(browser, 'setup.html', 'win1', { width: 480, height: 560 })
+	const setup = await openWindow(browser, 'setup.html', 'win1', { width: 480, height: 640 })
 	await sleep(300)
 	await setup.page.screenshot({ path: `${shots}/mac-setup.png` })
+	const choices = await setup.page.locator('.u-choice strong').allInnerTexts()
+	assert.deepEqual(choices, ['Nextcloud', 'This Mac only'], 'no drive keys in this build: Nextcloud and this Mac')
+	await setup.page.click('.u-choice >> nth=0')
+	assert.ok(await setup.page.isVisible('#server'))
 
 	step('log in through the setup form; a "user" logs in and grants access')
 	await setup.page.fill('#server', 'localhost:8080')
@@ -134,7 +138,8 @@ async function openWindow(browser, file, winName, opts = {}) {
 	step('main window: Tracker interface through the app, every page')
 	const win = await openWindow(browser, 'app.html', mainWin.name, { width: 1240, height: 820, hash: '#now' })
 	await win.page.waitForSelector('.imp-col, .imp-empty', { timeout: 15000 })
-	for (const pg of ['now', 'tasks', 'done', 'time', 'settings', 'c/1']) {
+	const firstId = (await call('api', 'GET', 'state')).commitments[0].id
+	for (const pg of ['now', 'tasks', 'done', 'time', 'settings', 'c/' + firstId]) {
 		await win.page.evaluate((h) => { location.hash = h }, '#' + pg)
 		await win.page.waitForTimeout(1200)
 		const ok = await win.page.evaluate(() => !!document.querySelector('.imp-page') && !document.querySelector('.imp-empty')?.textContent.includes('could not be loaded'))
@@ -142,7 +147,7 @@ async function openWindow(browser, file, winName, opts = {}) {
 		await win.page.screenshot({ path: `${shots}/mac-win-${pg.replace('/', '')}.png` })
 		console.log('  ', pg, 'ok')
 	}
-	assert.ok(await win.page.evaluate(() => !!document.querySelector('.imp-stats') && !!document.querySelector('.imp-nav a.active[href="#c/1"]')), 'commitment page with stats, sidebar link active')
+	assert.ok(await win.page.evaluate((id) => !!document.querySelector('.imp-stats') && !!document.querySelector('.imp-nav a.active[href="#c/' + id + '"]'), firstId), 'commitment page with stats, sidebar link active')
 	const bars = await win.page.evaluate(() => [...document.querySelectorAll('*')].filter((e) => e.scrollHeight > e.clientHeight + 2 && e.offsetWidth - e.clientWidth > 0).length)
 	assert.equal(bars, 0, 'no visible scrollbars')
 	assert.ok(await win.page.evaluate(() => !!document.querySelector('.imp-nav a[href="#"]')), 'Calendar entry in the sidebar')
@@ -249,6 +254,13 @@ async function openWindow(browser, file, winName, opts = {}) {
 	assert.ok(T.log.includes('dock hide'))
 	await call('open', 'tracker')
 	assert.ok(T.BrowserWindow.all.filter((w) => w.file === 'app.html').length === 2, 'reopened')
+
+	step('changes made on this Mac reach Nextcloud')
+	await call('syncNow')
+	assert.equal((await call('state')).sync.pending, 0, 'nothing left to send')
+	const serverDash = await (await fetch(`${SERVER}/index.php/apps/tracker/api/dashboard`, { headers: { Authorization: auth, 'OCS-APIRequest': 'true' } })).json()
+	assert.ok(JSON.stringify(serverDash).includes('Reply to reviewer'), 'the subtask added on this Mac is on the server')
+	console.log('  synced: the new subtask is on the server')
 
 	step('log out: password revoked on the server, back to setup')
 	const pw = cfg.appPassword

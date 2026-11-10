@@ -26,3 +26,4 @@ mac/config/providers.json
 *.iml
 .vscode/
 .DS_Store
+mac/helper/build/

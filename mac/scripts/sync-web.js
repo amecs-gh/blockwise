@@ -5,7 +5,7 @@ const path = require('node:path')
 
 const src = path.resolve(__dirname, '..', '..', 'nextcloud')
 const dst = path.resolve(__dirname, '..', 'renderer', 'web')
-const files = { 'js/markdown.js': 'markdown.js', 'js/engine.js': 'engine.js', 'js/tracker.js': 'tracker.js', 'css/tracker.css': 'tracker.css' }
+const files = { 'js/markdown.js': 'markdown.js', 'js/engine.js': 'engine.js', 'js/filesync.js': 'filesync.js', 'js/tracker.js': 'tracker.js', 'css/tracker.css': 'tracker.css' }
 
 if (!fs.existsSync(path.join(src, 'appinfo', 'info.xml'))) {
 	console.error(`sync-web: ${src} not found (the Mac app is built from the blockwise repository)`)
