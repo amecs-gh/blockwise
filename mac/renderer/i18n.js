@@ -166,6 +166,9 @@
 		'{n} events copied into the built-in calendar.': '{n} eventi copiati nel calendario integrato.',
 		'Built-in calendar': 'Calendario integrato',
 		'Apple Calendar': 'Calendario di Apple',
+		'Blockwise could not open its data on this Mac': 'Blockwise non ha potuto aprire i propri dati su questo Mac',
+		'It was encrypted with a Keychain key that is no longer there (deleted, or the Keychain was reset). The old file was set aside in Blockwise\'s folder; Blockwise starts empty.': 'Erano cifrati con una chiave del Portachiavi che non c\'è più (eliminata, o il Portachiavi è stato reimpostato). Il vecchio file è stato messo da parte nella cartella di Blockwise; Blockwise riparte vuoto.',
+		'It was encrypted with a Keychain key that is no longer there (deleted, or the Keychain was reset). The old file was set aside in Blockwise\'s folder; your data comes again from your sync. Changes that were not synced yet are in the old file only.': 'Erano cifrati con una chiave del Portachiavi che non c\'è più (eliminata, o il Portachiavi è stato reimpostato). Il vecchio file è stato messo da parte nella cartella di Blockwise; i tuoi dati arrivano di nuovo dalla sincronizzazione. Le modifiche non ancora sincronizzate sono solo nel vecchio file.',
 	}
 
 	function make(locale) {

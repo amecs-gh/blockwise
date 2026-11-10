@@ -50,12 +50,27 @@ function createVault({ safeStorage, dir }) {
 		return true
 	}
 
+	/**
+	 * A file the Keychain key can't open any more (the key was deleted or the
+	 * Keychain reset): kept under another name, never deleted, in case the old
+	 * key comes back. @return {boolean} there was one
+	 */
+	function setAside(name) {
+		memory.delete(name)
+		try {
+			fs.renameSync(file(name), path.join(dir, `${name}.unreadable-${new Date().toISOString().replace(/[:.]/g, '-')}.bin`))
+			return true
+		} catch (e) {
+			return false
+		}
+	}
+
 	function remove(name) {
 		memory.delete(name)
 		try { fs.unlinkSync(file(name)) } catch (e) { /* not there */ }
 	}
 
-	return { seal, unseal, read, write, remove }
+	return { seal, unseal, read, write, remove, setAside }
 }
 
 module.exports = { createVault }

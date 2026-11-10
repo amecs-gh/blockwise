@@ -216,7 +216,8 @@ function helperPath() {
 	return fs.existsSync(p) ? p : null
 }
 
-async function connect() {
+/** @param {{fresh?: boolean}} o fresh: a new login, so data the Keychain can't open is set aside (never on start) */
+async function connect({ fresh = false } = {}) {
 	vault = createVault({ safeStorage, dir: app.getPath('userData') })
 	client = config.provider === 'nextcloud'
 		? nc.createClient({ server: config.server, loginName: config.loginName, appPassword: await openPassword(config), fetch: apiFetch })
@@ -230,8 +231,18 @@ async function connect() {
 	const lazy = { pull: (since, limit) => inner.pull(since, limit), push: (records) => inner.push(records) }
 	// Nextcloud has real calendars: built-in blocks stay on this Mac (until you switch to a drive)
 	if (client) lazy.localTypes = ['block']
-	// A Keychain that can't open the data throws here: nothing is started empty over it
-	const stored = await vault.read('data')
+	// A Keychain that can't open the data throws here: nothing is started empty over it.
+	// Only right after you log in again: the old file is set aside and your data comes again from the sync.
+	let stored
+	try {
+		stored = await vault.read('data')
+	} catch (e) {
+		if (!fresh) throw e
+		vault.setAside('data')
+		vault.setAside('drivestate')
+		stored = null
+		unreadableData = true
+	}
 	engine = await createEngine({
 		storage: { load: async () => (stored ? JSON.parse(stored) : null), save: (db) => vault.write('data', JSON.stringify(db)) },
 		remote: config.provider === 'local' ? null : lazy,
@@ -866,13 +877,25 @@ async function finishSetup(owner) {
 		v.remove('drivestate')
 	}
 	writeOwner(owner)
-	await connect()
-	if (fromLocal) await engine.resendAll()
+	unreadableData = false
+	await connect({ fresh: true })
+	if (fromLocal && !unreadableData) await engine.resendAll()
 	startApp()
 	syncNow()
 	if (setupWin) setupWin.close()
 	showMain('now')
+	if (unreadableData) {
+		dialog.showMessageBox({
+			type: 'info',
+			buttons: [t('OK')],
+			message: t('Blockwise could not open its data on this Mac'),
+			detail: owner === 'local'
+				? t('It was encrypted with a Keychain key that is no longer there (deleted, or the Keychain was reset). The old file was set aside in Blockwise\'s folder; Blockwise starts empty.')
+				: t('It was encrypted with a Keychain key that is no longer there (deleted, or the Keychain was reset). The old file was set aside in Blockwise\'s folder; your data comes again from your sync. Changes that were not synced yet are in the old file only.'),
+		})
+	}
 }
+let unreadableData = false
 
 /** Connect a drive: you allow Blockwise in your browser. @return {{exists: boolean}} a Blockwise folder is there already */
 async function connectDrive(provider) {

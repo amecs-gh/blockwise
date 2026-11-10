@@ -79,7 +79,11 @@ module.exports = {
 	safeStorage: {
 		isAsyncEncryptionAvailable: async () => true,
 		encryptStringAsync: async (s) => { if (process.env.TEST_KEYCHAIN_FAIL) throw new Error('Error while encrypting the text provided to safeStorage.encryptStringAsync.'); return Buffer.from('enc:' + [...s].reverse().join('')) },
-		decryptStringAsync: async (b) => ({ result: [...b.toString().slice(4)].reverse().join(''), shouldReEncrypt: false }),
+		decryptStringAsync: async (b) => {
+			// Like macOS when the Keychain key is gone: another key's file can't be opened
+			if (!b.toString().startsWith('enc:')) throw new Error('Error while decrypting the ciphertext provided to safeStorage.decryptStringAsync.')
+			return { result: [...b.toString().slice(4)].reverse().join(''), shouldReEncrypt: false }
+		},
 	},
 	shell: { openExternal: (u) => record('openExternal', u), openPath: async (p) => { record('openPath', p); return '' } },
 	net: { fetch: (u, o) => fetch(u, o) },
