@@ -29,14 +29,17 @@
 		defaultEstimate: [15, 5, 600],
 	}
 	const SETTINGS_BOOL = { pomodoro: false }
-	const TYPES = ['commitment', 'task', 'subtask', 'session']
-	const REFS = { task: { commitment: 'commitment' }, subtask: { task: 'task' }, session: { commitment: 'commitment' } }
+	const TYPES = ['commitment', 'task', 'subtask', 'note', 'session']
+	const REFS = { task: { commitment: 'commitment' }, subtask: { task: 'task' }, note: { commitment: 'commitment' }, session: { commitment: 'commitment' } }
 	const MAX_SUBTASKS = 200
+	const MAX_NOTES = 1000
+	const NOTE_MAX = 2000
 	// Fields each record type may have (the server's lib/Sync/SyncFields.php); anything else from a server is ignored
 	const FIELDS = {
 		commitment: ['name', 'color', 'goal', 'position', 'calendarUrl', 'created'],
 		task: ['commitment', 'title', 'note', 'position', 'done', 'doneAt', 'created', 'carriedBlocks'],
 		subtask: ['task', 'title', 'position', 'done', 'doneAt', 'estimate', 'created'],
+		note: ['commitment', 'text', 'position', 'done', 'doneAt', 'created'],
 		session: ['commitment', 'start', 'end', 'blockUid', 'pomodoro'],
 		settings: [...Object.keys({ focusMinutes: 0, shortBreakMinutes: 0, longBreakMinutes: 0, sessionsBeforeLongBreak: 0, reminderMinutes: 0, defaultEstimate: 0 }), 'pomodoro', 'longBreakUntil'],
 	}
@@ -73,6 +76,19 @@
 		if (typeof c !== 'string') return '#0082c9'
 		if (/^#[0-9a-fA-F]{8}$/.test(c)) return c.slice(0, 7)
 		return /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#0082c9'
+	}
+
+	/** A note's text: trimmed, at most 2000 characters (like the server) */
+	const noteText = (v) => {
+		const s = typeof v === 'string' ? v.replace(/\r\n/g, '\n').trim() : ''
+		if (!s) throw new ApiError('Text is required')
+		return [...s].slice(0, 2000).join('')
+	}
+	/** A note in lists: its first line, at most 120 characters */
+	const noteTitle = (t) => {
+		const line = String(t || '').split('\n')[0].trim()
+		const chars = [...line]
+		return chars.length > 120 ? chars.slice(0, 119).join('').trimEnd() + '…' : line
 	}
 
 	/** "Draft 45m", "1h", "1h30", "1.5h", "90min" -> [title, minutes] (same as the server) */
@@ -116,7 +132,7 @@
 				cursor: 0,
 				nextId: 1,
 				ids: {}, // uuid (or "cal:" + url) -> local number
-				records: { commitment: {}, task: {}, subtask: {}, session: {} },
+				records: { commitment: {}, task: {}, subtask: {}, note: {}, session: {} },
 				settings: { f: {}, c: {} },
 				deleted: {}, // uuid -> type
 				dirty: {}, // "type:uuid" -> {field: true} or {deleted: true}
@@ -124,6 +140,8 @@
 				lastSync: null,
 			}
 		}
+		// Data saved by an older version: record types added since (notes)
+		for (const type of TYPES) if (!db.records[type]) db.records[type] = {}
 		let saveTimer = null
 		let syncing = null
 
@@ -253,6 +271,13 @@
 			id: lid(u), uuid: u, commitmentId: lid(r.f.commitment ?? null), start: r.f.start, end: r.f.end ?? null,
 			blockUid: r.f.blockUid ?? null, pomodoro: !!r.f.pomodoro,
 		})
+		const noteJson = (u, r) => ({
+			id: lid(u), uuid: u, commitmentId: lid(r.f.commitment), text: r.f.text, position: r.f.position || 0,
+			done: !!r.f.done, doneAt: r.f.doneAt ?? null, created: r.f.created || 0,
+		})
+		const notesOf = (commitmentUuid = null, done = null) => Object.entries(db.records.note)
+			.filter(([, r]) => (commitmentUuid === null || r.f.commitment === commitmentUuid) && (done === null || !!r.f.done === done))
+			.sort(([ua, a], [ub, b]) => (a.f.position || 0) - (b.f.position || 0) || lid(ua) - lid(ub))
 		const runningEntry = () => {
 			const run = Object.entries(db.records.session).filter(([, r]) => r.f.end === null || r.f.end === undefined)
 			run.sort(([, a], [, b]) => b.f.start - a.f.start)
@@ -506,6 +531,7 @@
 				const [u] = byLid('commitment', m[1])
 				for (const [tu, t] of Object.entries(db.records.task)) if (t.f.commitment === u) deleteTask(tu)
 				// Tracked time stays, as unplanned time
+				for (const [nu, n] of Object.entries(db.records.note)) if (n.f.commitment === u) remove('note', nu)
 				for (const [su, s] of Object.entries(db.records.session)) if (s.f.commitment === u) write('session', su, { commitment: null })
 				remove('commitment', u)
 				changed()
@@ -641,6 +667,57 @@
 				return taskJson(tu, db.records.task[tu])
 			}],
 
+			// notes
+			['GET', /^notes$/, async (m, q) => {
+				const cu = q.commitmentId !== undefined ? commitmentUuid(q.commitmentId) : null
+				const done = q.status === 'open' ? false : q.status === 'done' ? true : null
+				return notesOf(cu, done).map(([u, r]) => noteJson(u, r))
+			}],
+			['POST', /^notes$/, async (m, q, body) => {
+				const cu = commitmentUuid(body.commitmentId)
+				const own = notesOf(cu, null)
+				if (own.length >= MAX_NOTES) throw new ApiError('Too many notes')
+				const u = uuid4()
+				write('note', u, { commitment: cu, text: noteText(body.text), position: maxPos(own) + 1, done: false, doneAt: null, created: now() })
+				changed()
+				return noteJson(u, db.records.note[u])
+			}],
+			['PUT', /^notes\/(\d+)$/, async (m, q, body) => {
+				const [u, n] = byLid('note', m[1])
+				const ch = {}
+				if ('text' in body) ch.text = noteText(body.text)
+				if ('done' in body) {
+					const done = body.done === true || body.done === 'true' || body.done === 1 || body.done === '1'
+					if (done !== !!n.f.done) { ch.done = done; ch.doneAt = done ? now() : null }
+				}
+				if ('commitmentId' in body && Number(body.commitmentId) !== lid(n.f.commitment)) {
+					const target = commitmentUuid(body.commitmentId)
+					ch.commitment = target
+					ch.position = maxPos(notesOf(target, null)) + 1
+				}
+				write('note', u, ch)
+				changed()
+				return noteJson(u, db.records.note[u])
+			}],
+			['DELETE', /^notes\/(\d+)$/, async (m) => {
+				const [u] = byLid('note', m[1])
+				remove('note', u)
+				changed()
+				return { ok: true }
+			}],
+			['POST', /^notes-order$/, async (m, q, body) => {
+				const cu = commitmentUuid(body.commitmentId)
+				let pos = 1
+				for (const id of (Array.isArray(body.ids) ? body.ids : []).slice(0, MAX_NOTES)) {
+					const [u, n] = byLid('note', id)
+					if (n.f.commitment !== cu) continue
+					if ((n.f.position || 0) !== pos) write('note', u, { position: pos })
+					pos++
+				}
+				changed()
+				return { ok: true }
+			}],
+
 			// reports
 			['GET', /^blocks$/, async (m, q) => {
 				await refreshCalendars()
@@ -668,7 +745,13 @@
 					if (!t) continue
 					items.push({ kind: 'subtask', id: lid(su), title: s.f.title, task: t.f.title, taskId: lid(s.f.task), commitmentId: lid(t.f.commitment), doneAt: s.f.doneAt })
 				}
-				items.sort((a, b) => a.doneAt - b.doneAt)
+				for (const [nu, n] of Object.entries(db.records.note)) {
+					if (!n.f.done || n.f.doneAt === null || n.f.doneAt === undefined || n.f.doneAt < from || n.f.doneAt >= to) continue
+					if (!db.records.commitment[n.f.commitment]) continue
+					items.push({ kind: 'note', id: lid(nu), title: noteTitle(n.f.text), task: null, taskId: null, commitmentId: lid(n.f.commitment), doneAt: n.f.doneAt })
+				}
+				const kindOrder = (k) => (k === 'note' ? 0 : 1) // same order as the server (by kind name)
+				items.sort((a, b) => a.doneAt - b.doneAt || kindOrder(a.kind) - kindOrder(b.kind) || a.id - b.id)
 				return items
 			}],
 
@@ -755,7 +838,7 @@
 				out.push({ type, id: u, fields, clock })
 			}
 			// parents first
-			const order = { settings: 0, commitment: 1, task: 2, subtask: 3, session: 4 }
+			const order = { settings: 0, commitment: 1, task: 2, subtask: 3, note: 4, session: 5 }
 			return out.sort((a, b) => order[a.type] - order[b.type])
 		}
 
@@ -773,6 +856,7 @@
 				for (const [tu, t] of Object.entries(db.records.task)) {
 					if (t.f.commitment === u) { dropChildren('task', tu, tombstone); drop('task', tu) }
 				}
+				for (const [nu, n] of Object.entries(db.records.note)) if (n.f.commitment === u) drop('note', nu)
 			}
 		}
 

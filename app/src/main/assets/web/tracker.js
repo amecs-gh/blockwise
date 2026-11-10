@@ -184,6 +184,9 @@
 		showAll: false, // Now page: show all commitments while tracking
 		calMonth: 0, // months from now in the mini calendar
 		doneWeek: 0, // weeks back from this one on the Done page
+		notesFor: null, // commitment id on the Notes page
+		noteDraft: null, // { for, text }: a note being written (kept across re-renders)
+		notesTickedOpen: false, // Notes page: ticked notes shown
 		tasks: [],
 		period: localStorageGet('period', 'week'),
 		offset: 0,
@@ -355,6 +358,7 @@
 	const ROUTES = [
 		{ id: 'now', label: () => tr('Now'), icon: 'M12 7v5l3 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z' },
 		{ id: 'tasks', label: () => tr('Tasks'), icon: 'M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2' },
+		{ id: 'notes', label: () => tr('Notes'), icon: 'M6 3h9l4 4v14H6zM14 3v5h5M9 12h7M9 16h5' },
 		{ id: 'done', label: () => tr('Done'), icon: 'M4 12l5 5L20 6' },
 		{ id: 'time', label: () => tr('Time'), icon: 'M4 20V10M10 20V4M16 20v-7M22 20H2' },
 		{ id: 'settings', label: () => tr('Settings'), icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z' },
@@ -593,11 +597,22 @@
 	document.addEventListener('click', () => { if (popEl) popEl.hidden = true })
 	document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && popEl) popEl.hidden = true })
 
+	/** "3 subtasks checked off", "2 notes ticked", or both */
+	function doneCount(items) {
+		const notes = items.filter((i) => i.kind === 'note').length
+		const subs = items.length - notes
+		if (!notes) return trn('%n subtask checked off', '%n subtasks checked off', subs)
+		if (!subs) return trn('%n note ticked', '%n notes ticked', notes)
+		return `${trn('%n subtask checked off', '%n subtasks checked off', subs)}, ${trn('%n note ticked', '%n notes ticked', notes)}`
+	}
+
 	function doneList(items, empty) {
 		if (!items.length) return h('p', { class: 'imp-pop__empty' }, empty)
 		return h('ul', { class: 'imp-pop__list' }, items.slice(0, 12).map((i) => h('li', null,
 			h('span', { class: 'imp-pop__check', 'aria-hidden': 'true' }, '✓'),
-			h('span', null, i.title, i.title !== i.task ? h('span', { class: 'imp-muted' }, ` — ${i.task}`) : null),
+			h('span', null, i.title,
+				i.kind === 'note' ? h('span', { class: 'imp-muted' }, ` — ${tr('note')}`)
+					: i.task && i.title !== i.task ? h('span', { class: 'imp-muted' }, ` — ${i.task}`) : null),
 			h('time', { class: 'imp-muted' }, fmt.time.format(at(i.doneAt))))),
 		items.length > 12 ? h('li', { class: 'imp-muted' }, trn('and %n more', 'and %n more', items.length - 12)) : null)
 	}
@@ -713,10 +728,10 @@
 						type: 'button',
 						class: `imp-tl__dot ${g.length > 1 ? 'is-multi' : ''}`,
 						style: { left: `${pos(g[0].doneAt, day)}%`, '--c': colorOf(g[0].commitmentId) },
-						'aria-label': trn('%n subtask checked off', '%n subtasks checked off', g.length),
+						'aria-label': doneCount(g),
 					}, g.length > 1 ? String(g.length) : '')
 					track.append(popover(el, () => [
-						h('div', { class: 'imp-pop__head' }, h('strong', null, trn('%n subtask checked off', '%n subtasks checked off', g.length))),
+						h('div', { class: 'imp-pop__head' }, h('strong', null, doneCount(g))),
 						doneList(g, ''),
 					]))
 				})
@@ -727,7 +742,7 @@
 			return h('div', { class: `imp-tl__row ${isToday ? 'is-today' : ''} ${day.end <= now ? 'is-past' : ''}` },
 				h('span', { class: 'imp-tl__day' }, fmt.day.format(day.date)),
 				track,
-				large ? h('span', { class: 'imp-tl__count', title: trn('%n subtask checked off', '%n subtasks checked off', count) }, count ? `✓ ${count}` : '') : null)
+				large ? h('span', { class: 'imp-tl__count', title: doneCount(done.filter((i) => i.doneAt >= day.start && i.doneAt < day.end)) }, count ? `✓ ${count}` : '') : null)
 		})
 
 		return h('div', { class: `imp-tl ${large ? 'imp-tl--large' : ''}` },
@@ -741,7 +756,7 @@
 		return h('div', { class: 'imp-tl__legend' },
 			h('span', null, h('span', { class: 'imp-tl__key imp-tl__key--block' }), tr('Planned block')),
 			h('span', null, h('span', { class: 'imp-tl__key imp-tl__key--session' }), tr('Tracked')),
-			large ? h('span', null, h('span', { class: 'imp-tl__key imp-tl__key--dot' }), tr('Subtask checked off')) : null,
+			large ? h('span', null, h('span', { class: 'imp-tl__key imp-tl__key--dot' }), tr('Subtask or note checked off')) : null,
 			h('span', { class: 'imp-muted' }, tr('Hover or tap for details')))
 	}
 
@@ -1720,8 +1735,13 @@
 	}
 	const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
 
-	// "N" on the Tasks page opens the composer
+	// "N" on the Tasks page opens the composer; on the Notes page it starts a note
 	document.addEventListener('keydown', (e) => {
+		if (state.route === 'notes' && !e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 'n' || e.key === 'N') && !document.activeElement?.matches('input, textarea, select, [contenteditable]')) {
+			const field = document.getElementById('imp-note-new')
+			if (field) { e.preventDefault(); field.focus() }
+			return
+		}
 		if (state.route !== 'tasks' || e.metaKey || e.ctrlKey || e.altKey || (e.key !== 'n' && e.key !== 'N')) return
 		if (document.activeElement?.matches('input, textarea, select, [contenteditable]') || menuEl) return
 		e.preventDefault()
@@ -1825,6 +1845,187 @@
 	}
 
 	// ---------------------------------------------------------------------------
+	// Page: Notes (per commitment; tick them off, ticked ones show in Done)
+	// ---------------------------------------------------------------------------
+
+	async function pageNotes() {
+		const page = h('div', { class: 'imp-page imp-notes' })
+		if (!state.commitments.length) {
+			page.append(h('div', { class: 'imp-empty' }, h('p', null, tr('Create a commitment first.')), h('a', { class: 'imp-button imp-button--primary', href: '#settings' }, tr('Create a commitment'))))
+			return page
+		}
+		if (!commitmentById(state.notesFor)) state.notesFor = commitmentById(state.tasksFor) ? state.tasksFor : state.commitments[0].id
+		const c = commitmentById(state.notesFor)
+		page.style.setProperty('--c', c.color)
+		const all = await api('GET', `notes?commitmentId=${c.id}`)
+		const open = all.filter((n) => !n.done)
+		const ticked = all.filter((n) => n.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0))
+
+		page.append(h('div', { class: 'imp-tabs', role: 'tablist', 'aria-label': tr('Commitments') }, state.commitments.map((x) => h('button', {
+			role: 'tab',
+			'aria-selected': x.id === c.id ? 'true' : 'false',
+			class: x.id === c.id ? 'active' : '',
+			style: { '--c': x.color },
+			onclick: () => { state.notesFor = x.id; render() },
+		}, h('span', { class: 'imp-dot', style: { background: x.color } }), x.name))))
+
+		page.append(h('p', { class: 'imp-muted imp-notes__summary' },
+			open.length ? trn('%n open note', '%n open notes', open.length) : tr('No notes for {name} yet.', { name: c.name }),
+			ticked.length ? [' · ', trn('%n ticked', '%n ticked', ticked.length)] : null))
+
+		if (open.length) {
+			page.append(h('ul', { class: 'imp-notes__list', 'aria-label': tr('Notes') }, open.map((n, i) => noteItem(n, i, open, c))))
+		}
+		page.append(noteComposer(c))
+
+		if (ticked.length) {
+			page.append(h('details', { class: 'imp-notes__ticked', open: state.notesTickedOpen ? true : null, ontoggle: (e) => { state.notesTickedOpen = e.target.open } },
+				h('summary', null, tr('Ticked ({count})', { count: ticked.length })),
+				h('ul', { class: 'imp-notes__list' }, ticked.map((n) => noteItem(n, -1, ticked, c)))))
+		}
+		return page
+	}
+
+	async function saveNoteOrder(c, ids) {
+		await api('POST', 'notes-order', { commitmentId: c.id, ids })
+		await render()
+	}
+
+	function noteItem(n, index, list, c) {
+		const open = !n.done
+		const li = h('li', {
+			class: `imp-check imp-note ${n.done ? 'is-done' : ''}`,
+			ondragstart: (e) => {
+				if (e.target !== li) return
+				e.dataTransfer.setData('text/plain', String(n.id))
+				e.dataTransfer.effectAllowed = 'move'
+				li.classList.add('is-dragging')
+			},
+			ondragend: () => { li.classList.remove('is-dragging'); li.draggable = false },
+			ondragover: (e) => { if (open) { e.preventDefault(); li.classList.add('is-over') } },
+			ondragleave: () => li.classList.remove('is-over'),
+			ondrop: async (e) => {
+				e.preventDefault()
+				li.classList.remove('is-over')
+				const dragged = Number(e.dataTransfer.getData('text/plain'))
+				if (!open || !dragged || dragged === n.id || !list.some((x) => x.id === dragged)) return
+				const ids = list.map((x) => x.id).filter((x) => x !== dragged)
+				ids.splice(ids.indexOf(n.id), 0, dragged)
+				await saveNoteOrder(c, ids)
+			},
+			onkeydown: (e) => {
+				// Alt+↑/↓ moves an open note
+				if (!open || !e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || !e.target.matches('.imp-note__text')) return
+				e.preventDefault()
+				const j = index + (e.key === 'ArrowUp' ? -1 : 1)
+				if (j < 0 || j >= list.length) return
+				const ids = list.map((x) => x.id)
+				;[ids[index], ids[j]] = [ids[j], ids[index]]
+				state.refocus = `imp-nt-${n.id}`
+				saveNoteOrder(c, ids)
+			},
+		})
+		// (append() would write a missing part as the text "null")
+		li.append(...[
+			open ? h('span', {
+				class: 'imp-qitem__handle imp-note__handle',
+				title: tr('Drag to reorder'),
+				'aria-hidden': 'true',
+				onmousedown: () => { li.draggable = true },
+				onmouseup: () => { li.draggable = false },
+			}, '⋮⋮') : null,
+			h('input', {
+				type: 'checkbox',
+				id: `imp-nc-${n.id}`,
+				checked: n.done,
+				'aria-label': tr(n.done ? 'Untick: {title}' : 'Tick: {title}', { title: noteFirstLine(n.text) }),
+				onchange: async (e) => {
+					state.refocus = e.target.checked ? 'imp-note-new' : `imp-nc-${n.id}`
+					await api('PUT', `notes/${n.id}`, { done: e.target.checked })
+					await render()
+				},
+			}),
+			h('div', { class: 'imp-note__body' },
+				editableText(n.text, {
+					id: `imp-nt-${n.id}`,
+					label: tr('Note'),
+					className: 'imp-note__text',
+					multiline: true,
+					onSave: async (v) => {
+						if (!v.trim()) {
+							// Emptied: delete it
+							await api('DELETE', `notes/${n.id}`)
+						} else {
+							await api('PUT', `notes/${n.id}`, { text: v })
+						}
+						await render()
+					},
+				}),
+				n.done && n.doneAt ? h('span', { class: 'imp-muted imp-note__when' }, tr('Ticked {date}', { date: fmt.dateTime.format(at(n.doneAt)) })) : null),
+			h('button', {
+				type: 'button',
+				class: 'imp-icon-btn imp-note__del',
+				'aria-label': tr('Delete note: {title}', { title: noteFirstLine(n.text) }),
+				title: tr('Delete note'),
+				onclick: async () => {
+					if (!window.confirm(tr('Delete this note?'))) return
+					await api('DELETE', `notes/${n.id}`)
+					await render()
+				},
+			}, '×'),
+		].filter(Boolean))
+		return li
+	}
+
+	const noteFirstLine = (text) => {
+		const line = String(text || '').split('\n')[0].trim()
+		return line.length > 60 ? line.slice(0, 59) + '…' : line
+	}
+
+	/** Write a note: Enter adds it, Shift+Enter starts a new line. */
+	function noteComposer(c) {
+		const field = h('textarea', {
+			id: 'imp-note-new',
+			class: 'imp-note__new',
+			rows: 1,
+			maxlength: 2000,
+			placeholder: tr('Write a note…'),
+			'aria-label': tr('New note for {name}', { name: c.name }),
+		})
+		if (state.noteDraft && state.noteDraft.for === c.id) field.value = state.noteDraft.text
+		const grow = () => { field.style.height = 'auto'; field.style.height = `${Math.min(field.scrollHeight, 240)}px` }
+		const add = h('button', { type: 'submit', class: 'imp-button imp-button--primary', disabled: !field.value.trim() }, tr('Add'))
+		const submit = async (e) => {
+			if (e) e.preventDefault()
+			const text = field.value.trim()
+			if (!text) return
+			add.disabled = true
+			try {
+				await api('POST', 'notes', { commitmentId: c.id, text })
+			} catch (err) {
+				add.disabled = false
+				return
+			}
+			state.noteDraft = null
+			state.refocus = 'imp-note-new'
+			await render()
+		}
+		field.addEventListener('input', () => {
+			state.noteDraft = { for: c.id, text: field.value }
+			add.disabled = !field.value.trim()
+			grow()
+		})
+		field.addEventListener('keydown', (e) => {
+			if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) submit(e)
+			if (e.key === 'Escape') { field.value = ''; state.noteDraft = null; add.disabled = true; grow(); field.blur() }
+		})
+		setTimeout(grow, 0)
+		return h('form', { class: 'imp-note__composer', onsubmit: submit },
+			field, add,
+			h('span', { class: 'imp-muted imp-note__keys' }, tr('Enter adds · Shift+Enter for a new line')))
+	}
+
+	// ---------------------------------------------------------------------------
 	// Page: Done
 	// ---------------------------------------------------------------------------
 
@@ -1847,7 +2048,7 @@
 				h('button', { class: 'imp-icon-btn', 'aria-label': tr('Next week'), disabled: state.doneWeek === 0, onclick: () => { state.doneWeek--; render() } }, '›'),
 				state.doneWeek > 0 ? h('button', { class: 'imp-link', onclick: () => { state.doneWeek = 0; render() } }, tr('This week')) : null),
 			h('span', { class: 'imp-muted' },
-				trn('%n subtask checked off', '%n subtasks checked off', done.length), ' · ',
+				doneCount(done), ' · ',
 				tr('tracked {time}', { time: duration(sessions.reduce((sum, x) => sum + overlapSeconds(x.start, x.end ?? nowTs(), from, to), 0), { short: true }) }))))
 
 		page.append(h('figure', { class: 'imp-figure' },
@@ -2380,7 +2581,7 @@
 	// Boot
 	// ---------------------------------------------------------------------------
 
-	const PAGES = { now: pageNow, tasks: pageTasks, done: pageDone, time: pageTime, settings: pageSettings, commitment: pageCommitment }
+	const PAGES = { now: pageNow, tasks: pageTasks, notes: pageNotes, done: pageDone, time: pageTime, settings: pageSettings, commitment: pageCommitment }
 
 	function routeFromHash() {
 		const r = (location.hash || '#now').slice(1)
