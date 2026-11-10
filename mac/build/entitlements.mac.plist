@@ -7,6 +7,11 @@
 	<true/>
 	<key>com.apple.security.cs.allow-unsigned-executable-memory</key>
 	<true/>
+	<!-- Ad-hoc signed builds have no Team ID, so Electron's own frameworks would
+	     fail library validation and the app would not start. Code injection
+	     through DYLD_* variables and debuggers stays blocked by the hardened runtime. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
 	<!-- Apple Calendar (macOS still asks you once) -->
 	<key>com.apple.security.personal-information.calendars</key>
 	<true/>

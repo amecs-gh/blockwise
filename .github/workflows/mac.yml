@@ -43,6 +43,18 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :NSCalendarsFullAccessUsageDescription' "$APP/Contents/Info.plist"
           codesign --verify --deep "$APP"
           npx --yes @electron/fuses@1.8.0 read --app "$APP"
+      - name: Start the app (it must keep running)
+        run: |
+          APP=dist/mac-arm64/Blockwise.app
+          "$APP/Contents/MacOS/Blockwise" > launch.log 2>&1 &
+          PID=$!
+          sleep 20
+          if ! kill -0 $PID 2>/dev/null; then
+            echo "Blockwise quit at launch:"; cat launch.log
+            ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | head -3 | while read f; do head -60 ~/Library/Logs/DiagnosticReports/"$f"; done
+            exit 1
+          fi
+          echo "running after 20 s"; kill $PID
           ditto -c -k --keepParent "$APP" Blockwise-mac.zip
       - uses: actions/upload-artifact@v4
         with:
