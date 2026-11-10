@@ -678,7 +678,7 @@ async function unlockDrive(passphrase) {
 	const v = createVault({ safeStorage, dir: app.getPath('userData') })
 	const driveToken = await v.seal(pendingDrive.refreshToken)
 	const syncKey = await v.seal(Buffer.from(key).toString('base64'))
-	if (!driveToken || !syncKey) throw new Error(t('Blockwise could not use your Keychain, so it can\'t keep the connection. Quit Blockwise, open it again and retry.'))
+	if (!driveToken || !syncKey) throw new Error(t('Blockwise needs its own Keychain entry ("Blockwise Safe Storage") to keep the connection; it can\'t see your other passwords. Quit Blockwise, open it again, connect, and click Always Allow when macOS asks.'))
 	const { provider, account } = pendingDrive
 	config = { provider, driveToken, syncKey, driveAccount: account, notifications: true }
 	saveConfig(config)

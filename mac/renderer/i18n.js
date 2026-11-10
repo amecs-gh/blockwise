@@ -81,7 +81,7 @@
 		'Disconnect {drive}? Blockwise stops syncing and forgets the drive and your passphrase on this Mac. Your data on the drive stays.': 'Scollegare {drive}? Blockwise smette di sincronizzare e dimentica il drive e la passphrase su questo Mac. I dati sul drive restano.',
 		'Disconnect': 'Scollega',
 		'Some changes on this Mac are not synced yet and will be lost.': 'Alcune modifiche su questo Mac non sono ancora sincronizzate e andranno perse.',
-		'Blockwise could not use your Keychain, so it can\'t keep the connection. Quit Blockwise, open it again and retry.': 'Blockwise non ha potuto usare il Portachiavi, quindi non può mantenere il collegamento. Esci da Blockwise, riaprilo e riprova.',
+		'Blockwise needs its own Keychain entry ("Blockwise Safe Storage") to keep the connection; it can\'t see your other passwords. Quit Blockwise, open it again, connect, and click Always Allow when macOS asks.': 'Blockwise ha bisogno della propria voce nel Portachiavi ("Blockwise Safe Storage") per mantenere il collegamento; non vede le altre password. Esci da Blockwise, riaprilo, collegati e fai clic su Consenti sempre quando macOS lo chiede.',
 		'Where should Blockwise keep your data?': 'Dove deve tenere i tuoi dati Blockwise?',
 		'You can change this later from the menu bar icon.': 'Puoi cambiarlo più tardi dall\'icona nella barra dei menu.',
 		'Allow Blockwise in your browser. It can only see its own folder in your {drive}.': 'Autorizza Blockwise nel browser. Vede solo la propria cartella nel tuo {drive}.',
