@@ -1,0 +1,94 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'app.tracker.android'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'app.tracker.nextcloud'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    // Release builds are signed with your own key, given to the build as
+    // environment variables (GitHub secrets, never in the repository). Without
+    // them only the debug build is possible.
+    def keystore = System.getenv('TRACKER_KEYSTORE')
+    signingConfigs {
+        if (keystore) {
+            release {
+                storeFile file(keystore)
+                storePassword System.getenv('TRACKER_KEYSTORE_PASSWORD')
+                keyAlias 'tracker'
+                keyPassword System.getenv('TRACKER_KEYSTORE_PASSWORD')
+                enableV1Signing false
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // Not debuggable: no inspecting the app or its data over USB
+            debuggable false
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (keystore) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+}
+
+dependencies {
+    implementation project(':core')
+}
+
+// The interface comes from the Nextcloud app in this repository (../nextcloud),
+// so all three apps stay identical. The copy in src/main/assets/web is generated.
+def trackerDir = rootProject.file('../nextcloud')
+def webDir = file('src/main/assets/web')
+
+tasks.register('syncWeb') {
+    description = 'Copies the interface from ../nextcloud into the app.'
+    onlyIf { new File(trackerDir, 'appinfo/info.xml').exists() }
+    inputs.files(new File(trackerDir, 'js/tracker.js'), new File(trackerDir, 'js/engine.js'), new File(trackerDir, 'js/markdown.js'), new File(trackerDir, 'css/tracker.css'), new File(trackerDir, 'l10n/it.json'))
+    outputs.dir(webDir)
+    doLast {
+        webDir.mkdirs()
+        ['js/tracker.js': 'tracker.js', 'js/engine.js': 'engine.js', 'js/markdown.js': 'markdown.js', 'css/tracker.css': 'tracker.css'].each { from, to ->
+            new File(webDir, to).bytes = new File(trackerDir, from).bytes
+        }
+        def italian = new groovy.json.JsonSlurper().parse(new File(trackerDir, 'l10n/it.json'), 'UTF-8').translations
+        new File(webDir, 'l10n.js').setText('window.__trackerL10n = ' + groovy.json.JsonOutput.toJson([it: italian]) + '\n', 'UTF-8')
+        def version = (new File(trackerDir, 'appinfo/info.xml').getText('UTF-8') =~ /<version>([^<]+)<\/version>/)[0][1]
+        logger.lifecycle("syncWeb: copied the Blockwise ${version} interface")
+    }
+}
+tasks.named('preBuild') { dependsOn 'syncWeb' }
+
+android {
+    lint {
+        // Calls that don't exist on older Android versions, missing permissions etc. fail the build
+        abortOnError true
+        checkReleaseBuilds true
+        textReport true
+        // Newer library versions or SDK levels are suggestions, not errors
+        disable 'GradleDependency', 'OldTargetApi', 'AndroidGradlePluginVersion', 'NewerVersionAvailable'
+    }
+}

@@ -1,10 +1,28 @@
-.gradle/
-build/
-local.properties
-.idea/
-*.iml
-app/release/
+# Generated: the interface is copied from nextcloud/ when the apps are built
+android/app/src/main/assets/web/
+mac/renderer/web/
+
+# Dependencies and build output
+node_modules/
+mac/dist/
+android/.gradle/
+android/build/
+android/app/build/
+android/core/build/
+android/local.properties
+
+# Never commit signing keys or app credentials
 *.keystore
 *.jks
 *.p12
+*.pem
 signing/
+mac/config/providers.json
+.env
+
+# Test output, editors, OS
+**/test/shots/
+.idea/
+*.iml
+.vscode/
+.DS_Store

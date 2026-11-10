@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+	<id>tracker</id>
+	<name>Blockwise</name>
+	<summary>Plan your commitments in the calendar, work through tasks block by block, and see where your time goes.</summary>
+	<summary lang="it">Pianifica i tuoi impegni nel calendario, lavora ai task blocco per blocco e scopri dove va il tuo tempo.</summary>
+	<description><![CDATA[Each commitment (e.g. Thesis, Work) is a Nextcloud calendar. Italian: impegno. Every event in that calendar is a work block.
+
+* Ordered task queue per commitment, with checkable subtasks; unfinished work carries over to the next block
+* Notes per commitment in Markdown, with checklists; ticked notes show in Done
+* Play button to track time, optional Pomodoro mode, reminder before a block ends
+* Warning when blocks of different commitments overlap
+* Charts of what you did and how long you spent, per day, week and month
+
+Based on TimeManager by Thomas Ebert.]]></description>
+	<version>0.5.1</version>
+	<licence>agpl</licence>
+	<author>Manuel Acquistapace</author>
+	<namespace>Tracker</namespace>
+	<category>tools</category>
+	<category>organization</category>
+	<dependencies>
+		<nextcloud min-version="32" max-version="35"/>
+	</dependencies>
+	<background-jobs>
+		<job>OCA\Tracker\BackgroundJob\ReminderJob</job>
+	</background-jobs>
+	<navigations>
+		<navigation>
+			<name>Blockwise</name>
+			<route>tracker.page.index</route>
+			<icon>app.svg</icon>
+		</navigation>
+	</navigations>
+</info>

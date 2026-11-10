@@ -1,0 +1,273 @@
+/*
+ * Tracker's interface as a Mac window: the colors Nextcloud normally provides,
+ * a translucent sidebar under the window buttons, and native-looking controls.
+ */
+:root {
+	color-scheme: light dark;
+	--color-main-background: #ffffff;
+	--color-main-background-blur: transparent;
+	--color-background-hover: #f2f2f4;
+	--color-main-text: #1d1d1f;
+	--color-text-maxcontrast: #6e6e73;
+	--color-border: rgba(0, 0, 0, 0.1);
+	--color-border-dark: rgba(0, 0, 0, 0.18);
+	--color-primary-element: #0a6cd6;
+	--color-primary-element-hover: #0959b0;
+	--color-primary-element-text: #ffffff;
+	--color-primary-element-light: rgba(10, 108, 214, 0.12);
+	--color-primary-element-light-text: #0a4f9e;
+	--color-error: #c62828;
+	--color-text-error: #b3261e;
+	--color-warning: #b77900;
+	--color-success-text: #2a7a3b;
+	--border-radius-element: 6px;
+	--border-radius-large: 10px;
+	--body-container-radius: 0;
+	--sidebar-width: 220px;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--color-main-background: #1e1e1f;
+		--color-background-hover: #2c2c2e;
+		--color-main-text: #f5f5f7;
+		--color-text-maxcontrast: #a1a1a6;
+		--color-border: rgba(255, 255, 255, 0.1);
+		--color-border-dark: rgba(255, 255, 255, 0.2);
+		--color-primary-element: #3b8ef0;
+		--color-primary-element-hover: #5aa0f2;
+		--color-primary-element-light: rgba(59, 142, 240, 0.2);
+		--color-primary-element-light-text: #a8cbf7;
+		--color-error: #ff6b6b;
+		--color-text-error: #ff8a80;
+		--color-warning: #e0a526;
+		--color-success-text: #5cc675;
+	}
+}
+
+html,
+body.desktop {
+	height: 100%;
+	margin: 0;
+	overflow: hidden;
+	/* transparent: the window's sidebar vibrancy shows through the navigation */
+	background: transparent;
+	color: var(--color-main-text);
+	font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+body.desktop #tracker-app {
+	height: 100%;
+}
+button,
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+}
+a {
+	color: inherit;
+}
+h1,
+h2,
+h3,
+h4 {
+	letter-spacing: -0.01em;
+}
+
+/* --- window chrome ------------------------------------------------------------- */
+
+/* Drag the window by the strip above the content */
+.drag-bar {
+	position: fixed;
+	z-index: 50;
+	top: 0;
+	left: var(--sidebar-width);
+	right: 0;
+	height: 28px;
+	-webkit-app-region: drag;
+}
+body.desktop .imp-layout {
+	border-radius: 0;
+	background: transparent;
+}
+body.desktop .imp-nav {
+	flex: 0 0 var(--sidebar-width);
+	padding: 50px 10px 10px;
+	border-right: 1px solid var(--color-border);
+	background: transparent;
+	-webkit-app-region: drag;
+	user-select: none;
+}
+body.desktop .imp-nav a,
+body.desktop .imp-nav button {
+	-webkit-app-region: no-drag;
+}
+body.desktop .imp-nav a {
+	min-height: 30px;
+	padding: 0 10px;
+	border-radius: 6px;
+	font-size: 13px;
+}
+body.desktop .imp-nav a svg {
+	width: 16px;
+	height: 16px;
+	color: var(--color-primary-element);
+}
+body.desktop .imp-nav a:hover {
+	background: rgba(127, 127, 127, 0.12);
+}
+body.desktop .imp-nav a.active {
+	background: rgba(127, 127, 127, 0.22);
+	color: var(--color-main-text);
+	font-weight: 500;
+}
+body.desktop .imp-nav__heading {
+	margin: 18px 10px 4px;
+	font-size: 11px;
+}
+body.desktop .imp-main {
+	background: var(--color-main-background);
+}
+body.desktop .imp-page {
+	padding-top: 30px;
+}
+body.desktop .imp-page h1 {
+	font-size: 22px;
+}
+
+/* --- controls ----------------------------------------------------------------- */
+
+body.desktop input[type="text"],
+body.desktop input[type="number"],
+body.desktop select,
+body.desktop textarea {
+	min-height: 28px;
+	padding: 4px 8px;
+	border: 1px solid var(--color-border-dark);
+	border-radius: 6px;
+	background: var(--color-main-background);
+	outline: none;
+}
+body.desktop textarea {
+	padding: 6px 8px;
+}
+body.desktop input[type="text"]:focus,
+body.desktop input[type="number"]:focus,
+body.desktop select:focus,
+body.desktop textarea:focus {
+	border-color: var(--color-primary-element);
+	box-shadow: 0 0 0 3px var(--color-primary-element-light);
+}
+body.desktop input[type="color"] {
+	height: 28px;
+}
+body.desktop .imp-button {
+	min-height: 28px;
+	padding: 0 12px;
+	border-radius: 6px;
+	font-size: 13px;
+}
+body.desktop .imp-play {
+	width: 38px;
+	height: 38px;
+}
+/* No visible scrollbars: content still scrolls with trackpad, wheel and keyboard */
+body.desktop,
+body.desktop * {
+	scrollbar-width: none;
+}
+body.desktop ::-webkit-scrollbar {
+	display: none;
+}
+
+/* --- toast ---------------------------------------------------------------------- */
+
+.toast {
+	position: fixed;
+	z-index: 100;
+	bottom: 18px;
+	left: calc(50% + var(--sidebar-width) / 2);
+	max-width: 480px;
+	padding: 8px 14px;
+	border-radius: 8px;
+	background: rgba(40, 40, 42, 0.92);
+	color: #fff;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+	transform: translateX(-50%);
+}
+.toast.is-error {
+	background: #b3261e;
+}
+
+/* --- responsive window ------------------------------------------------------------
+ * Tracker's own small-screen layout puts the navigation on top (for phones).
+ * In the Mac window the sidebar stays; it narrows to icons when space is short. */
+
+body.desktop .imp-layout {
+	flex-direction: row;
+}
+body.desktop .imp-nav__main {
+	display: block;
+	overflow: visible;
+}
+body.desktop .imp-nav__heading,
+body.desktop .imp-nav__commitments {
+	display: block;
+}
+body.desktop .imp-nav {
+	border-bottom: none;
+}
+@media (max-width: 760px) {
+	:root {
+		--sidebar-width: 60px;
+	}
+	body.desktop .imp-nav {
+		padding: 50px 8px 10px;
+	}
+	body.desktop .imp-nav a {
+		justify-content: center;
+		padding: 0;
+		min-height: 36px;
+	}
+	/* Labels stay for VoiceOver; links also have tooltips */
+	body.desktop .imp-nav a span:not(.imp-dot) {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
+	}
+	body.desktop .imp-nav__heading,
+	body.desktop .imp-nav__commitments li:last-child,
+	body.desktop .imp-nav__ext {
+		display: none;
+	}
+	/* Commitments as colored dots */
+	body.desktop .imp-nav__commitments {
+		margin-top: 14px;
+		padding-top: 10px;
+		border-top: 1px solid var(--color-border);
+	}
+	body.desktop .imp-nav__commitments .imp-dot {
+		width: 12px;
+		height: 12px;
+	}
+	body.desktop .imp-page {
+		padding: 30px 16px 40px;
+	}
+}
+@media (max-width: 520px) {
+	body.desktop .imp-page h1 {
+		font-size: 19px;
+	}
+	body.desktop .imp-timer__clock {
+		font-size: 30px;
+	}
+}

@@ -6,12 +6,16 @@
 # (Settings → Secrets and variables → Actions), it builds the release version,
 # signed with your key: not debuggable, and each update installs over the last.
 # Without them it builds the debug version.
-name: Build APK
+name: Android
 on:
   push:
+    paths: ['android/**', 'nextcloud/js/**', 'nextcloud/css/**', 'nextcloud/l10n/**', 'nextcloud/appinfo/info.xml', '.github/workflows/android.yml']
   workflow_dispatch:
 permissions:
   contents: read
+defaults:
+  run:
+    working-directory: android
 jobs:
   build:
     runs-on: ubuntu-latest
