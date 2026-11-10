@@ -25,13 +25,23 @@ it to the sync you choose next; **remove** leaves it only where it is synced now
 | **Google Drive** | Through Blockwise's hidden app folder in your Drive, end-to-end encrypted | Apple Calendar |
 | **This Mac only** | None; connect a sync later and your data comes along | Apple Calendar |
 
-**Apple Calendar is optional** (right-click the menu bar icon → **Use Apple
-Calendar**). With it, the events in the calendars you link to a commitment are
-your planned time blocks, and Blockwise adds the blocks you plan. It shows every
-calendar you added to macOS (iCloud, Google, Exchange, Nextcloud via CalDAV).
-macOS only offers full calendar access, so Blockwise explains first and asks
-only when you turn it on. Without it, everything else works: commitments,
-tasks, notes, the timer and your time.
+**Calendar:** without Nextcloud, your blocks are in Blockwise's **built-in
+calendar** (sidebar → Calendar): day, week and month, drag on the grid to plan a
+block, drag a block to move it, drag its lower edge to change its length,
+repeats (every day, weekday, week, 2 weeks, month, with an end date) and "this
+block only / all future blocks" like Apple Calendar. Click a block to see the
+tasks and subtasks planned for it, tick them off there, or start the timer.
+Keys: ← → to move, T today, D W M for day, week, month, N for a new block.
+Built-in blocks sync with your data (through Dropbox or Google Drive) and need
+no calendar access.
+
+Prefer **Apple Calendar** (iCloud, Google, Exchange, Nextcloud via CalDAV)?
+Settings → Calendar → Apple Calendar. Blockwise explains, then macOS asks for
+calendar access (it only offers full access). Each commitment gets a calendar
+and your built-in blocks are copied there, repeats included. Switching back
+copies the events of your commitments' calendars (3 months back to a year
+ahead) into the built-in calendar; nothing is doubled either way, and a block
+you changed replaces its old copy.
 
 ### Dropbox and Google Drive: end-to-end encrypted
 

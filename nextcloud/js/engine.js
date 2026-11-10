@@ -29,8 +29,8 @@
 		defaultEstimate: [15, 5, 600],
 	}
 	const SETTINGS_BOOL = { pomodoro: false }
-	const TYPES = ['commitment', 'task', 'subtask', 'note', 'session']
-	const REFS = { task: { commitment: 'commitment' }, subtask: { task: 'task' }, note: { commitment: 'commitment' }, session: { commitment: 'commitment' } }
+	const TYPES = ['commitment', 'task', 'subtask', 'note', 'session', 'block']
+	const REFS = { task: { commitment: 'commitment' }, subtask: { task: 'task' }, note: { commitment: 'commitment' }, session: { commitment: 'commitment' }, block: { commitment: 'commitment' } }
 	const MAX_SUBTASKS = 200
 	const MAX_NOTES = 1000
 	const NOTE_MAX = 2000
@@ -41,11 +41,17 @@
 		subtask: ['task', 'title', 'position', 'done', 'doneAt', 'estimate', 'created'],
 		note: ['commitment', 'text', 'position', 'done', 'doneAt', 'created'],
 		session: ['commitment', 'start', 'end', 'blockUid', 'pomodoro'],
+		// The built-in calendar's blocks (only on devices without Nextcloud; never sent to a Nextcloud server)
+		block: ['commitment', 'title', 'start', 'end', 'repeat', 'until', 'skip', 'origin', 'created'],
 		settings: [...Object.keys({ focusMinutes: 0, shortBreakMinutes: 0, longBreakMinutes: 0, sessionsBeforeLongBreak: 0, reminderMinutes: 0, defaultEstimate: 0 }), 'pomodoro', 'longBreakUntil'],
 	}
 	const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 	/** "Carried over" marks: a set, at most 500 (the newest), like the server */
 	const carriedSet = (list) => [...new Set(list.filter((x) => typeof x === 'string' && x !== '' && x.length <= 600))].slice(-500)
+	/** Repeating blocks, like Apple Calendar's simple choices */
+	const REPEATS = ['', 'daily', 'weekdays', 'weekly', 'biweekly', 'monthly']
+	/** Skipped occurrences (start times) of a repeating block: at most 1000, whole numbers */
+	const skipList = (v) => (Array.isArray(v) ? [...new Set(v.filter((x) => Number.isInteger(x) && x > 0))].sort((a, b) => a - b).slice(-1000) : [])
 	const okValue = (v) => v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))
 
 	class ApiError extends Error {
@@ -134,7 +140,7 @@
 				cursor: 0,
 				nextId: 1,
 				ids: {}, // uuid (or "cal:" + url) -> local number
-				records: { commitment: {}, task: {}, subtask: {}, note: {}, session: {} },
+				records: { commitment: {}, task: {}, subtask: {}, note: {}, session: {}, block: {} },
 				settings: { f: {}, c: {} },
 				deleted: {}, // uuid -> type
 				dirty: {}, // "type:uuid" -> {field: true} or {deleted: true}
@@ -234,12 +240,78 @@
 
 		let calendarList = []
 		const calLid = (url) => (url ? lid('cal:' + url) : null)
+
+		// --- the built-in calendar: one calendar per commitment, blocks stored (and synced) as records ---
+		const BUILTIN = 'blockwise:'
+		const builtin = !!(o.calendar && o.calendar.kind === 'builtin')
+		/** The calendar a commitment's blocks come from. Built in: its own (the Apple/Nextcloud link is kept for later). */
+		const calUrlOf = (u, r) => (builtin ? BUILTIN + u : r.f.calendarUrl)
+		const localTypes = new Set(o.remote && Array.isArray(o.remote.localTypes) ? o.remote.localTypes : [])
+		const pendingCount = () => Object.keys(db.dirty).filter((k) => !localTypes.has(k.split(':')[0])).length
+
+		/** Start times of a block's occurrences in [from, to) (repeats follow local time, across DST). */
+		const occurrences = (f, from, to) => {
+			const dur = f.end - f.start
+			if (!(dur > 0)) return []
+			const rep = REPEATS.includes(f.repeat) ? f.repeat : ''
+			if (!rep) return f.start + dur > from && f.start < to ? [f.start] : []
+			const until = Number.isFinite(f.until) && f.until > 0 ? f.until : Infinity
+			const skip = new Set(skipList(f.skip))
+			const base = new Date(f.start * 1000)
+			const days = rep === 'weekly' ? 7 : rep === 'biweekly' ? 14 : 1
+			const at = (k) => {
+				const d = new Date(base.getTime())
+				if (rep === 'monthly') {
+					d.setMonth(base.getMonth() + k)
+					if (d.getDate() !== base.getDate()) return null // no 31st this month
+				} else d.setDate(base.getDate() + k * days)
+				return Math.floor(d.getTime() / 1000)
+			}
+			const approx = (rep === 'monthly' ? 31 : days) * 86400
+			let k = Math.max(0, Math.floor((from - dur - f.start) / approx) - 2)
+			const out = []
+			for (let n = 0; n < 3000 && out.length < 1000; n++, k++) {
+				const st = at(k)
+				if (st === null) continue
+				if (st >= to || st > until) break
+				if (st + dur <= from || skip.has(st)) continue
+				if (rep === 'weekdays') {
+					const wd = new Date(st * 1000).getDay()
+					if (wd === 0 || wd === 6) continue
+				}
+				out.push(st)
+			}
+			return out
+		}
+		const builtinSource = {
+			kind: 'builtin',
+			calendars: async () => commitments().map((c) => ({ url: BUILTIN + c.uuid, name: c.name, color: c.color, writable: true })),
+			events: async (from, to, urls) => {
+				const want = new Set(urls)
+				const out = []
+				for (const [bu, b] of Object.entries(db.records.block)) {
+					if (!complete('block', b) || !want.has(BUILTIN + b.f.commitment)) continue
+					for (const st of occurrences(b.f, from, to)) {
+						out.push({ uid: `${bu}#${st}`, title: b.f.title || '', start: st, end: st + (b.f.end - b.f.start), url: BUILTIN + b.f.commitment,
+							series: lid(bu), occurrence: st, repeat: b.f.repeat || '', until: b.f.until || null })
+					}
+				}
+				return out
+			},
+			createEvent: async ({ url, title, start, end, repeat = '', until = null }) => {
+				const bu = uuid4()
+				write('block', bu, { commitment: url.slice(BUILTIN.length), title, start, end, repeat, until, skip: [], origin: null, created: now() })
+				changed()
+				return { uid: `${bu}#${start}` }
+			},
+		}
+		if (builtin) o = { ...o, calendar: builtinSource }
 		const commitmentJson = (u, r) => ({
 			id: lid(u),
 			uuid: u,
 			name: r.f.name,
 			color: r.f.color || '#0082c9',
-			calendarId: r.f.calendarUrl && calendarList.some((c) => c.url === r.f.calendarUrl) ? calLid(r.f.calendarUrl) : null,
+			calendarId: calUrlOf(u, r) && calendarList.some((c) => c.url === calUrlOf(u, r)) ? calLid(calUrlOf(u, r)) : null,
 			position: r.f.position || 0,
 			weeklyGoal: r.f.goal ?? null,
 			calendarUrl: r.f.calendarUrl ?? null,
@@ -248,9 +320,9 @@
 		 * A record shows once it has what it needs (and its parent exists): from a
 		 * drive, another device's change can arrive before the record itself.
 		 */
-		const REQUIRED = { commitment: ['name'], task: ['commitment', 'title'], subtask: ['task', 'title'], note: ['commitment', 'text'], session: ['start'] }
+		const REQUIRED = { commitment: ['name'], task: ['commitment', 'title'], subtask: ['task', 'title'], note: ['commitment', 'text'], session: ['start'], block: ['commitment', 'start', 'end'] }
 		const complete = (type, r) => !!r && REQUIRED[type].every((k) => r.f[k] !== undefined && r.f[k] !== null && r.f[k] !== '')
-			&& (type === 'task' || type === 'note' ? complete('commitment', db.records.commitment[r.f.commitment])
+			&& (type === 'task' || type === 'note' || type === 'block' ? complete('commitment', db.records.commitment[r.f.commitment])
 				: type === 'subtask' ? complete('task', db.records.task[r.f.task]) : true)
 		const commitments = () => Object.entries(db.records.commitment)
 			.filter(([, r]) => complete('commitment', r))
@@ -329,7 +401,7 @@
 		const blocks = async (from, to, onlyUuids = null, strict = false) => {
 			const byUrl = new Map()
 			for (const [u, r] of Object.entries(db.records.commitment)) {
-				if (r.f.calendarUrl && (!onlyUuids || onlyUuids.includes(u))) byUrl.set(r.f.calendarUrl, u)
+				if (calUrlOf(u, r) && (!onlyUuids || onlyUuids.includes(u))) byUrl.set(calUrlOf(u, r), u)
 			}
 			if (!byUrl.size) return []
 			let events = []
@@ -344,10 +416,20 @@
 			for (const ev of events) {
 				const cu = byUrl.get(ev.url)
 				if (!cu || !(ev.end > ev.start) || ev.end <= from || ev.start >= to) continue
-				out.push({ uid: ev.uid, title: ev.title || '', start: ev.start, end: ev.end, calendarId: calLid(ev.url), commitmentId: lid(cu) })
+				const b = { uid: ev.uid, title: ev.title || '', start: ev.start, end: ev.end, calendarId: calLid(ev.url), commitmentId: lid(cu) }
+				// Built in: which block and occurrence (to change or delete it)
+				if (ev.series) Object.assign(b, { series: ev.series, occurrence: ev.occurrence, repeat: ev.repeat, until: ev.until })
+				out.push(b)
 			}
 			out.sort((a, b) => a.start - b.start)
 			return out
+		}
+		/** A repeat rule from a request: {repeat, until} (until: last possible start, or null) */
+		const repeatOf = (body, start) => {
+			const repeat = REPEATS.includes(body.repeat) ? body.repeat : ''
+			let until = body.until === null || body.until === undefined || body.until === '' ? null : Math.trunc(Number(body.until))
+			if (!repeat || !Number.isFinite(until) || until < start) until = null
+			return { repeat, until }
 		}
 		const findOverlaps = (list) => {
 			const out = []
@@ -367,7 +449,7 @@
 			let touched = false
 			for (const [cu, c] of Object.entries(db.records.commitment)) {
 				const since = Math.max(db.checked[cu] || (c.f.created || t), t - 14 * 86400)
-				if (!c.f.calendarUrl || since >= t) { db.checked[cu] = t; continue }
+				if (!calUrlOf(cu, c) || since >= t) { db.checked[cu] = t; continue }
 				let ended
 				try {
 					ended = (await blocks(since - 86400, t, [cu], true)).filter((b) => b.end > since && b.end <= t)
@@ -444,8 +526,8 @@
 					running: running(),
 					longBreakUntil: longBreakUntil(),
 					now: now(),
-					features: { createBlocks: typeof o.calendar.createEvent === 'function', calendars: o.calendar.kind !== 'none' },
-					sync: { pending: Object.keys(db.dirty).length, lastSync: db.lastSync, server: !!o.remote, refused: db.refused || null },
+					features: { createBlocks: typeof o.calendar.createEvent === 'function', calendars: o.calendar.kind !== 'none', builtinCalendar: builtin },
+					sync: { pending: pendingCount(), lastSync: db.lastSync, server: !!o.remote, refused: db.refused || null },
 				}
 			}],
 			['GET', /^dashboard$/, async () => {
@@ -547,6 +629,7 @@
 				for (const [tu, t] of Object.entries(db.records.task)) if (t.f.commitment === u) deleteTask(tu)
 				// Tracked time stays, as unplanned time
 				for (const [nu, n] of Object.entries(db.records.note)) if (n.f.commitment === u) remove('note', nu)
+				for (const [bu, b] of Object.entries(db.records.block)) if (b.f.commitment === u) remove('block', bu)
 				for (const [su, s] of Object.entries(db.records.session)) if (s.f.commitment === u) write('session', su, { commitment: null })
 				remove('commitment', u)
 				changed()
@@ -746,10 +829,66 @@
 				const start = Math.trunc(Number(body.start))
 				const end = Math.trunc(Number(body.end))
 				if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 24 * 3600) throw new ApiError('Invalid time')
-				if (!c.f.calendarUrl) throw new ApiError('This commitment gets its calendar at the next sync. Try again then.')
+				if (!calUrlOf(cu, c)) throw new ApiError('This commitment gets its calendar at the next sync. Try again then.')
 				const title = text(typeof body.title === 'string' && body.title.trim() ? body.title : c.f.name, 255)
-				const ev = await o.calendar.createEvent({ url: c.f.calendarUrl, title, start, end })
-				return { uid: ev.uid, title, start, end, calendarId: calLid(c.f.calendarUrl), commitmentId: lid(cu) }
+				const extra = builtin ? repeatOf(body, start) : {}
+				const ev = await o.calendar.createEvent({ url: calUrlOf(cu, c), title, start, end, ...extra })
+				return { uid: ev.uid, title, start, end, calendarId: calLid(calUrlOf(cu, c)), commitmentId: lid(cu) }
+			}],
+			// Built-in calendar: change a block (this occurrence, this and the following ones, or all)
+			['PUT', /^blocks\/(\d+)\/(\d+)$/, async (m, q, body) => {
+				if (!builtin) throw new ApiError('Not found', 404)
+				const [bu, b] = byLid('block', m[1])
+				if (!complete('block', b)) throw new ApiError('Not found', 404)
+				const occ = Number(m[2])
+				if (!occurrences(b.f, occ, occ + 1).includes(occ)) throw new ApiError('Not found', 404)
+				const dur = b.f.end - b.f.start
+				const start = body.start === undefined ? occ : Math.trunc(Number(body.start))
+				const end = body.end === undefined ? start + dur : Math.trunc(Number(body.end))
+				if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 24 * 3600 || start < 0) throw new ApiError('Invalid time')
+				let commitment = b.f.commitment
+				if (body.commitmentId !== undefined) commitment = byLid('commitment', body.commitmentId)[0]
+				const title = body.title === undefined ? (b.f.title || '') : (typeof body.title === 'string' ? [...body.title.trim()].slice(0, 255).join('') : '')
+				const repeating = !!b.f.repeat
+				const scope = repeating && ['this', 'future'].includes(body.scope) ? body.scope : 'all'
+				const delta = start - occ
+				const rule = body.repeat !== undefined || body.until !== undefined
+					? repeatOf({ repeat: body.repeat ?? b.f.repeat, until: body.until === undefined ? b.f.until : body.until }, start)
+					: { repeat: b.f.repeat || '', until: b.f.until ? b.f.until + delta : null } // the end moves with the blocks
+				if (scope === 'this') {
+					// This one only: skipped in the series, kept as its own block
+					write('block', bu, { skip: skipList([...(b.f.skip || []), occ]) })
+					const nu = uuid4()
+					write('block', nu, { commitment, title, start, end, repeat: '', until: null, skip: [], origin: null, created: now() })
+					changed()
+					return { ok: true, series: lid(nu), occurrence: start }
+				}
+				if (scope === 'future' && occ !== b.f.start) {
+					// The series ends before this one; a new one starts here
+					write('block', bu, { until: occ - 1, skip: skipList((b.f.skip || []).filter((x) => x < occ)) })
+					const nu = uuid4()
+					const skip = skipList((b.f.skip || []).filter((x) => x > occ).map((x) => x + delta))
+					write('block', nu, { commitment, title, start, end, ...rule, skip, origin: null, created: now() })
+					changed()
+					return { ok: true, series: lid(nu), occurrence: start }
+				}
+				// All of them: the whole series moves by the same amount
+				const sStart = b.f.start + delta
+				write('block', bu, { commitment, title, start: sStart, end: sStart + (end - start), ...(rule.repeat ? { repeat: rule.repeat, until: rule.until && rule.until < sStart ? null : rule.until } : { repeat: '', until: null }),
+					skip: skipList((b.f.skip || []).map((x) => x + delta)) })
+				changed()
+				return { ok: true, series: lid(bu), occurrence: start }
+			}],
+			['DELETE', /^blocks\/(\d+)\/(\d+)$/, async (m, q) => {
+				if (!builtin) throw new ApiError('Not found', 404)
+				const [bu, b] = byLid('block', m[1])
+				const occ = Number(m[2])
+				const scope = b.f.repeat && ['this', 'future'].includes(q.scope) ? q.scope : 'all'
+				if (scope === 'this') write('block', bu, { skip: skipList([...(b.f.skip || []), occ]) })
+				else if (scope === 'future' && occ > b.f.start) write('block', bu, { until: occ - 1 })
+				else remove('block', bu)
+				changed()
+				return { ok: true }
 			}],
 			['GET', /^done$/, async (m, q) => {
 				const [from, to] = range(q)
@@ -853,8 +992,10 @@
 				out.push({ type, id: u, fields, clock })
 			}
 			// parents first
-			const order = { settings: 0, commitment: 1, task: 2, subtask: 3, note: 4, session: 5 }
-			return out.sort((a, b) => order[a.type] - order[b.type])
+			const order = { settings: 0, commitment: 1, task: 2, subtask: 3, note: 4, session: 5, block: 6 }
+			// A remote that doesn't keep some types (Nextcloud has real calendars): those stay on this device
+			const local = new Set(o.remote && Array.isArray(o.remote.localTypes) ? o.remote.localTypes : [])
+			return out.filter((r) => !local.has(r.type)).sort((a, b) => order[a.type] - order[b.type])
 		}
 
 		/** Removes a record's children here (the server deletes them too). `tombstone`: remember them as deleted. */
@@ -872,6 +1013,7 @@
 					if (t.f.commitment === u) { dropChildren('task', tu, tombstone); drop('task', tu) }
 				}
 				for (const [nu, n] of Object.entries(db.records.note)) if (n.f.commitment === u) drop('note', nu)
+				for (const [bu, b] of Object.entries(db.records.block)) if (b.f.commitment === u) drop('block', bu)
 			}
 		}
 
@@ -896,7 +1038,9 @@
 			const dirty = db.dirty[key]
 			for (const [k, v] of Object.entries(rec.fields || {})) {
 				if (!FIELDS[type].includes(k)) continue
-				if (k === 'carriedBlocks' ? !(Array.isArray(v) && v.every((x) => typeof x === 'string')) : !okValue(v)) continue
+				if (k === 'carriedBlocks' ? !(Array.isArray(v) && v.every((x) => typeof x === 'string'))
+					: k === 'skip' ? !(Array.isArray(v) && v.length <= 1000 && v.every((x) => Number.isInteger(x)))
+						: !okValue(v)) continue
 				const rc = rec.clock && typeof rec.clock[k] === 'string' && CLOCK_RE.test(rec.clock[k]) ? rec.clock[k] : ''
 				observe(rc)
 				if (k === 'carriedBlocks') {
@@ -1002,7 +1146,7 @@
 			if (!o.remote) return { ok: false, reason: 'no server' }
 			if (syncing) return syncing
 			syncing = (async () => {
-				const before = Object.keys(db.dirty).length
+				const before = pendingCount()
 				const refused = await pushDirty()
 				let { pulled, reset } = await pullAll()
 				if (reset) {
@@ -1059,11 +1203,33 @@
 			hlc: () => db.hlc,
 			ApiError,
 			/** Changes not yet sent to the server */
-			pending: () => Object.keys(db.dirty).length,
+			pending: () => pendingCount(),
 			lastSync: () => db.lastSync,
 			/** What the native side needs for notifications: running timer, settings, commitments, calendars */
 			snapshot: () => ({ node: db.node, hlc: db.hlc, pending: Object.keys(db.dirty).length, running: running(), settings: settings(), longBreakUntil: longBreakUntil(), commitments: commitments().map((c) => ({ id: c.id, uuid: c.uuid, name: c.name, color: c.color, calendarUrl: c.calendarUrl })) }),
 			flush: () => o.storage.save(db),
+			/** Built-in calendar, for moving to Apple Calendar and back (the app only, not the pages) */
+			builtinBlocks: () => Object.entries(db.records.block).filter(([, b]) => complete('block', b)).map(([u, b]) => ({
+				uuid: u, commitment: b.f.commitment, title: b.f.title || '', start: b.f.start, end: b.f.end, repeat: b.f.repeat || '', until: b.f.until || null, skip: skipList(b.f.skip), origin: b.f.origin || null })),
+			/** Events from another calendar as built-in blocks (one each; an event imported before is not added again) */
+			importBlocks: (list) => {
+				const seen = new Set(Object.values(db.records.block).map((b) => b.f.origin).filter(Boolean))
+				let n = 0
+				for (const e of Array.isArray(list) ? list : []) {
+					if (!e || !db.records.commitment[e.commitment] || !(e.end > e.start) || e.end - e.start > 86400 || seen.has(e.origin)) continue
+					seen.add(e.origin)
+					write('block', uuid4(), { commitment: e.commitment, title: [...String(e.title || '')].slice(0, 255).join(''), start: Math.trunc(e.start), end: Math.trunc(e.end), repeat: '', until: null, skip: [], origin: String(e.origin || '').slice(0, 600) || null, created: now() })
+					n++
+				}
+				if (n) changed()
+				return n
+			},
+			/** Occurrences of one built-in block in [from, to) */
+			occurrencesOf: (uuid, from, to) => (db.records.block[uuid] ? occurrences(db.records.block[uuid].f, from, to) : []),
+			/** Where a block was copied to (or came from): "apple:<event id>" */
+			markBlock: (uuid, origin) => { if (db.records.block[uuid]) { write('block', uuid, { origin: String(origin).slice(0, 600) }); changed() } },
+			removeBlocks: (uuids) => { for (const u of uuids || []) remove('block', u); changed() },
+			linkCalendar: (commitmentUuid, url) => { if (db.records.commitment[commitmentUuid]) { write('commitment', commitmentUuid, { calendarUrl: url }); changed() } },
 			/** Moving to a new sync (data taken along): send everything, read the new one from the start */
 			resendAll: () => { markAllDirty(); db.cursor = 0; return o.storage.save(db) },
 			_db: () => db,

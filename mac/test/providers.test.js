@@ -147,7 +147,7 @@ fs.writeFileSync(keysFile, JSON.stringify({ dropboxAppKey: 'dbxtestkey12', googl
 
 	console.log('Switching, data taken along')
 	const st0 = await call('api', 'GET', 'state')
-	assert.equal(st0.features.calendars, false, 'Apple Calendar off until you turn it on')
+	assert.equal(st0.features.builtinCalendar, true, 'the built-in calendar until you choose Apple Calendar')
 	assert.ok(!T.log.some((l) => /blockwise-calendar|access/.test(l) && /helper/.test(l)), 'macOS was never asked for calendar access')
 	const top = T.appMenu.items[0].submenu.map((i) => i.label)
 	assert.ok(top.includes('Log out or switch sync…') && top.includes('Sync now'), 'also in the Blockwise menu at the top')

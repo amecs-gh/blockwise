@@ -12,6 +12,7 @@
 const { execFile } = require('node:child_process')
 
 const APPLE = 'apple:'
+const REPEATS = ['', 'daily', 'weekdays', 'weekly', 'biweekly', 'monthly']
 const ID_RE = /^[A-Za-z0-9:_.-]{1,200}$/
 const appleUrl = (id) => APPLE + id
 const appleId = (url) => (typeof url === 'string' && url.startsWith(APPLE) && ID_RE.test(url.slice(APPLE.length)) ? url.slice(APPLE.length) : null)
@@ -72,11 +73,24 @@ function appleCalendar({ helperPath, run }) {
 			}
 			return out
 		},
-		async createEvent({ url, title, start, end }) {
+		async createEvent({ url, title, start, end, repeat = '', until = null, skip = [] }) {
 			const id = appleId(url)
 			if (!id) throw new Error('This commitment has no calendar on this Mac. Link one in Settings.')
-			const r = await call('createEvent', { calendar: id, title: String(title).slice(0, 255), start, end })
-			return { uid: `${r.uid}#${start}` }
+			const input = { calendar: id, title: String(title).slice(0, 255), start, end }
+			if (REPEATS.includes(repeat) && repeat) {
+				input.repeat = repeat
+				if (Number.isFinite(until) && until >= start) input.until = until
+				input.skip = (Array.isArray(skip) ? skip : []).filter((x) => Number.isInteger(x)).slice(-1000)
+			}
+			const r = await call('createEvent', input)
+			if (!r || typeof r.uid !== 'string' || !r.uid) throw new Error('Apple Calendar could not be read.')
+			return { uid: `${r.uid}#${start}`, eventUid: r.uid }
+		},
+		/** An event's old copy (one occurrence with `start`, else the series), by its iCalendar UID */
+		async deleteEvent({ url, uid, start }) {
+			const calendar = appleId(url)
+			if (!calendar || typeof uid !== 'string' || !uid || uid.length > 1000) return
+			await call('deleteEvent', Number.isFinite(start) ? { calendar, uid, start } : { calendar, uid })
 		},
 		/** A new commitment's calendar (in iCloud if you use it, else on this Mac) */
 		async createCalendar({ name, color }) {

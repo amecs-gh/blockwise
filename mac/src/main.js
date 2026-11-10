@@ -222,12 +222,14 @@ async function connect() {
 		? nc.createClient({ server: config.server, loginName: config.loginName, appPassword: await openPassword(config), fetch: apiFetch })
 		: null
 	const helper = helperPath()
-	// Apple Calendar only when you turned it on (menu bar icon → Use Apple Calendar)
-	const calendar = client ? cal.nextcloudCalendar({ api: client.api }) : helper && config.appleCalendar ? cal.appleCalendar({ helperPath: helper }) : cal.noCalendar
+	// Without Nextcloud: Blockwise's built-in calendar, or Apple Calendar when you chose it (Settings → Calendar)
+	const calendar = client ? cal.nextcloudCalendar({ api: client.api }) : helper && calendarMode() === 'apple' ? cal.appleCalendar({ helperPath: helper }) : { kind: 'builtin' }
 
 	let inner = null
 	if (client) inner = { pull: (since, limit) => client.api('GET', `sync?since=${since}&limit=${limit}`), push: (records) => client.api('POST', 'sync', { records }) }
 	const lazy = { pull: (since, limit) => inner.pull(since, limit), push: (records) => inner.push(records) }
+	// Nextcloud has real calendars: built-in blocks stay on this Mac (until you switch to a drive)
+	if (client) lazy.localTypes = ['block']
 	// A Keychain that can't open the data throws here: nothing is started empty over it
 	const stored = await vault.read('data')
 	engine = await createEngine({
@@ -253,35 +255,173 @@ async function connect() {
 	remote = config.provider === 'local' ? null : lazy
 }
 
+/** After switching from the menu bar: tell what happened */
+const changedToast = (r) => { if (r && r.changed && r.message && Notification.isSupported()) new Notification({ title: 'Blockwise', body: r.message, silent: true }).show() }
+
+/** 'builtin' (default) or 'apple'; older versions saved a yes/no */
+const calendarMode = () => (config && (config.calendar === 'apple' || (config.calendar === undefined && config.appleCalendar)) ? 'apple' : 'builtin')
+
+const DAY = 86400
+/** "apple:<event id>": a built-in block copied to (or from) Apple Calendar */
+const baseUid = (uid) => String(uid).replace(/#\d+$/, '')
+
 /**
- * Apple Calendar on or off. Blockwise reads the events of the calendars you link
- * to commitments (your time blocks) and adds the blocks you plan. macOS can only
- * allow full calendar access, so Blockwise explains first and asks only now.
+ * Switch where blocks live (Settings → Calendar). To Apple Calendar: each
+ * commitment gets a calendar (or keeps its own) and the built-in blocks are
+ * copied there, repeats included. Back to built in: the events of the
+ * commitments' calendars (3 months back to a year ahead) are copied in. The
+ * built-in blocks are not deleted (your other Macs may use them).
+ * @return {{changed: boolean, message?: string}}
  */
-async function setAppleCalendar(on) {
+async function setCalendarMode(mode) {
+	if (!engine || config.provider === 'nextcloud' || (mode !== 'apple' && mode !== 'builtin') || mode === calendarMode()) return { changed: false }
 	const helper = helperPath()
-	if (on) {
+	if (mode === 'apple' && !helper) {
+		await dialog.showMessageBox({ type: 'info', buttons: [t('OK')], message: t('Apple Calendar is not part of this build.'), detail: t('Build the app with Xcode\'s command line tools installed (npm run build).') })
+		return { changed: false }
+	}
+	const apple = helper ? cal.appleCalendar({ helperPath: helper }) : null
+	const snap = engine.snapshot()
+	const byUuid = new Map(snap.commitments.map((c) => [c.uuid, c]))
+	if (mode === 'apple') {
+		const blocks = engine.builtinBlocks()
 		const { response } = await dialog.showMessageBox({
 			type: 'question',
 			buttons: [t('Continue'), t('Cancel')],
 			defaultId: 0,
-			message: t('Use Apple Calendar for your time blocks?'),
-			detail: t('Blockwise reads the events in the calendars you link to a commitment: they are your planned time blocks. It adds a block when you plan one, and a calendar for a new commitment. It never sends calendar data anywhere, except the blocks to your sync.\n\nmacOS only offers full access to calendars, so it will ask you next. Without it, everything else in Blockwise works: commitments, tasks, notes, the timer and your time.'),
+			cancelId: 1,
+			message: t('Use Apple Calendar for your blocks?'),
+			detail: t('Blockwise reads the events in the calendars of your commitments: they are your planned blocks. It adds the blocks you plan, and a calendar for each commitment. Calendar data stays on your Mac.\n\nYour {n} built-in blocks are copied to Apple Calendar. macOS only offers full access to calendars, so it asks you next.', { n: blocks.length }),
 		})
-		if (response !== 0) return
+		if (response !== 0) return { changed: false }
 		let granted = false
-		try { granted = helper ? (await cal.appleCalendar({ helperPath: helper }).access()).granted === true : false } catch (e) { granted = false }
+		try { granted = (await apple.access()).granted === true } catch (e) { granted = false }
 		if (!granted) {
-			dialog.showMessageBox({ type: 'info', buttons: [t('OK')], message: t('Blockwise may not use your calendars.'), detail: t('You can allow it later in System Settings → Privacy & Security → Calendars, then turn on Use Apple Calendar again.') })
-			return
+			await dialog.showMessageBox({ type: 'info', buttons: [t('OK')], message: t('Blockwise may not use your calendars.'), detail: t('You can allow it in System Settings → Privacy & Security → Calendars, then switch again. The built-in calendar stays.') })
+			return { changed: false }
 		}
+		// A calendar for each commitment (the one linked before, if it is still there)
+		const cals = await apple.calendars()
+		const urlOf = new Map()
+		for (const c of snap.commitments) {
+			const own = cals.find((x) => x.url === c.calendarUrl && x.writable)
+			let url = own ? own.url : null
+			if (!url) {
+				try { url = await apple.createCalendar({ name: c.name, color: c.color }) } catch (e) { url = null }
+				if (url) engine.linkCalendar(c.uuid, url)
+			}
+			if (url) urlOf.set(c.uuid, url)
+		}
+		// What is in Apple Calendar now: a block copied (or taken) from there and not changed since is not copied again
+		const from = Math.floor(Date.now() / 1000) - 90 * DAY
+		const to = Math.floor(Date.now() / 1000) + 365 * DAY
+		let there = []
+		try { there = await apple.events(from, to, [...new Set(urlOf.values())]) } catch (e) { there = [] }
+		const byBase = new Map()
+		for (const e of there) {
+			const k = baseUid(e.uid)
+			if (!byBase.has(k)) byBase.set(k, [])
+			byBase.get(k).push(e)
+		}
+		const sig = (list) => list.map((x) => `${x.start}-${x.end}-${x.title || ''}`).sort().join()
+		let copied = 0
+		let failed = 0
+		for (const b of blocks) {
+			const url = urlOf.get(b.commitment)
+			if (!url) { failed++; continue }
+			const title = b.title || (byUuid.get(b.commitment) || {}).name || ''
+			const key = b.origin && b.origin.startsWith('apple:') ? b.origin.slice(6) : null
+			if (key) {
+				const one = /#(\d+)$/.exec(key)
+				const evs = byBase.get(baseUid(key)) || []
+				const theirs = one ? evs.filter((e) => e.uid === key) : evs
+				const mine = engine.occurrencesOf(b.uuid, from, to).map((st) => ({ start: st, end: st + (b.end - b.start), title }))
+				if (theirs.length && sig(theirs) === sig(mine)) continue // the same there
+				// Changed here since: its old copy in Apple Calendar is replaced
+				if (theirs.length) {
+					// Only where it was found: in this commitment's calendar
+					const where = theirs[0].url
+					try { await apple.deleteEvent(one ? { url: where, uid: baseUid(key), start: Number(one[1]) } : { url: where, uid: baseUid(key) }) } catch (e) { failed++; continue }
+				}
+			}
+			try {
+				const r = await apple.createEvent({ url, title, start: b.start, end: b.end, repeat: b.repeat, until: b.until, skip: b.skip })
+				engine.markBlock(b.uuid, `apple:${r.eventUid}`)
+				copied++
+			} catch (e) { failed++ }
+		}
+		config.calendar = 'apple'
+		delete config.appleCalendar
+		saveConfig(config)
+		await engine.flush().catch(() => {})
+		await connect()
+		refresh()
+		notifyChanged()
+		return { changed: true, message: failed ? t('{n} blocks copied to Apple Calendar; {m} could not be copied (they stay in the built-in calendar).', { n: copied, m: failed }) : t('{n} blocks copied to Apple Calendar.', { n: copied }) }
 	}
-	config.appleCalendar = !!on
+
+	// Back to the built-in calendar
+	const { response } = await dialog.showMessageBox({
+		type: 'question',
+		buttons: [t('Continue'), t('Cancel')],
+		defaultId: 0,
+		cancelId: 1,
+		message: t('Use the built-in calendar?'),
+		detail: t('Blocks will live in Blockwise and sync with your data. The events of your commitments\' calendars, from 3 months ago to a year ahead, are copied in. Apple Calendar stays as it is.'),
+	})
+	if (response !== 0) return { changed: false }
+	let imported = 0
+	let note = ''
+	try {
+		const linked = snap.commitments.filter((c) => c.calendarUrl && c.calendarUrl.startsWith('apple:'))
+		const commitmentOfUrl = new Map(linked.map((c) => [c.calendarUrl, c.uuid]))
+		const from = Math.floor(Date.now() / 1000) - 90 * DAY
+		const to = Math.floor(Date.now() / 1000) + 365 * DAY
+		const events = linked.length ? await apple.events(from, to, linked.map((c) => c.calendarUrl)) : []
+		const groups = new Map()
+		for (const e of events) {
+			const k = baseUid(e.uid)
+			if (!groups.has(k)) groups.set(k, [])
+			groups.get(k).push(e)
+		}
+		const blocks = engine.builtinBlocks()
+		const current = new Set(events.map((e) => `apple:${e.uid}`))
+		const drop = []
+		const keep = new Set()
+		for (const b of blocks) {
+			if (!b.origin || !b.origin.startsWith('apple:')) continue
+			const key = b.origin.slice(6)
+			if (/#\d+$/.test(key)) {
+				// Copied in before as one event: gone or moved in Apple Calendar since
+				if (groups.has(baseUid(key)) && !current.has(b.origin)) drop.push(b.uuid)
+				continue
+			}
+			// Copied to Apple Calendar as a series: unchanged there, it stays as it is
+			const evs = groups.get(key)
+			if (!evs) continue
+			const mine = engine.occurrencesOf(b.uuid, from, to).map((st) => `${st}-${st + (b.end - b.start)}`).sort().join()
+			const theirs = evs.map((e) => `${e.start}-${e.end}`).sort().join()
+			if (mine === theirs && evs.every((e) => (e.title || '') === (b.title || e.title || ''))) keep.add(key)
+			else drop.push(b.uuid)
+		}
+		if (drop.length) engine.removeBlocks(drop)
+		const fresh = []
+		for (const [k, evs] of groups) {
+			if (keep.has(k)) continue
+			for (const e of evs) fresh.push({ commitment: commitmentOfUrl.get(e.url), title: e.title, start: e.start, end: e.end, origin: `apple:${e.uid}` })
+		}
+		imported = engine.importBlocks(fresh)
+	} catch (e) {
+		note = t('Apple Calendar could not be read, so nothing was copied in.')
+	}
+	config.calendar = 'builtin'
+	delete config.appleCalendar
 	saveConfig(config)
 	await engine.flush().catch(() => {})
 	await connect()
 	refresh()
 	notifyChanged()
+	return { changed: true, message: note || t('{n} events copied into the built-in calendar.', { n: imported }) }
 }
 
 /**
@@ -465,7 +605,10 @@ function contextMenu() {
 		{ type: 'separator' },
 		{ label: t('Open at login'), type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: (i) => app.setLoginItemSettings({ openAtLogin: i.checked }) },
 		{ label: t('Desktop notifications'), type: 'checkbox', checked: config.notifications !== false, click: (i) => { config.notifications = i.checked; saveConfig(config); broadcast() } },
-		...(config.provider !== 'nextcloud' ? [{ label: t('Use Apple Calendar'), type: 'checkbox', checked: !!config.appleCalendar, click: (i) => setAppleCalendar(i.checked) }] : []),
+		...(config.provider !== 'nextcloud' ? [{ label: t('Calendar'), submenu: [
+			{ label: t('Built-in calendar'), type: 'radio', checked: calendarMode() === 'builtin', click: () => setCalendarMode('builtin').then(changedToast) },
+			{ label: t('Apple Calendar'), type: 'radio', checked: calendarMode() === 'apple', click: () => setCalendarMode('apple').then(changedToast) },
+		] }] : []),
 		{ type: 'separator' },
 		config.provider === 'nextcloud'
 			? { label: t('Logged in as {user} on {host}', { user: config.loginName, host: new URL(config.server).host }), enabled: false }
@@ -587,7 +730,7 @@ function positionPopover() {
 function showMain(page = null) {
 	if (!engine) return showSetup()
 	if (page === 'calendar') return openCalendar()
-	const hash = PAGES.includes(page) ? `#${page}` : ''
+	const hash = PAGES.includes(page) ? `#${page}` : /^calendar\/\d{8}$/.test(page || '') ? `#${page}` : ''
 	if (!mainWin || mainWin.isDestroyed()) {
 		createMain(hash)
 	} else if (hash) {
@@ -633,6 +776,11 @@ function notifyChanged(except) {
 
 /** Opens Apple Calendar, on the day of `ts` (unix seconds) if given. */
 function openCalendar(ts) {
+	// The built-in calendar: in Blockwise's window, on that day
+	if (engine && config.provider !== 'nextcloud' && calendarMode() === 'builtin') {
+		const d = Number.isFinite(ts) ? new Date(ts * 1000) : new Date()
+		return showMain(`calendar/${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`)
+	}
 	const fallback = () => shell.openPath('/System/Applications/Calendar.app').then((err) => { if (err) shell.openExternal('ical://') })
 	if (process.platform !== 'darwin' || !Number.isFinite(ts)) return fallback()
 	const day = (x) => { const d = new Date(x); d.setHours(12, 0, 0, 0); return d }
@@ -790,7 +938,7 @@ handle('state', () => publicState())
  * Blockwise API paths only, e.g. "tasks/12" or "blocks?from=1&to=2": no "..", no
  * other Nextcloud endpoints (the app password could reach your files).
  */
-const API_PATH = /^[a-z][a-z-]*(\/\d+(\/[a-z][a-z-]*)?|\/(start|stop))?(\?[a-zA-Z]+=[a-zA-Z0-9_-]*(&[a-zA-Z]+=[a-zA-Z0-9_-]*)*)?$/
+const API_PATH = /^[a-z][a-z-]*(\/\d+(\/([a-z][a-z-]*|\d+))?|\/(start|stop))?(\?[a-zA-Z]+=[a-zA-Z0-9_-]*(&[a-zA-Z]+=[a-zA-Z0-9_-]*)*)?$/
 const isPlainBody = (b) => b === undefined || (b !== null && typeof b === 'object' && Object.getPrototypeOf(b) === Object.prototype)
 
 ipcMain.handle('api', async (e, method, apiPath, body) => {
@@ -812,6 +960,9 @@ ipcMain.handle('api', async (e, method, apiPath, body) => {
 })
 handle('open', (page) => showMain(typeof page === 'string' ? page : null))
 handle('openCalendar', (ts) => openCalendar(typeof ts === 'number' ? ts : undefined))
+handle('calendarMode', () => ({ mode: calendarMode(), available: !!config && config.provider !== 'nextcloud' }))
+// Only from the main window; asks you before anything changes
+handle('setCalendarMode', (mode) => setCalendarMode(String(mode || '')), 'app.html')
 // Choosing where your data lives: only from the first-run screen, and only while
 // nothing is connected (no other window can switch your sync or wipe your data)
 const setupOnly = (fn) => (...args) => {

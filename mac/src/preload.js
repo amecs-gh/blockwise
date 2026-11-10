@@ -28,5 +28,7 @@ contextBridge.exposeInMainWorld('trackerApp', {
 	menu: () => call('menu'),
 	setHeight: (h) => ipcRenderer.send('popover:height', h),
 	openCalendar: (ts) => call('openCalendar', ts),
+	calendarMode: () => call('calendarMode'),
+	setCalendarMode: (mode) => call('setCalendarMode', mode),
 	onChanged: (cb) => ipcRenderer.on('changed', () => cb()),
 })

@@ -3,7 +3,8 @@
 //   {"ok": true, "data": ...}  or  {"ok": false, "error": "denied" | "invalid" | "failed"}
 //
 // Commands: access, calendars, events {from, to, calendars}, createEvent
-// {calendar, title, start, end}, createCalendar {title, color}. Times are unix
+// {calendar, title, start, end, repeat?, until?, skip?}, deleteEvent {calendar, uid, start?},
+// createCalendar {title, color}. Times are unix
 // seconds. It only touches calendars and events, never reminders or contacts.
 //
 // Build: swiftc -O -target arm64-apple-macos13 -framework EventKit -o build/blockwise-calendar BlockwiseCalendar.swift
@@ -116,8 +117,59 @@ case "createEvent":
 	e.title = text(input["title"], max: 255) ?? cal.title
 	e.startDate = Date(timeIntervalSince1970: start)
 	e.endDate = Date(timeIntervalSince1970: end)
+	// A repeating block (from Blockwise's built-in calendar)
+	let repeatKind = (input["repeat"] as? String) ?? ""
+	if !repeatKind.isEmpty {
+		var freq = EKRecurrenceFrequency.daily
+		var interval = 1
+		var days: [EKRecurrenceDayOfWeek]? = nil
+		switch repeatKind {
+		case "daily": freq = .daily
+		case "weekdays": freq = .weekly; days = [2, 3, 4, 5, 6].compactMap { EKWeekday(rawValue: $0) }.map { EKRecurrenceDayOfWeek($0) }
+		case "weekly": freq = .weekly
+		case "biweekly": freq = .weekly; interval = 2
+		case "monthly": freq = .monthly
+		default: fail("invalid")
+		}
+		var until: EKRecurrenceEnd? = nil
+		if let u = number(input["until"]), u >= start { until = EKRecurrenceEnd(end: Date(timeIntervalSince1970: u)) }
+		e.addRecurrenceRule(EKRecurrenceRule(recurrenceWith: freq, interval: interval, daysOfTheWeek: days, daysOfTheMonth: nil, monthsOfTheYear: nil, weeksOfTheYear: nil, daysOfTheYear: nil, setPositions: nil, end: until))
+	}
 	do { try store.save(e, span: .thisEvent, commit: true) } catch { fail("failed") }
+	// Occurrences deleted in Blockwise: removed here too
+	if !repeatKind.isEmpty, let skip = input["skip"] as? [NSNumber], skip.count <= 1000 {
+		let itemId = e.calendarItemIdentifier
+		for s in skip {
+			let t = s.doubleValue
+			guard t.isFinite else { continue }
+			let p = store.predicateForEvents(withStart: Date(timeIntervalSince1970: t - 60), end: Date(timeIntervalSince1970: t + 60), calendars: [cal])
+			for occ in store.events(matching: p) where occ.calendarItemIdentifier == itemId && abs(occ.startDate.timeIntervalSince1970 - t) < 1 {
+				try? store.remove(occ, span: .thisEvent, commit: false)
+			}
+		}
+		try? store.commit()
+	}
 	ok(["uid": e.calendarItemExternalIdentifier ?? e.eventIdentifier ?? ""])
+
+case "deleteEvent":
+	// A block changed in Blockwise's built-in calendar: its old copy goes. With
+	// `start`, only that occurrence; without, the whole series.
+	guard hasAccess() else { fail("denied") }
+	guard let uid = text(input["uid"], max: 1000), let calId = input["calendar"] as? String else { fail("invalid") }
+	// Only in the commitment's own calendar: never in your other calendars
+	let items = store.calendarItems(withExternalIdentifier: uid).compactMap { $0 as? EKEvent }.filter { $0.calendar.calendarIdentifier == calId }
+	guard let master = items.first, master.calendar.allowsContentModifications else { ok(["deleted": 0]) }
+	if let s = number(input["start"]) {
+		let p = store.predicateForEvents(withStart: Date(timeIntervalSince1970: s - 60), end: Date(timeIntervalSince1970: s + 60), calendars: [master.calendar])
+		var n = 0
+		for occ in store.events(matching: p) where occ.calendarItemExternalIdentifier == uid && abs(occ.startDate.timeIntervalSince1970 - s) < 1 {
+			if (try? store.remove(occ, span: .thisEvent, commit: false)) != nil { n += 1 }
+		}
+		try? store.commit()
+		ok(["deleted": n])
+	}
+	do { try store.remove(master, span: .futureEvents, commit: true) } catch { fail("failed") }
+	ok(["deleted": 1])
 
 case "createCalendar":
 	guard hasAccess() else { fail("denied") }

@@ -183,6 +183,10 @@
 		addingTo: null, // task id with the inline "add subtask" field open on Now
 		showAll: false, // Now page: show all commitments while tracking
 		calMonth: 0, // months from now in the mini calendar
+		calView: localStorageGet('calView', 'week'), // the built-in calendar: day | week | month
+		calDate: new Date(new Date().setHours(0, 0, 0, 0)),
+		calScroll: null, // where the time grid was scrolled to
+		calBlocks: [],
 		doneWeek: 0, // weeks back from this one on the Done page
 		notesFor: null, // commitment id on the Notes page
 		noteDraft: null, // { for, text, open }: a note being written (kept across re-renders)
@@ -376,8 +380,11 @@
 					icon(r.icon), h('span', null, r.label()))))),
 			// What the Mac and phone apps add: Calendar (their calendar app) and, on the phone, the account sheet
 			desktop ? h('ul', { class: 'imp-nav__main imp-nav__apps' },
-				h('li', { class: 'imp-nav__app' }, h('a', { href: '#', title: tr('Calendar'), onclick: (e) => { e.preventDefault(); desktop.openCalendar() } },
-					icon('M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z'), h('span', null, tr('Calendar')), h('span', { class: 'imp-nav__ext', 'aria-hidden': 'true' }, '↗'))),
+				state.features.builtinCalendar
+					? h('li', null, h('a', { href: '#calendar', title: tr('Calendar'), class: state.route === 'calendar' ? 'active' : '', 'aria-current': state.route === 'calendar' ? 'page' : null },
+						icon('M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z'), h('span', null, tr('Calendar'))))
+					: h('li', { class: 'imp-nav__app' }, h('a', { href: '#', title: tr('Calendar'), onclick: (e) => { e.preventDefault(); desktop.openCalendar() } },
+						icon('M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z'), h('span', null, tr('Calendar')), h('span', { class: 'imp-nav__ext', 'aria-hidden': 'true' }, '↗'))),
 				desktop.account ? h('li', { class: 'imp-nav__app' }, h('a', { href: '#', title: tr('Account'), onclick: (e) => { e.preventDefault(); desktop.account() } },
 					icon('M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0'), h('span', null, tr('Account')))) : null) : null,
 			h('div', { class: 'imp-nav__heading' }, tr('Commitments')),
@@ -2765,11 +2772,14 @@
 
 		// Commitments
 		const sec = h('section', { class: 'imp-settings__section' }, h('h2', null, tr('Commitments')),
-			h('p', { class: 'imp-muted' }, tr('Each commitment is a calendar. Name and color stay in sync with the Calendar app. Blocks of different commitments must not overlap; other calendars are ignored.')))
+			h('p', { class: 'imp-muted' }, state.features.builtinCalendar
+				? tr('Each commitment has its own calendar in Blockwise for its blocks.')
+				: tr('Each commitment is a calendar. Name and color stay in sync with the Calendar app. Blocks of different commitments must not overlap; other calendars are ignored.')))
 		const list = h('ul', { class: 'imp-clist' })
 		state.commitments.forEach((c) => list.append(commitmentRow(c)))
 		sec.append(list, newCommitmentForm())
 		page.append(sec)
+		if (desktop && desktop.calendarMode) page.append(await calendarSourceSection())
 
 		// Pomodoro & reminders
 		const s = state.settings
@@ -2805,6 +2815,40 @@
 		return page
 	}
 
+	/** The Mac app: blocks in Blockwise's own calendar, or in Apple Calendar */
+	async function calendarSourceSection() {
+		const info = await desktop.calendarMode()
+		const sec = h('section', { class: 'imp-settings__section imp-calsource' }, h('h2', null, tr('Calendar')))
+		if (!info || !info.available) {
+			sec.append(h('p', { class: 'imp-muted' }, tr('With Nextcloud, blocks are in your Nextcloud calendars.')))
+			return sec
+		}
+		const option = (mode, title, text) => h('label', { class: `imp-calsource__opt ${info.mode === mode ? 'is-current' : ''}` },
+			h('input', { type: 'radio', name: 'calmode', value: mode, checked: info.mode === mode }),
+			h('span', null, h('strong', null, title), h('span', { class: 'imp-muted' }, text)))
+		const form = h('form', {
+			class: 'imp-calsource__form',
+			onsubmit: async (e) => {
+				e.preventDefault()
+				const mode = new FormData(form).get('calmode')
+				if (mode === info.mode) return
+				const r = await desktop.setCalendarMode(mode)
+				if (r && r.changed) {
+					toast(r.message || tr('Calendar changed'))
+					await refresh()
+				}
+			},
+		},
+		option('builtin', tr('Built-in calendar'), tr('Blocks live in Blockwise and sync with your data. No calendar access needed.')),
+		option('apple', tr('Apple Calendar'), tr('Blocks are events in Apple Calendar (iCloud, Google, Exchange…). Your built-in blocks are copied there, and each commitment gets a calendar.')),
+		h('p', { class: 'imp-muted' }, info.mode === 'apple'
+			? tr('Going back copies the events of your commitments\' calendars (from 3 months ago to a year ahead) into the built-in calendar.')
+			: tr('Blockwise asks macOS for calendar access when you switch.')),
+		h('button', { class: 'imp-button imp-button--primary', type: 'submit' }, tr('Switch calendar')))
+		sec.append(form)
+		return sec
+	}
+
 	function commitmentRow(c) {
 		const name = h('input', { type: 'text', value: c.name, 'aria-label': tr('Name'), maxlength: 255 })
 		const color = h('input', { type: 'color', value: c.color, 'aria-label': tr('Color') })
@@ -2819,7 +2863,7 @@
 				onsubmit: async (e) => {
 					e.preventDefault()
 					const body = { name: name.value, color: color.value, weeklyGoal: goal.value ? Math.round(Number(goal.value) * 60) : null }
-					const sel = calSelect.value
+					const sel = state.features.builtinCalendar ? '' : calSelect.value
 					if (sel === 'new') Object.assign(body, { relink: true, calendarId: null })
 					else if (sel && Number(sel) !== c.calendarId) Object.assign(body, { relink: true, calendarId: Number(sel) })
 					await api('PUT', `commitments/${c.id}`, body)
@@ -2827,13 +2871,15 @@
 					await refresh()
 				},
 			},
-			color, name, calSelect,
+			color, name, state.features.builtinCalendar ? null : calSelect,
 			h('label', { class: 'imp-newtask__est', title: tr('Weekly goal') }, goal, h('span', null, tr('h/week'))),
 			h('button', { class: 'imp-button', type: 'submit' }, tr('Save')),
 			h('button', {
 				class: 'imp-button imp-button--danger', type: 'button',
 				onclick: async () => {
-					if (!window.confirm(tr('Delete "{name}" and its tasks? The calendar and its events are kept; tracked time stays as unplanned time.', { name: c.name }))) return
+					if (!window.confirm(state.features.builtinCalendar
+						? tr('Delete "{name}" with its tasks, notes and blocks? Tracked time stays as unplanned time.', { name: c.name })
+						: tr('Delete "{name}" and its tasks? The calendar and its events are kept; tracked time stays as unplanned time.', { name: c.name }))) return
 					await api('DELETE', `commitments/${c.id}`)
 					await refresh()
 				},
@@ -2861,18 +2907,538 @@
 			},
 		},
 		h('h3', null, tr('New commitment')),
-		h('div', { class: 'imp-newcommitment__row' }, source, color, name,
+		h('div', { class: 'imp-newcommitment__row' }, state.features.builtinCalendar ? null : source, color, name,
 			h('button', { class: 'imp-button imp-button--primary', type: 'submit' }, tr('Create'))))
 	}
+
+	// ---------------------------------------------------------------------------
+	// Page: Calendar (built in: the Mac app without Apple Calendar)
+	// Day, week and month like Apple Calendar: drag to plan a block, drag it to
+	// move it, drag its lower edge to change its length, click it for what to do.
+	// ---------------------------------------------------------------------------
+
+	const HOUR_PX = 48
+	const SNAP_MIN = 15
+	const REPEATS = () => [['', tr('Never')], ['daily', tr('Every day')], ['weekdays', tr('Every weekday')], ['weekly', tr('Every week')], ['biweekly', tr('Every 2 weeks')], ['monthly', tr('Every month')]]
+	const repeatLabel = (r) => (REPEATS().find(([k]) => k === (r || '')) || [null, ''])[1]
+	const tsOf = (d) => Math.floor(d.getTime() / 1000)
+	const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x }
+	const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+	const minutesOf = (ts) => { const d = at(ts); return d.getHours() * 60 + d.getMinutes() }
+	const atMinutes = (day, min) => tsOf(new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, min))
+	const pad2 = (n) => String(n).padStart(2, '0')
+	const dateValue = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+	const timeValue = (ts) => { const d = at(ts); return `${pad2(d.getHours())}:${pad2(d.getMinutes())}` }
+	const fromInputs = (date, time) => {
+		const [y, mo, d] = date.split('-').map(Number)
+		const [hh, mm] = time.split(':').map(Number)
+		return tsOf(new Date(y, mo - 1, d, hh, mm))
+	}
+	const calFmt = {
+		month: new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }),
+		day: new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+		dayShort: new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }),
+		range: new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric' }),
+		weekday: new Intl.DateTimeFormat(locale, { weekday: 'short' }),
+		hour: new Intl.DateTimeFormat(locale, { hour: 'numeric' }),
+	}
+	let calBusy = false // a drag or a panel open: no automatic re-render
+
+	function calDays() {
+		const d = startOfDay(state.calDate)
+		if (state.calView === 'day') return [d]
+		if (state.calView === 'week') return Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(d), i))
+		const first = startOfWeek(startOfMonth(d))
+		return Array.from({ length: 42 }, (_, i) => addDays(first, i))
+	}
+	function calMove(n) {
+		const d = new Date(state.calDate)
+		if (state.calView === 'day') d.setDate(d.getDate() + n)
+		else if (state.calView === 'week') d.setDate(d.getDate() + 7 * n)
+		else { d.setDate(1); d.setMonth(d.getMonth() + n) }
+		state.calDate = startOfDay(d)
+		render()
+	}
+	function calSetView(v) {
+		state.calView = v
+		localStorageSet('calView', v)
+		render()
+	}
+
+	async function pageCalendar() {
+		await loadState()
+		const page = h('div', { class: 'imp-page imp-cal' })
+		if (!state.features.builtinCalendar) {
+			page.append(h('p', { class: 'imp-empty' }, tr('Your blocks are in your calendar app.')))
+			return page
+		}
+		if (!state.commitments.length) {
+			page.append(h('div', { class: 'imp-empty' }, h('p', null, tr('Create a commitment first: each one has its own calendar for its blocks.')), h('a', { class: 'imp-button imp-button--primary', href: '#settings' }, tr('Create a commitment'))))
+			return page
+		}
+		const days = calDays()
+		const from = tsOf(days[0])
+		const to = tsOf(addDays(days[days.length - 1], 1))
+		const { blocks } = await api('GET', `blocks?from=${from}&to=${to}`)
+		state.calBlocks = blocks
+		page.append(calHeader(days), state.calView === 'month' ? monthGrid(days, blocks) : timeGrid(days, blocks))
+		return page
+	}
+
+	function calHeader(days) {
+		const d = state.calDate
+		const title = state.calView === 'month' ? calFmt.month.format(d)
+			: state.calView === 'day' ? calFmt.day.format(d)
+				: calFmt.range.formatRange ? calFmt.range.formatRange(days[0], days[6]) : `${calFmt.dayShort.format(days[0])} – ${calFmt.dayShort.format(days[6])} ${days[6].getFullYear()}`
+		const seg = (v, label, key) => h('button', { type: 'button', class: state.calView === v ? 'active' : '', 'aria-pressed': state.calView === v ? 'true' : 'false', title: `${label} (${key})`, onclick: () => calSetView(v) }, label)
+		return h('header', { class: 'imp-cal__head' },
+			h('h1', null, title),
+			h('div', { class: 'imp-cal__nav' },
+				h('button', { type: 'button', class: 'imp-button imp-cal__arrow', 'aria-label': tr('Previous'), title: tr('Previous (←)'), onclick: () => calMove(-1) }, '‹'),
+				h('button', { type: 'button', class: 'imp-button', title: tr('Today (T)'), onclick: () => { state.calDate = startOfDay(new Date()); state.calScroll = null; render() } }, tr('Today')),
+				h('button', { type: 'button', class: 'imp-button imp-cal__arrow', 'aria-label': tr('Next'), title: tr('Next (→)'), onclick: () => calMove(1) }, '›')),
+			h('div', { class: 'imp-cal__views', role: 'group', 'aria-label': tr('View') }, seg('day', tr('Day'), 'D'), seg('week', tr('Week'), 'W'), seg('month', tr('Month'), 'M')),
+			h('button', {
+				type: 'button', class: 'imp-button imp-button--primary', title: tr('New block (N)'),
+				onclick: (e) => {
+					const day = state.calView === 'day' || state.calView === 'month' ? startOfDay(state.calDate) : (days.find((x) => sameDay(x, new Date())) || days[0])
+					const now = new Date()
+					const startMin = sameDay(day, now) ? Math.ceil((now.getHours() * 60 + now.getMinutes()) / 30) * 30 : 9 * 60
+					blockEditor(e.currentTarget, { start: atMinutes(day, startMin), end: atMinutes(day, startMin + 60) })
+				},
+			}, '+ ', tr('New block')))
+	}
+
+	/** Side by side where blocks overlap (each gets a column of its cluster) */
+	function layoutDay(list) {
+		const sorted = [...list].sort((a, b) => a.top - b.top || b.bottom - a.bottom)
+		let cluster = []
+		let clusterEnd = -1
+		const flush = () => {
+			const cols = Math.max(1, ...cluster.map((x) => x.col + 1))
+			for (const x of cluster) x.cols = cols
+			cluster = []
+		}
+		for (const x of sorted) {
+			if (x.top >= clusterEnd) { flush(); clusterEnd = -1 }
+			const used = new Set(cluster.filter((y) => y.bottom > x.top).map((y) => y.col))
+			let c = 0
+			while (used.has(c)) c++
+			x.col = c
+			cluster.push(x)
+			clusterEnd = Math.max(clusterEnd, x.bottom)
+		}
+		flush()
+		return sorted
+	}
+
+	function timeGrid(days, blocks) {
+		const today = new Date()
+		const n = days.length
+		const head = h('div', { class: 'imp-cal__dayheads', style: { '--days': n } },
+			h('div', { class: 'imp-cal__corner' }),
+			days.map((d) => h('button', {
+				type: 'button',
+				class: `imp-cal__dayhead ${sameDay(d, today) ? 'is-today' : ''}`,
+				title: calFmt.day.format(d),
+				onclick: () => { state.calDate = d; calSetView('day') },
+			}, h('span', { class: 'imp-cal__wd' }, calFmt.weekday.format(d)), h('span', { class: 'imp-cal__dn' }, d.getDate()))))
+		const hours = h('div', { class: 'imp-cal__hours', 'aria-hidden': 'true' },
+			Array.from({ length: 23 }, (_, i) => h('span', { style: { top: `${(i + 1) * HOUR_PX}px` } }, calFmt.hour.format(new Date(2000, 0, 1, i + 1)))))
+		const cols = days.map((d) => {
+			const col = h('div', { class: `imp-cal__col ${sameDay(d, today) ? 'is-today' : ''}`, 'data-day': tsOf(d), role: 'group', 'aria-label': calFmt.day.format(d) })
+			const dayStart = tsOf(d)
+			const dayEnd = tsOf(addDays(d, 1))
+			const items = blocks.filter((b) => b.end > dayStart && b.start < dayEnd).map((b) => {
+				const top = b.start <= dayStart ? 0 : minutesOf(b.start)
+				const bottom = b.end >= dayEnd ? 24 * 60 : Math.max(top + 15, minutesOf(b.end) || 24 * 60)
+				return { b, top, bottom, clipStart: b.start < dayStart, clipEnd: b.end > dayEnd }
+			})
+			for (const x of layoutDay(items)) col.append(calEvent(x))
+			if (sameDay(d, today)) {
+				const m = today.getHours() * 60 + today.getMinutes()
+				col.append(h('div', { class: 'imp-cal__now', style: { top: `${(m / 60) * HOUR_PX}px` }, 'aria-hidden': 'true' }))
+			}
+			return col
+		})
+		const body = h('div', { class: 'imp-cal__body', style: { '--days': n, height: `${24 * HOUR_PX}px` } }, hours, h('div', { class: 'imp-cal__cols' }, cols))
+		const scroll = h('div', { class: 'imp-cal__scroll', onscroll: (e) => { state.calScroll = e.target.scrollTop } }, body)
+		// Opens at the current hour (or 7:00), then where you left it
+		requestAnimationFrame(() => {
+			if (!document.contains(scroll)) return
+			const inView = days.some((d) => sameDay(d, today))
+			scroll.scrollTop = state.calScroll ?? Math.max(0, ((inView ? today.getHours() - 1.5 : 7) * HOUR_PX))
+		})
+		calPointer(body)
+		return h('div', { class: 'imp-cal__grid' }, head, scroll)
+	}
+
+	function calEvent({ b, top, bottom, col, cols, clipEnd }) {
+		const c = commitmentById(b.commitmentId)
+		const color = c ? c.color : '#888'
+		const title = b.title || (c ? c.name : '')
+		const short = bottom - top < 40
+		const el = h('div', {
+			class: `imp-cal__ev ${short ? 'is-short' : ''} ${b.end <= nowTs() ? 'is-past' : ''}`,
+			role: 'button',
+			tabindex: '0',
+			'aria-label': `${title}, ${blockTime(b)}${b.repeat ? `, ${repeatLabel(b.repeat)}` : ''}`,
+			style: { top: `${(top / 60) * HOUR_PX}px`, height: `${((bottom - top) / 60) * HOUR_PX - 2}px`, left: `calc(${(col / cols) * 100}% + 1px)`, width: `calc(${100 / cols}% - 3px)`, '--c': color, '--on-c': onColor(color) },
+			onkeydown: (e) => {
+				if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); blockSummary(el, b) }
+				if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteBlock(el, b) }
+			},
+		},
+		h('span', { class: 'imp-cal__evtitle' }, title, b.repeat ? h('span', { class: 'imp-cal__rep', title: repeatLabel(b.repeat), 'aria-hidden': 'true' }, ' ↻') : null),
+		short ? null : h('span', { class: 'imp-cal__evtime' }, `${fmt.time.format(at(b.start))}–${fmt.time.format(at(b.end))}`),
+		clipEnd ? null : h('span', { class: 'imp-cal__resize', 'aria-hidden': 'true' }))
+		el.calBlock = b
+		return el
+	}
+
+	/** Drag on the grid: plan a block; drag a block: move it; drag its lower edge: resize it */
+	function calPointer(body) {
+		let drag = null
+		const snap = (min) => Math.round(min / SNAP_MIN) * SNAP_MIN
+		const colAt = (x) => [...body.querySelectorAll('.imp-cal__col')].find((c) => { const r = c.getBoundingClientRect(); return x >= r.left && x < r.right })
+		const minAt = (col, y) => Math.max(0, Math.min(24 * 60, ((y - col.getBoundingClientRect().top) / HOUR_PX) * 60))
+		const dayOf = (col) => at(Number(col.dataset.day))
+		body.addEventListener('pointerdown', (e) => {
+			if (e.button !== 0) return
+			const ev = e.target.closest('.imp-cal__ev')
+			const col = e.target.closest('.imp-cal__col')
+			if (!col) return
+			if (ev) {
+				const b = ev.calBlock
+				drag = { kind: e.target.classList.contains('imp-cal__resize') ? 'resize' : 'move', el: ev, b, x0: e.clientX, y0: e.clientY, moved: false, col, grab: minAt(col, e.clientY) - minutesOf(b.start), dur: (b.end - b.start) / 60 }
+			} else {
+				const m = snap(minAt(col, e.clientY) - SNAP_MIN / 2)
+				const ghost = h('div', { class: 'imp-cal__ev imp-cal__ghost', style: { top: `${(m / 60) * HOUR_PX}px`, height: `${HOUR_PX - 2}px`, left: '1px', width: 'calc(100% - 3px)' } }, h('span', { class: 'imp-cal__evtime' }, ''))
+				drag = { kind: 'create', col, start: m, end: m + 60, ghost, x0: e.clientX, y0: e.clientY, moved: false }
+			}
+			calBusy = true
+			body.setPointerCapture(e.pointerId)
+			e.preventDefault()
+		})
+		body.addEventListener('pointermove', (e) => {
+			if (!drag) return
+			if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 4) return
+			drag.moved = true
+			if (drag.kind === 'create') {
+				if (!drag.ghost.isConnected) drag.col.append(drag.ghost)
+				const m = snap(minAt(drag.col, e.clientY))
+				const a = Math.min(drag.start, m)
+				const z = Math.max(drag.start + SNAP_MIN, m)
+				drag.from = m < drag.start ? a : drag.start
+				drag.to = m < drag.start ? drag.start + SNAP_MIN : z
+				Object.assign(drag.ghost.style, { top: `${(drag.from / 60) * HOUR_PX}px`, height: `${((drag.to - drag.from) / 60) * HOUR_PX - 2}px` })
+				drag.ghost.firstChild.textContent = `${timeValue(atMinutes(dayOf(drag.col), drag.from))}–${timeValue(atMinutes(dayOf(drag.col), drag.to))}`
+				return
+			}
+			drag.el.classList.add('is-dragging')
+			if (drag.kind === 'resize') {
+				const top = minutesOf(drag.b.start)
+				drag.newEnd = Math.max(top + SNAP_MIN, snap(minAt(drag.col, e.clientY)))
+				drag.el.style.height = `${((drag.newEnd - top) / 60) * HOUR_PX - 2}px`
+				return
+			}
+			const col = colAt(e.clientX) || drag.col
+			const start = Math.max(0, Math.min(24 * 60 - SNAP_MIN, snap(minAt(col, e.clientY) - drag.grab)))
+			if (col !== drag.el.parentNode) col.append(drag.el)
+			Object.assign(drag.el.style, { top: `${(start / 60) * HOUR_PX}px`, left: '1px', width: 'calc(100% - 3px)' })
+			drag.target = { col, start }
+		})
+		const end = async (e) => {
+			if (!drag) return
+			const d = drag
+			drag = null
+			calBusy = false
+			if (d.kind === 'create') {
+				const day = dayOf(d.col)
+				const from = d.moved ? d.from : d.start
+				const to = d.moved ? d.to : d.start + 60
+				if (!d.ghost.isConnected) d.col.append(d.ghost)
+				Object.assign(d.ghost.style, { top: `${(from / 60) * HOUR_PX}px`, height: `${((to - from) / 60) * HOUR_PX - 2}px` })
+				blockEditor(d.ghost, { start: atMinutes(day, from), end: atMinutes(day, to) }, () => d.ghost.remove())
+				return
+			}
+			if (!d.moved) { blockSummary(d.el, d.b); return }
+			if (e && e.type === 'pointercancel') { render(); return }
+			if (d.kind === 'resize') {
+				const day = startOfDay(at(d.b.start))
+				await changeBlock(d.el, d.b, { start: d.b.start, end: atMinutes(day, d.newEnd) })
+			} else if (d.target) {
+				const start = atMinutes(dayOf(d.target.col), d.target.start)
+				await changeBlock(d.el, d.b, { start, end: start + (d.b.end - d.b.start) })
+			}
+		}
+		body.addEventListener('pointerup', end)
+		body.addEventListener('pointercancel', end)
+	}
+
+	function monthGrid(days, blocks) {
+		const today = new Date()
+		const month = state.calDate.getMonth()
+		const grid = h('div', { class: 'imp-cal__month' },
+			days.slice(0, 7).map((d) => h('div', { class: 'imp-cal__mwd', 'aria-hidden': 'true' }, calFmt.weekday.format(d))))
+		for (const d of days) {
+			const s = tsOf(d)
+			const e = tsOf(addDays(d, 1))
+			const list = blocks.filter((b) => b.end > s && b.start < e)
+			const MAX = 4
+			const cell = h('div', {
+				class: `imp-cal__mday ${d.getMonth() !== month ? 'is-other' : ''} ${sameDay(d, today) ? 'is-today' : ''}`,
+				ondblclick: (ev) => { if (ev.target === cell || ev.target.classList.contains('imp-cal__mlist')) blockEditor(cell, { start: atMinutes(d, 9 * 60), end: atMinutes(d, 10 * 60) }) },
+			},
+			h('button', { type: 'button', class: 'imp-cal__mnum', title: calFmt.day.format(d), onclick: () => { state.calDate = d; calSetView('day') } }, d.getDate()),
+			h('ul', { class: 'imp-cal__mlist' },
+				list.slice(0, list.length > MAX ? MAX - 1 : MAX).map((b) => {
+					const c = commitmentById(b.commitmentId)
+					const chip = h('button', { type: 'button', class: 'imp-cal__chip', style: { '--c': c ? c.color : '#888' }, onclick: () => blockSummary(chip, b), title: `${b.title || (c && c.name) || ''}, ${blockTime(b)}` },
+						h('span', { class: 'imp-dot', style: { background: c ? c.color : '#888' } }),
+						h('span', { class: 'imp-cal__chiptime' }, fmt.time.format(at(b.start))),
+						h('span', { class: 'imp-cal__chiptitle' }, b.title || (c ? c.name : '')))
+					return h('li', null, chip)
+				}),
+				list.length > MAX ? h('li', null, h('button', { type: 'button', class: 'imp-cal__more', onclick: () => { state.calDate = d; calSetView('day') } }, tr('{n} more', { n: list.length - MAX + 1 }))) : null))
+			grid.append(cell)
+		}
+		return grid
+	}
+
+	// --- panels: what to do in a block, plan or change one ---
+
+	let calPanelEl = null
+	function closeCalPanel() {
+		if (!calPanelEl) return
+		const back = calPanelEl.returnFocus
+		const done = calPanelEl.onClose
+		calPanelEl.remove()
+		calPanelEl = null
+		calBusy = false
+		if (done) done()
+		if (back && document.contains(back)) back.focus()
+	}
+	function calPanel(anchor, build, { label, onClose } = {}) {
+		closeCalPanel()
+		closeMenu()
+		const el = h('div', { class: 'imp-calpanel', role: 'dialog', 'aria-label': label || '' })
+		el.returnFocus = anchor
+		el.onClose = onClose
+		el.addEventListener('mousedown', (e) => e.stopPropagation())
+		el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeCalPanel() } })
+		document.body.append(el)
+		calPanelEl = el
+		calBusy = true
+		const place = () => {
+			if (!document.contains(anchor)) return
+			const r = anchor.getBoundingClientRect()
+			const w = el.offsetWidth
+			const hgt = el.offsetHeight
+			let left = r.right + 10
+			if (left + w > window.innerWidth - 8) left = r.left - w - 10
+			if (left < 8) left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8)
+			const top = Math.min(Math.max(8, r.top), window.innerHeight - hgt - 8)
+			el.style.left = `${left + window.scrollX}px`
+			el.style.top = `${top + window.scrollY}px`
+		}
+		const fill = async () => {
+			const focused = el.contains(document.activeElement) && document.activeElement.id ? document.activeElement.id : null
+			el.replaceChildren(...[await build(fill)].flat(Infinity).filter((x) => x !== null && x !== undefined && x !== false))
+			place()
+			if (focused) document.getElementById(focused)?.focus()
+		}
+		fill().then(() => setTimeout(() => (el.querySelector('[autofocus]') || el.querySelector('input, button'))?.focus(), 0))
+		return el
+	}
+	document.addEventListener('mousedown', () => closeCalPanel())
+	document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && calPanelEl) { e.preventDefault(); closeCalPanel() } })
+
+	/** "This block only" or "all future blocks" for a repeating block: 'this' | 'future' | null */
+	function askScope(anchor, del) {
+		return new Promise((resolve) => {
+			let answered = false
+			const pick = (v) => { answered = true; closeCalPanel(); resolve(v) }
+			calPanel(anchor, () => [
+				h('p', { class: 'imp-calpanel__q' }, del ? tr('Delete this block, or all future ones too?') : tr('Change this block, or all future ones too?')),
+				h('p', { class: 'imp-muted' }, tr('It is a repeating block.')),
+				h('div', { class: 'imp-calpanel__actions imp-calpanel__actions--stack' },
+					h('button', { type: 'button', class: 'imp-button imp-button--primary', autofocus: true, onclick: () => pick('this') }, del ? tr('Delete this block only') : tr('This block only')),
+					h('button', { type: 'button', class: `imp-button ${del ? 'imp-button--danger' : ''}`, onclick: () => pick('future') }, del ? tr('Delete all future blocks') : tr('All future blocks')),
+					h('button', { type: 'button', class: 'imp-button', onclick: () => pick(null) }, tr('Cancel'))),
+			], { label: tr('Repeating block'), onClose: () => { if (!answered) resolve(null) } })
+		})
+	}
+
+	async function changeBlock(anchor, b, changes) {
+		let scope = 'all'
+		if (b.repeat) {
+			scope = await askScope(anchor, false)
+			if (!scope) { render(); return false }
+		}
+		try {
+			await api('PUT', `blocks/${b.series}/${b.occurrence}`, { ...changes, scope })
+		} catch (e) { render(); return false }
+		await render()
+		return true
+	}
+	async function deleteBlock(anchor, b) {
+		let scope = 'all'
+		if (b.repeat) {
+			scope = await askScope(anchor, true)
+			if (!scope) return
+		}
+		closeCalPanel()
+		await api('DELETE', `blocks/${b.series}/${b.occurrence}?scope=${scope}`)
+		toast(tr('Block deleted'))
+		await render()
+	}
+
+	/** Click on a block: when, and what to do in it (the commitment's tasks planned for it) */
+	function blockSummary(anchor, b) {
+		const c = commitmentById(b.commitmentId)
+		if (!c) return
+		calPanel(anchor, async (refill) => {
+			const now = nowTs()
+			const [tasks, upcoming] = await Promise.all([
+				api('GET', `tasks?commitmentId=${c.id}&status=open`),
+				api('GET', `blocks?from=${now}&to=${Math.max(now, b.end) + 86400}`).then((r) => r.blocks).catch(() => []),
+			])
+			const own = upcoming.filter((x) => x.commitmentId === c.id && x.end > now).sort((x, y) => x.start - y.start)
+			const plan = planIntoBlocks(tasks, own)
+			const slotIndex = own.findIndex((x) => x.uid === b.uid)
+			const mine = slotIndex >= 0 ? plan.slots[slotIndex].tasks : []
+			const before = slotIndex >= 0 ? plan.slots.slice(0, slotIndex).reduce((n, s) => n + s.tasks.length, 0) : 0
+			const past = b.end <= now
+			const isNow = b.start <= now && now < b.end
+			const toggle = async (t, s, done) => {
+				await api('PUT', `subtasks/${s.id}`, { done })
+				refill()
+			}
+			const taskRow = (t) => {
+				const single = t.subtasks.length === 1 && t.subtasks[0].title === t.title
+				const box = (s, title) => {
+					const id = `imp-calsub-${s.id}`
+					return h(title ? 'div' : 'li', { class: 'imp-check' },
+						h('input', { type: 'checkbox', id, checked: s.done, onchange: (e) => toggle(t, s, e.target.checked) }),
+						h('label', { for: id }, s.title),
+						s.estimate ? h('span', { class: 'imp-est' }, fmtMin(s.estimate)) : null)
+				}
+				if (single) return h('li', { class: 'imp-calpanel__task' }, box(t.subtasks[0], true))
+				return h('li', { class: 'imp-calpanel__task' },
+					h('div', { class: 'imp-calpanel__tname' }, t.title, h('span', { class: 'imp-muted' }, ` ${t.subtasks.filter((x) => x.done).length}/${t.subtasks.length}`)),
+					h('ul', { class: 'imp-subtasks' }, t.subtasks.map((s) => box(s, false))))
+			}
+			const length = b.end - b.start
+			const work = mine.reduce((sum, t) => sum + remainingMin(t) * 60, 0)
+			const list = past ? [] : slotIndex >= 0 ? mine : tasks
+			return [
+				h('div', { class: 'imp-calpanel__head', style: { '--c': c.color } },
+					h('h2', null, b.title || c.name),
+					h('p', null, h('span', { class: 'imp-dot', style: { background: c.color } }), ' ', c.name),
+					h('p', { class: 'imp-muted' }, `${calFmt.day.format(at(b.start))}`, h('br'), `${fmt.time.format(at(b.start))}–${fmt.time.format(at(b.end))} · ${duration(length, { short: true })}`,
+						b.repeat ? [h('br'), `↻ ${repeatLabel(b.repeat)}`, b.until ? `, ${tr('until {date}', { date: calFmt.dayShort.format(at(b.until)) })}` : ''] : null)),
+				h('div', { class: 'imp-calpanel__actions' },
+					!past ? h('button', { type: 'button', class: 'imp-button imp-button--primary', onclick: async () => { closeCalPanel(); await startTracking(c.id) } }, isNow ? tr('Start now') : tr('Start')) : null,
+					h('button', { type: 'button', class: 'imp-button', onclick: () => blockEditor(anchor, b) }, tr('Edit')),
+					h('button', { type: 'button', class: 'imp-button imp-button--danger', onclick: () => deleteBlock(anchor, b) }, tr('Delete'))),
+				h('h3', { class: 'imp-calpanel__sub' }, past ? tr('This block is over') : slotIndex >= 0 ? tr('To do in this block') : tr('Open tasks')),
+				past ? h('p', { class: 'imp-muted' }, tr('Unfinished tasks stay on top for the next block.'))
+					: list.length
+						? [h('p', { class: 'imp-muted' }, slotIndex >= 0
+							? [tr('{used} of {time}', { used: duration(work, { short: true }), time: duration(plan.slots[slotIndex].seconds, { short: true }) }), before ? ` · ${trn('%n task in earlier blocks', '%n tasks in earlier blocks', before)}` : '']
+							: tr('From the top of the queue.')),
+						h('ul', { class: 'imp-calpanel__tasks' }, list.slice(0, 12).map(taskRow)),
+						list.length > 12 ? h('p', { class: 'imp-muted' }, tr('{n} more', { n: list.length - 12 })) : null]
+						: h('p', { class: 'imp-muted' }, tasks.length ? tr('Earlier blocks take all open tasks.') : tr('No open tasks for {name}.', { name: c.name })),
+				h('a', { class: 'imp-calpanel__link', href: `#c/${c.id}`, onclick: () => closeCalPanel() }, tr('Open {name}', { name: c.name }), ' →'),
+			]
+		}, { label: b.title || c.name })
+	}
+
+	/** Plan a block, or change one (`b` from the calendar) */
+	function blockEditor(anchor, b, onClose) {
+		const isNew = !b.series
+		const lastUsed = Number(localStorageGet('calCommitment', '')) || null
+		const cid = b.commitmentId || (commitmentById(lastUsed) ? lastUsed : state.commitments[0].id)
+		calPanel(anchor, () => {
+			const title = h('input', { type: 'text', value: b.title || '', placeholder: (commitmentById(cid) || {}).name || '', maxlength: '255', 'aria-label': tr('Title'), autofocus: true })
+			const who = h('select', { 'aria-label': tr('Commitment'), onchange: () => { title.placeholder = (commitmentById(Number(who.value)) || {}).name || '' } },
+				state.commitments.map((c) => h('option', { value: c.id, selected: c.id === cid }, c.name)))
+			const day = h('input', { type: 'date', required: true, value: dateValue(at(b.start)), 'aria-label': tr('Day') })
+			const from = h('input', { type: 'time', required: true, step: 300, value: timeValue(b.start), 'aria-label': tr('From') })
+			const to = h('input', { type: 'time', required: true, step: 300, value: timeValue(b.end), 'aria-label': tr('Until') })
+			const repeat = h('select', { 'aria-label': tr('Repeat'), onchange: () => { endsRow.hidden = !repeat.value } }, REPEATS().map(([k, label]) => h('option', { value: k, selected: k === (b.repeat || '') }, label)))
+			const ends = h('select', { 'aria-label': tr('End repeat'), onchange: () => { untilIn.hidden = ends.value !== 'on' } },
+				h('option', { value: 'never', selected: !b.until }, tr('Never')), h('option', { value: 'on', selected: !!b.until }, tr('On date')))
+			const untilIn = h('input', { type: 'date', value: b.until ? dateValue(at(b.until)) : dateValue(addDays(at(b.start), 28)), 'aria-label': tr('End repeat on'), hidden: !b.until })
+			const endsRow = h('label', { class: 'imp-calpanel__field', hidden: !b.repeat }, h('span', null, tr('End repeat')), h('span', { class: 'imp-calpanel__pair' }, ends, untilIn))
+			const save = async (e) => {
+				e.preventDefault()
+				const s = fromInputs(day.value, from.value)
+				let en = fromInputs(day.value, to.value)
+				if (!Number.isFinite(s) || !Number.isFinite(en)) return
+				if (en <= s) en += 86400 // ends after midnight
+				const until = repeat.value && ends.value === 'on' && untilIn.value ? fromInputs(untilIn.value, '23:59') : null
+				const body = { commitmentId: Number(who.value), title: title.value.trim(), start: s, end: en, repeat: repeat.value, until }
+				localStorageSet('calCommitment', who.value)
+				if (isNew) {
+					try { await api('POST', 'blocks', { ...body, title: body.title || null }) } catch (err) { return }
+					closeCalPanel()
+					toast(tr('Block planned'))
+					await render()
+					return
+				}
+				closeCalPanel()
+				await changeBlock(anchor, b, body)
+			}
+			return h('form', { class: 'imp-calpanel__form', onsubmit: save },
+				h('h2', null, isNew ? tr('New block') : tr('Edit block')),
+				h('label', { class: 'imp-calpanel__field' }, h('span', null, tr('Title')), title),
+				h('label', { class: 'imp-calpanel__field' }, h('span', null, tr('Commitment')), who),
+				h('label', { class: 'imp-calpanel__field' }, h('span', null, tr('Day')), day),
+				h('div', { class: 'imp-calpanel__field' }, h('span', null, tr('Time')), h('span', { class: 'imp-calpanel__pair' }, from, h('span', { 'aria-hidden': 'true' }, '–'), to)),
+				h('label', { class: 'imp-calpanel__field' }, h('span', null, tr('Repeat')), repeat),
+				endsRow,
+				h('div', { class: 'imp-calpanel__actions' },
+					!isNew ? h('button', { type: 'button', class: 'imp-button imp-button--danger', onclick: () => deleteBlock(anchor, b) }, tr('Delete')) : null,
+					h('span', { class: 'imp-calpanel__spacer' }),
+					h('button', { type: 'button', class: 'imp-button', onclick: () => closeCalPanel() }, tr('Cancel')),
+					h('button', { type: 'submit', class: 'imp-button imp-button--primary' }, isNew ? tr('Add') : tr('Save'))))
+		}, { label: isNew ? tr('New block') : tr('Edit block'), onClose })
+	}
+
+	// Keys on the calendar: ← → move, T today, D W M views, N new block
+	document.addEventListener('keydown', (e) => {
+		if (state.route !== 'calendar' || e.metaKey || e.ctrlKey || e.altKey || calPanelEl || menuEl) return
+		if (document.activeElement?.matches('input, textarea, select, [contenteditable]')) return
+		const k = e.key.toLowerCase()
+		if (e.key === 'ArrowLeft') calMove(-1)
+		else if (e.key === 'ArrowRight') calMove(1)
+		else if (k === 't') { state.calDate = startOfDay(new Date()); state.calScroll = null; render() }
+		else if (k === 'd') calSetView('day')
+		else if (k === 'w') calSetView('week')
+		else if (k === 'm') calSetView('month')
+		else if (k === 'n') document.querySelector('.imp-cal__head .imp-button--primary')?.click()
+		else return
+		e.preventDefault()
+	})
 
 	// ---------------------------------------------------------------------------
 	// Boot
 	// ---------------------------------------------------------------------------
 
-	const PAGES = { now: pageNow, tasks: pageTasks, notes: pageNotes, done: pageDone, time: pageTime, settings: pageSettings, commitment: pageCommitment }
+	const PAGES = { now: pageNow, tasks: pageTasks, notes: pageNotes, done: pageDone, time: pageTime, settings: pageSettings, commitment: pageCommitment, calendar: pageCalendar }
 
 	function routeFromHash() {
 		const r = (location.hash || '#now').slice(1)
+		// #calendar/20261110: the calendar on that day
+		const cd = /^calendar(?:\/(\d{4})(\d{2})(\d{2}))?$/.exec(r)
+		if (cd) {
+			state.route = 'calendar'
+			if (cd[1]) { state.calDate = new Date(Number(cd[1]), Number(cd[2]) - 1, Number(cd[3])); state.calScroll = null }
+			return
+		}
 		const m = /^c\/(\d+)$/.exec(r)
 		if (m) {
 			state.route = 'commitment'
@@ -2903,7 +3469,7 @@
 		setInterval(tick, 1000)
 		// Keep blocks and the queue current
 		setInterval(() => {
-			if (state.route === 'now' && document.visibilityState === 'visible' && !document.activeElement?.matches('input, textarea, select')) render()
+			if ((state.route === 'now' || (state.route === 'calendar' && !calBusy)) && document.visibilityState === 'visible' && !document.activeElement?.matches('input, textarea, select')) render()
 		}, 60000)
 		document.addEventListener('visibilitychange', () => {
 			if (document.visibilityState === 'visible' && state.route === 'now') render()

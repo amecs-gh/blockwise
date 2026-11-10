@@ -153,6 +153,19 @@
 		'Blockwise forgets the drive and your passphrase on this Mac. Your encrypted data on the drive stays.': 'Blockwise dimentica il drive e la passphrase su questo Mac. I dati cifrati sul drive restano.',
 		'"Switch" keeps your data on this Mac and takes it to the sync you choose next (Nextcloud, Dropbox, Google Drive or this Mac only).': '"Cambia" mantiene i dati su questo Mac e li porta alla sincronizzazione che sceglierai (Nextcloud, Dropbox, Google Drive o solo questo Mac).',
 		'Some changes on this Mac are not synced yet: "Switch" keeps them, "remove" loses them.': 'Alcune modifiche su questo Mac non sono ancora sincronizzate: "Cambia" le mantiene, "rimuovi" le perde.',
+		'Apple Calendar is not part of this build.': 'Calendario di Apple non è incluso in questa build.',
+		'Build the app with Xcode\'s command line tools installed (npm run build).': 'Crea l\'app con gli strumenti da riga di comando di Xcode installati (npm run build).',
+		'Use Apple Calendar for your blocks?': 'Usare Calendario di Apple per i tuoi blocchi?',
+		'Blockwise reads the events in the calendars of your commitments: they are your planned blocks. It adds the blocks you plan, and a calendar for each commitment. Calendar data stays on your Mac.\n\nYour {n} built-in blocks are copied to Apple Calendar. macOS only offers full access to calendars, so it asks you next.': 'Blockwise legge gli eventi nei calendari dei tuoi impegni: sono i tuoi blocchi pianificati. Aggiunge i blocchi che pianifichi e un calendario per ogni impegno. I dati del calendario restano sul tuo Mac.\n\nI tuoi {n} blocchi del calendario integrato vengono copiati in Calendario di Apple. macOS offre solo l\'accesso completo ai calendari, quindi te lo chiede ora.',
+		'You can allow it in System Settings → Privacy & Security → Calendars, then switch again. The built-in calendar stays.': 'Puoi consentirlo in Impostazioni di Sistema → Privacy e sicurezza → Calendari, poi cambia di nuovo. Il calendario integrato resta.',
+		'{n} blocks copied to Apple Calendar; {m} could not be copied (they stay in the built-in calendar).': '{n} blocchi copiati in Calendario di Apple; {m} non è stato possibile copiarli (restano nel calendario integrato).',
+		'{n} blocks copied to Apple Calendar.': '{n} blocchi copiati in Calendario di Apple.',
+		'Use the built-in calendar?': 'Usare il calendario integrato?',
+		'Blocks will live in Blockwise and sync with your data. The events of your commitments\' calendars, from 3 months ago to a year ahead, are copied in. Apple Calendar stays as it is.': 'I blocchi staranno in Blockwise e si sincronizzeranno con i tuoi dati. Gli eventi dei calendari dei tuoi impegni, da 3 mesi fa a un anno avanti, vengono copiati. Calendario di Apple resta com\'è.',
+		'Apple Calendar could not be read, so nothing was copied in.': 'Impossibile leggere Calendario di Apple, quindi non è stato copiato nulla.',
+		'{n} events copied into the built-in calendar.': '{n} eventi copiati nel calendario integrato.',
+		'Built-in calendar': 'Calendario integrato',
+		'Apple Calendar': 'Calendario di Apple',
 	}
 
 	function make(locale) {
