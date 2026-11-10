@@ -1,0 +1,30 @@
+# Checks the Nextcloud app and the shared interface code on every push.
+name: Checks
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: PHP syntax
+        run: find nextcloud/lib nextcloud/appinfo nextcloud/templates -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: JavaScript syntax
+        run: for f in nextcloud/js/*.js mac/src/*.js mac/renderer/*.js android/app/src/main/assets/*.js; do node --check "$f"; done
+      - name: Translations are valid
+        run: node -e "JSON.parse(require('fs').readFileSync('nextcloud/l10n/it.json','utf8'))"
+      - name: Markdown parser
+        run: node nextcloud/tests/markdown.test.js
+      - name: Encrypted file sync
+        run: if [ -f nextcloud/tests/filesync.test.js ]; then node nextcloud/tests/filesync.test.js; fi

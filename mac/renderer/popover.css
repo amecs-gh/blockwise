@@ -1,0 +1,304 @@
+/* The menu bar panel. The window has macOS vibrancy behind a slightly tinted background. */
+body.popover {
+	background: var(--bg-pop);
+	user-select: none;
+}
+#root {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 12px;
+}
+body.is-busy {
+	cursor: progress;
+}
+.p-muted {
+	color: var(--muted);
+}
+.p-dot {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--c);
+}
+
+/* timer: the one colored element */
+.p-timer {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px 12px;
+	padding: 12px 14px;
+	border-radius: var(--radius);
+	background: var(--c);
+	color: var(--on-c);
+}
+.p-timer.is-idle {
+	border: 1px dashed var(--line);
+	background: transparent;
+	color: var(--text);
+}
+.p-timer__text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.p-timer__label {
+	font-weight: 600;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.p-timer__clock {
+	font-size: 28px;
+	font-weight: 300;
+	line-height: 1.15;
+}
+.p-timer__sub {
+	opacity: 0.85;
+	font-size: 12px;
+}
+.p-stop {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 30px;
+	padding: 0 14px;
+	border: 1.5px solid currentColor;
+	border-radius: 15px;
+	background: transparent;
+	font-weight: 600;
+}
+.p-stop:hover {
+	background: color-mix(in srgb, currentColor 15%, transparent);
+}
+.p-pomo {
+	display: flex;
+	flex-basis: 100%;
+	justify-content: space-between;
+	gap: 8px;
+	padding-top: 8px;
+	border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+	font-size: 12px;
+}
+.p-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 12px;
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	background: var(--bg);
+	font-weight: 500;
+}
+.p-btn:hover {
+	background: var(--bg-soft);
+}
+
+/* current block */
+.p-block__head {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.p-block__head .p-muted {
+	margin-left: auto;
+	font-size: 12px;
+}
+.p-block__time {
+	margin: 2px 0 6px 14px;
+	font-size: 12px;
+}
+.p-empty {
+	margin: 4px 0 0 14px;
+}
+.p-task {
+	padding: 6px 0 6px 14px;
+	border-top: 1px solid var(--line);
+}
+.p-task__head {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	margin-bottom: 2px;
+	font-weight: 600;
+}
+.p-check {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 3px 0;
+}
+.p-check input {
+	flex: 0 0 auto;
+	width: 15px;
+	height: 15px;
+	margin: 1px 0 0;
+	accent-color: var(--c);
+}
+.p-check__label {
+	flex: 1;
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.p-check.is-title .p-check__label {
+	font-weight: 600;
+}
+.p-check input:checked + .p-check__label {
+	color: var(--muted);
+	text-decoration: line-through;
+}
+.p-est {
+	color: var(--muted);
+	font-size: 12px;
+	white-space: nowrap;
+}
+.p-add {
+	display: flex;
+	gap: 6px;
+	margin: 6px 0 0 14px;
+}
+.p-add__input {
+	flex: 1;
+	min-width: 0;
+	height: 28px;
+	padding: 0 8px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--bg);
+	user-select: text;
+}
+.p-add__select {
+	max-width: 110px;
+	height: 28px;
+	border: 1px solid var(--line);
+	border-radius: 6px;
+	background: var(--bg);
+}
+
+/* other commitments */
+.p-list h2 {
+	margin: 0 0 4px;
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 600;
+}
+.p-list ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.p-row {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 6px 0;
+}
+.p-row + .p-row {
+	border-top: 1px solid var(--line);
+}
+.p-row__bar {
+	align-self: stretch;
+	flex: 0 0 3px;
+	border-radius: 2px;
+	background: var(--c);
+}
+.p-row__text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	font-size: 12px;
+}
+.p-row__text strong {
+	font-size: 13px;
+}
+.p-goal {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 2px;
+}
+.p-goal__bar {
+	flex: 0 0 60px;
+	height: 4px;
+	overflow: hidden;
+	border-radius: 2px;
+	background: color-mix(in srgb, var(--c) 22%, transparent);
+}
+.p-goal__bar span {
+	display: block;
+	height: 100%;
+	background: var(--c);
+}
+.p-play {
+	display: grid;
+	flex: 0 0 auto;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	border: none;
+	border-radius: 50%;
+	background: var(--c);
+	color: var(--on-c);
+}
+.p-play.is-running {
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 30%, transparent);
+}
+
+.p-error {
+	margin: 0;
+	color: var(--error);
+}
+.p-flash {
+	margin: 0;
+	color: var(--success);
+	font-weight: 600;
+}
+.p-loading {
+	padding: 24px 0;
+	color: var(--muted);
+	text-align: center;
+}
+.p-footer {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding-top: 8px;
+	border-top: 1px solid var(--line);
+}
+.p-link,
+.p-icon {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 28px;
+	padding: 0 8px;
+	border: none;
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text);
+}
+.p-icon {
+	margin-left: auto;
+	color: var(--muted);
+}
+.p-link:hover,
+.p-icon:hover {
+	background: var(--line);
+}
+
+.p-more {
+	margin: 2px 0 0 14px;
+	padding: 2px 0;
+	border: none;
+	background: transparent;
+	color: var(--accent);
+	font-weight: 500;
+}
+.p-more:hover {
+	text-decoration: underline;
+}

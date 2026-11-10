@@ -1,0 +1,50 @@
+{
+  "name": "tracker-mac",
+  "productName": "Blockwise",
+  "version": "0.1.0",
+  "description": "Blockwise from your Nextcloud as a Mac app, with a menu bar timer.",
+  "private": true,
+  "main": "src/main.js",
+  "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "start": "node scripts/sync-web.js && electron .",
+    "test": "node test/alerts.test.js",
+    "build": "node scripts/sync-web.js && electron-builder --mac dir",
+    "dmg": "node scripts/sync-web.js && electron-builder --mac dmg"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.15.4"
+  },
+  "build": {
+    "appId": "app.tracker.nextcloud",
+    "productName": "Blockwise",
+    "files": [
+      "src/**",
+      "renderer/**",
+      "assets/**",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "identity": "-",
+      "target": [
+        "dir"
+      ],
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "Blockwise opens Apple Calendar on the day you choose."
+      }
+    },
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableCookieEncryption": true,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "resetAdHocDarwinSignature": true
+    },
+    "asar": true
+  }
+}
