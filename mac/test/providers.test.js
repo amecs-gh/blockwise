@@ -24,7 +24,7 @@ const call = async (channel, ...args) => {
 const keysFile = path.join(__dirname, '..', 'config', 'providers.json')
 const savedKeys = fs.existsSync(keysFile) ? fs.readFileSync(keysFile) : null
 const restore = () => { if (savedKeys) fs.writeFileSync(keysFile, savedKeys); else fs.rmSync(keysFile, { force: true }) }
-fs.writeFileSync(keysFile, JSON.stringify({ dropboxAppKey: 'dbx-key', googleClientId: '', googleClientSecret: '' }))
+fs.writeFileSync(keysFile, JSON.stringify({ dropboxAppKey: 'dbxtestkey12', googleClientId: '', googleClientSecret: '' }))
 
 ;(async () => {
 	const { provider } = require('./drives.test.js')
@@ -43,7 +43,9 @@ fs.writeFileSync(keysFile, JSON.stringify({ dropboxAppKey: 'dbx-key', googleClie
 	T.ready()
 	await sleep(300)
 	let s = await call('state')
-	assert.deepEqual(s.providers, ['nextcloud', 'dropbox', 'local'], 'Google hidden: no client id in this build')
+	assert.deepEqual(s.providers, ['nextcloud', 'local', 'gdrive', 'dropbox'])
+	assert.deepEqual(s.providersReady, { dropbox: true, gdrive: false }, 'Google not set up in this build')
+	assert.match((await T.handlers.connectDrive(EV, 'gdrive')).error, /Set up/)
 
 	console.log('This Mac only')
 	await call('useThisMac')
@@ -103,7 +105,7 @@ fs.writeFileSync(keysFile, JSON.stringify({ dropboxAppKey: 'dbx-key', googleClie
 	// Another Mac with the same Dropbox: opens the folder with the passphrase
 	{
 		const FS = require('../renderer/web/filesync.js')
-		const store = drives.dropboxStore({ appKey: 'dbx-key', refreshToken: [...p.refresh.keys()][0], fetch, endpoints: drives.DROPBOX })
+		const store = drives.dropboxStore({ appKey: 'dbxtestkey12', refreshToken: [...p.refresh.keys()][0], fetch, endpoints: drives.DROPBOX })
 		await assert.rejects(FS.unlock(store, 'wrong horse battery staple'), /Wrong passphrase/)
 		const { createEngine } = require('../renderer/web/engine.js')
 		const key = await FS.unlock(store, 'correct horse battery staple')

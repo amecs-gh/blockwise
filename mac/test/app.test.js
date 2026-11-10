@@ -70,7 +70,7 @@ async function openWindow(browser, file, winName, opts = {}) {
 	await sleep(300)
 	await setup.page.screenshot({ path: `${shots}/mac-setup.png` })
 	const choices = await setup.page.locator('.u-choice strong').allInnerTexts()
-	assert.deepEqual(choices, ['Nextcloud', 'This Mac only'], 'no drive keys in this build: Nextcloud and this Mac')
+	assert.deepEqual(choices, ['Nextcloud', 'This Mac only', 'Google Drive', 'Dropbox'], 'all four choices, always')
 	await setup.page.click('.u-choice >> nth=0')
 	assert.ok(await setup.page.isVisible('#server'))
 

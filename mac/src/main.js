@@ -96,19 +96,58 @@ const writeOwner = (o) => fs.writeFileSync(ownerPath(), o, { mode: 0o600 })
 
 /** App keys for Dropbox and Google (not secret: PKCE protects the login), from the build */
 let providerKeys = {}
-function loadProviderKeys() {
+// App keys for Dropbox and Google: built in (config/providers.json) or pasted
+// once on the first-run screen (kept in your Blockwise folder). Not secrets: the
+// logins use PKCE; they only say which registered app is asking.
+const KEY_FORMAT = {
+	dropboxAppKey: /^[a-z0-9]{8,32}$/,
+	googleClientId: /^[0-9]{6,30}-[a-z0-9]{10,64}\.apps\.googleusercontent\.com$/,
+	googleClientSecret: /^[A-Za-z0-9_-]{10,80}$/,
+}
+const userKeysFile = () => path.join(app.getPath('userData'), 'providers.json')
+function readKeys(file) {
 	try {
-		const k = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'config', 'providers.json'), 'utf8'))
-		providerKeys = {
-			dropboxAppKey: typeof k.dropboxAppKey === 'string' ? k.dropboxAppKey : '',
-			googleClientId: typeof k.googleClientId === 'string' ? k.googleClientId : '',
-			googleClientSecret: typeof k.googleClientSecret === 'string' ? k.googleClientSecret : '',
-		}
+		const k = JSON.parse(fs.readFileSync(file, 'utf8'))
+		const out = {}
+		for (const [name, re] of Object.entries(KEY_FORMAT)) if (typeof k[name] === 'string' && re.test(k[name])) out[name] = k[name]
+		return out
 	} catch (e) {
-		providerKeys = {}
+		return {}
 	}
 }
-const availableProviders = () => ['nextcloud', providerKeys.dropboxAppKey && 'dropbox', providerKeys.googleClientId && 'gdrive', 'local'].filter(Boolean)
+function loadProviderKeys() {
+	const built = readKeys(path.join(__dirname, '..', 'config', 'providers.json'))
+	const own = readKeys(userKeysFile())
+	const google = built.googleClientId ? built : own
+	providerKeys = {
+		dropboxAppKey: built.dropboxAppKey || own.dropboxAppKey || '',
+		googleClientId: google.googleClientId || '',
+		googleClientSecret: google.googleClientSecret || '',
+	}
+}
+/** Keys pasted on the first-run screen; checked against the providers' formats */
+function saveProviderKeys(provider, keys) {
+	const k = keys && typeof keys === 'object' ? keys : {}
+	const own = readKeys(userKeysFile())
+	if (provider === 'dropbox') {
+		const v = String(k.dropboxAppKey || '').trim()
+		if (!KEY_FORMAT.dropboxAppKey.test(v)) throw new Error('That is not a Dropbox app key (letters and digits, from the app\'s Settings page).')
+		own.dropboxAppKey = v
+	} else if (provider === 'gdrive') {
+		const id = String(k.googleClientId || '').trim()
+		const secret = String(k.googleClientSecret || '').trim()
+		if (!KEY_FORMAT.googleClientId.test(id)) throw new Error('That is not a Google client ID (it ends in .apps.googleusercontent.com).')
+		if (!KEY_FORMAT.googleClientSecret.test(secret)) throw new Error('That is not a Google client secret.')
+		own.googleClientId = id
+		own.googleClientSecret = secret
+	} else {
+		throw new Error('Invalid request.')
+	}
+	fs.mkdirSync(app.getPath('userData'), { recursive: true })
+	fs.writeFileSync(userKeysFile(), JSON.stringify(own, null, 1), { mode: 0o600 })
+	loadProviderKeys()
+}
+const providersReady = () => ({ dropbox: !!providerKeys.dropboxAppKey, gdrive: !!(providerKeys.googleClientId && providerKeys.googleClientSecret) })
 
 function saveConfig(c) {
 	fs.mkdirSync(path.dirname(configPath()), { recursive: true })
@@ -325,7 +364,8 @@ function publicState() {
 		error: dashError || syncError,
 		now: Math.floor(Date.now() / 1000),
 		provider,
-		providers: availableProviders(),
+		providers: ['nextcloud', 'local', 'gdrive', 'dropbox'],
+		providersReady: providersReady(),
 		server: config && config.server,
 		host: provider === 'nextcloud' ? new URL(config.server).host : provider ? t(PROVIDER_NAMES[provider]) : null,
 		loginName: config && config.loginName,
@@ -616,6 +656,7 @@ async function finishSetup(owner) {
 /** Connect a drive: you allow Blockwise in your browser. @return {{exists: boolean}} a Blockwise folder is there already */
 async function connectDrive(provider) {
 	if (provider !== 'dropbox' && provider !== 'gdrive') throw new Error('Invalid request.')
+	if (!providersReady()[provider]) throw new Error('Set up {drive} first.')
 	if (pendingDrive && pendingDrive.cancel) pendingDrive.cancel()
 	const opts = { fetch: apiFetch, openBrowser: (u) => openLink(u) }
 	const flow = provider === 'dropbox'
@@ -716,6 +757,7 @@ handle('cancelLogin', () => {
 handle('connectDrive', setupOnly((provider) => connectDrive(String(provider || ''))), 'setup.html')
 handle('unlockDrive', setupOnly((passphrase) => unlockDrive(typeof passphrase === 'string' ? passphrase : '')), 'setup.html')
 handle('useThisMac', setupOnly(() => useThisMac()), 'setup.html')
+handle('saveProviderKeys', setupOnly((provider, keys) => saveProviderKeys(String(provider || ''), keys)), 'setup.html')
 handle('syncNow', () => syncNow())
 handle('menu', () => tray && tray.popUpContextMenu(contextMenu()))
 handle('refresh', () => refresh())

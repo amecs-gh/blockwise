@@ -8,6 +8,7 @@
 	const MIN_NEW = 10
 	let t = (s) => s
 	let drive = null // 'dropbox' | 'gdrive' while connecting one
+	let ready = null // drives with app keys in this build
 	let creating = false // a new sync folder (else: open the one your other devices made)
 
 	const STEPS = ['step-choose', 'step-nextcloud', 'step-passphrase', 'waiting']
@@ -68,6 +69,10 @@
 		}
 		if (p === 'local') {
 			try { await app.useThisMac() } catch (e) { choose(); error(e.message) }
+			return
+		}
+		if (!(ready && ready[p])) {
+			error(t('{drive} needs a one-time setup first: see "Set up Dropbox and Google Drive" in mac/README.md.', { drive: t(CHOICES[p][0]) }))
 			return
 		}
 		drive = p
@@ -143,6 +148,7 @@
 		$('cancel').textContent = t('Cancel')
 		for (const b of document.querySelectorAll('.js-back')) b.textContent = t('Back')
 		try { $('server').value = localStorage.getItem('server') || '' } catch (e) { /* none */ }
+		ready = s.providersReady || {}
 		buildChoices(s.providers || ['nextcloud', 'local'])
 		choose()
 	})

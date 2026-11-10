@@ -130,6 +130,8 @@
 		'The sync folder is damaged (blockwise.json).': 'La cartella di sincronizzazione è danneggiata (blockwise.json).',
 		'The sync folder was made by another version of Blockwise.': 'La cartella di sincronizzazione è stata creata da un\'altra versione di Blockwise.',
 		'Wrong passphrase for this sync folder.': 'Passphrase errata per questa cartella di sincronizzazione.',
+		'{drive} needs a one-time setup first: see "Set up Dropbox and Google Drive" in mac/README.md.': '{drive} richiede prima una configurazione una tantum: vedi "Set up Dropbox and Google Drive" in mac/README.md.',
+		'Set up {drive} first.': 'Configura prima {drive}.',
 		'Connect a drive first.': 'Collega prima un drive.',
 	}
 

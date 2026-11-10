@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('trackerApp', {
 	connectDrive: (provider) => call('connectDrive', provider),
 	unlockDrive: (passphrase) => call('unlockDrive', passphrase),
 	useThisMac: () => call('useThisMac'),
+	saveProviderKeys: (provider, keys) => call('saveProviderKeys', provider, keys),
 	syncNow: () => call('syncNow'),
 	menu: () => call('menu'),
 	setHeight: (h) => ipcRenderer.send('popover:height', h),

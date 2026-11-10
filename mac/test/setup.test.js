@@ -17,7 +17,7 @@ const ok = (n) => console.log('  ✔', n)
 		await page.addInitScript((loc) => {
 			let exists = false
 			window.trackerApp = {
-				getState: async () => ({ locale: loc, providers: ['nextcloud', 'dropbox', 'gdrive', 'local'] }),
+				getState: async () => ({ locale: loc, providers: ['nextcloud', 'local', 'gdrive', 'dropbox'], providersReady: { dropbox: true, gdrive: true } }),
 				connectDrive: async (p) => { window.__log('connect ' + p); await new Promise((r) => setTimeout(r, 300)); return { exists } },
 				unlockDrive: async (x) => { window.__log('unlock ' + x); if (x === 'wrong passphrase!') throw new Error('Wrong passphrase for this sync folder.') },
 				useThisMac: async () => window.__log('local'),
@@ -31,7 +31,7 @@ const ok = (n) => console.log('  ✔', n)
 		await page.screenshot({ path: `${shots}/mac-setup-choose-${locale}.png` })
 		const it = locale.startsWith('it')
 		// A new folder: passphrase twice, at least 10 characters
-		await page.click('.u-choice >> nth=1')
+		await page.click('.u-choice >> nth=3')
 		await page.waitForSelector('#step-passphrase:not([hidden])')
 		assert.equal(await page.isVisible('#pass2'), true)
 		await page.fill('#pass', 'short'); await page.fill('#pass2', 'short'); await page.click('#pass-submit')
