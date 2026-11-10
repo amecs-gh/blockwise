@@ -139,7 +139,7 @@ async function openWindow(browser, file, winName, opts = {}) {
 	const win = await openWindow(browser, 'app.html', mainWin.name, { width: 1240, height: 820, hash: '#now' })
 	await win.page.waitForSelector('.imp-col, .imp-empty', { timeout: 15000 })
 	const firstId = (await call('api', 'GET', 'state')).commitments[0].id
-	for (const pg of ['now', 'tasks', 'done', 'time', 'settings', 'c/' + firstId]) {
+	for (const pg of ['now', 'tasks', 'done', 'time', 'settings', 'calendar', 'c/' + firstId]) {
 		await win.page.evaluate((h) => { location.hash = h }, '#' + pg)
 		await win.page.waitForTimeout(1200)
 		const ok = await win.page.evaluate(() => !!document.querySelector('.imp-page') && !document.querySelector('.imp-empty')?.textContent.includes('could not be loaded'))
@@ -150,7 +150,7 @@ async function openWindow(browser, file, winName, opts = {}) {
 	assert.ok(await win.page.evaluate((id) => !!document.querySelector('.imp-stats') && !!document.querySelector('.imp-nav a.active[href="#c/' + id + '"]'), firstId), 'commitment page with stats, sidebar link active')
 	const bars = await win.page.evaluate(() => [...document.querySelectorAll('*')].filter((e) => e.scrollHeight > e.clientHeight + 2 && e.offsetWidth - e.clientWidth > 0).length)
 	assert.equal(bars, 0, 'no visible scrollbars')
-	assert.ok(await win.page.evaluate(() => !!document.querySelector('.imp-nav a[href="#"]')), 'Calendar entry in the sidebar')
+	assert.ok(await win.page.evaluate(() => !!document.querySelector('.imp-nav a[href="#calendar"]')), 'Calendar in the sidebar: the calendar page, also with Nextcloud')
 	// Smaller windows: the layout adapts, nothing spills out sideways
 	for (const [w, hgt] of [[820, 640], [560, 520], [420, 400]]) {
 		await win.page.setViewportSize({ width: w, height: hgt })
@@ -164,11 +164,11 @@ async function openWindow(browser, file, winName, opts = {}) {
 	}
 	await win.page.setViewportSize({ width: 1240, height: 820 })
 
-	step('"Calendar" opens Apple Calendar')
-	await win.page.click('.imp-nav a[href="#"]')
-	await sleep(500)
-	assert.ok(T.log.some((l) => l.includes('openPath /System/Applications/Calendar.app')))
-	console.log('  ->', T.log.filter((l) => l.startsWith('openPath')).pop())
+	step('"Calendar" opens the calendar page (Nextcloud\'s calendars), in the app')
+	await win.page.click('.imp-nav a[href="#calendar"]')
+	await win.page.waitForSelector('.imp-cal__col')
+	assert.ok(!T.log.some((l) => l.includes('openPath /System/Applications/Calendar.app')), 'not Apple Calendar')
+	await win.page.screenshot({ path: `${shots}/mac-nc-calendar.png` })
 
 	step('menu bar panel')
 	await call('api', 'POST', 'sessions/stop', {}).catch(() => {})
@@ -236,7 +236,7 @@ async function openWindow(browser, file, winName, opts = {}) {
 	assert.equal(T.Tray.last.title, '')
 	await panel.page.click('.p-footer .p-link:nth-child(2)')
 	await sleep(300)
-	assert.ok(T.log.filter((l) => l.startsWith('openPath')).length >= 2, 'Open Calendar from the panel')
+	assert.ok(T.log.some((l) => /#calendar\/\d{8}/.test(l)), 'Open Calendar from the panel: the calendar page, on today')
 	console.log('  stopped; "Open Calendar" opens Apple Calendar')
 
 	step('Italian')
@@ -261,6 +261,30 @@ async function openWindow(browser, file, winName, opts = {}) {
 	const serverDash = await (await fetch(`${SERVER}/index.php/apps/tracker/api/dashboard`, { headers: { Authorization: auth, 'OCS-APIRequest': 'true' } })).json()
 	assert.ok(JSON.stringify(serverDash).includes('Reply to reviewer'), 'the subtask added on this Mac is on the server')
 	console.log('  synced: the new subtask is on the server')
+
+	step('calendar page with Nextcloud: blocks are events in the commitment\'s Nextcloud calendar')
+	{
+		const st = await call('api', 'GET', 'state')
+		assert.equal(st.features.calendarView, true, 'the calendar page works with Nextcloud too')
+		assert.equal(st.features.builtinCalendar, false)
+		const c = st.commitments.find((x) => x.calendarId !== null)
+		const day = new Date(); day.setDate(day.getDate() + 3); day.setHours(0, 0, 0, 0)
+		const t0 = Math.floor(day / 1000)
+		const made = await call('api', 'POST', 'blocks', { commitmentId: c.id, title: 'Mac-planned block', start: t0 + 9 * 3600, end: t0 + 10 * 3600, repeat: 'daily', until: t0 + 86400 + 9 * 3600, tz: 'Europe/Zurich' })
+		assert.ok(made.uid)
+		const H = { headers: { Authorization: auth, 'OCS-APIRequest': 'true' } }
+		const onServer = async () => (await (await fetch(`${SERVER}/index.php/apps/tracker/api/blocks?from=${t0}&to=${t0 + 3 * 86400}`, H)).json()).blocks.filter((x) => x.title === 'Mac-planned block')
+		assert.equal((await onServer()).length, 2, 'two days on the server')
+		const mine = (await call('api', 'GET', `blocks?from=${t0}&to=${t0 + 3 * 86400}`)).blocks.filter((x) => x.title === 'Mac-planned block')
+		assert.equal(mine.length, 2)
+		assert.ok(mine[1].series && mine[1].repeat === 'daily')
+		await call('api', 'PUT', `blocks/${mine[1].series}/${mine[1].occurrence}`, { start: mine[1].start + 7200, end: mine[1].end + 7200, scope: 'this', tz: 'Europe/Zurich' })
+		const moved = await onServer()
+		assert.deepEqual(moved.map((x) => x.start - t0), [9 * 3600, 86400 + 11 * 3600], 'moved on the server')
+		await call('api', 'DELETE', `blocks/${mine[0].series}/${mine[0].occurrence}?scope=all`)
+		assert.equal((await onServer()).length, 0, 'deleted on the server')
+		console.log('  planned, moved and deleted through the Mac app, in the Nextcloud calendar')
+	}
 
 	step('log out: password revoked on the server, back to setup')
 	const pw = cfg.appPassword

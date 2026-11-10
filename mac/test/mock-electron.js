@@ -18,7 +18,7 @@ class WebContents extends EventEmitter {
 	loadURL(u) { this.url = u; this.history.push(u); record('loadURL', this.owner.name, u); setImmediate(() => { this.emit('did-navigate'); this.emit('did-finish-load') }) }
 	isLoading() { return false }
 	isDevToolsOpened() { return false }
-	executeJavaScript() { return Promise.resolve() }
+	executeJavaScript(js) { record('executeJavaScript', String(js).slice(0, 80)); return Promise.resolve() }
 	setWindowOpenHandler(fn) { this.openHandler = fn }
 	reload() { record('reload') }
 }

@@ -3039,3 +3039,12 @@
 .imp-calsource__form > .imp-button {
 	justify-self: start;
 }
+/* Nextcloud styles every button: the calendar's day headers stay plain */
+#tracker-app .imp-cal__dayhead {
+	margin: 0 !important;
+	border-radius: 0 !important;
+	background: none !important;
+}
+#tracker-app .imp-cal__dayhead:hover {
+	background: var(--imp-bg-soft) !important;
+}

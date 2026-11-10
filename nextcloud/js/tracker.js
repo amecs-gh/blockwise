@@ -371,6 +371,7 @@
 	]
 	const icon = (d, size = 20, filled = false) => svg('svg', { viewBox: '0 0 24 24', width: size, height: size, fill: filled ? 'currentColor' : 'none', stroke: 'currentColor', 'stroke-width': 1.8, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' }, svg('path', { d }))
 	const ICON_PLAY = 'M8 5.5v13l11-6.5z'
+	const ICON_CAL = 'M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z'
 	const ICON_STOP = 'M7 7h10v10H7z'
 
 	function navigation() {
@@ -378,14 +379,14 @@
 			h('ul', { class: 'imp-nav__main' }, ROUTES.map((r) => h('li', null,
 				h('a', { href: `#${r.id}`, class: state.route === r.id ? 'active' : '', 'aria-current': state.route === r.id ? 'page' : null, title: r.label() },
 					icon(r.icon), h('span', null, r.label()))))),
-			// What the Mac and phone apps add: Calendar (their calendar app) and, on the phone, the account sheet
-			desktop ? h('ul', { class: 'imp-nav__main imp-nav__apps' },
-				state.features.builtinCalendar
+			// Calendar: Blockwise's calendar page where blocks can be changed; else (phone) the calendar app. The phone adds its account sheet.
+			state.features.calendarView || desktop ? h('ul', { class: 'imp-nav__main imp-nav__apps' },
+				state.features.calendarView
 					? h('li', null, h('a', { href: '#calendar', title: tr('Calendar'), class: state.route === 'calendar' ? 'active' : '', 'aria-current': state.route === 'calendar' ? 'page' : null },
-						icon('M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z'), h('span', null, tr('Calendar'))))
+						icon(ICON_CAL), h('span', null, tr('Calendar'))))
 					: h('li', { class: 'imp-nav__app' }, h('a', { href: '#', title: tr('Calendar'), onclick: (e) => { e.preventDefault(); desktop.openCalendar() } },
-						icon('M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z'), h('span', null, tr('Calendar')), h('span', { class: 'imp-nav__ext', 'aria-hidden': 'true' }, '↗'))),
-				desktop.account ? h('li', { class: 'imp-nav__app' }, h('a', { href: '#', title: tr('Account'), onclick: (e) => { e.preventDefault(); desktop.account() } },
+						icon(ICON_CAL), h('span', null, tr('Calendar')), h('span', { class: 'imp-nav__ext', 'aria-hidden': 'true' }, '↗'))),
+				desktop && desktop.account ? h('li', { class: 'imp-nav__app' }, h('a', { href: '#', title: tr('Account'), onclick: (e) => { e.preventDefault(); desktop.account() } },
 					icon('M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0'), h('span', null, tr('Account')))) : null) : null,
 			h('div', { class: 'imp-nav__heading' }, tr('Commitments')),
 			h('ul', { class: 'imp-nav__commitments' },
@@ -2943,6 +2944,8 @@
 		hour: new Intl.DateTimeFormat(locale, { hour: 'numeric' }),
 	}
 	let calBusy = false // a drag or a panel open: no automatic re-render
+	/** Repeats follow this device's local time (across DST) */
+	const userTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined } catch (e) { return undefined } }
 
 	function calDays() {
 		const d = startOfDay(state.calDate)
@@ -2968,7 +2971,7 @@
 	async function pageCalendar() {
 		await loadState()
 		const page = h('div', { class: 'imp-page imp-cal' })
-		if (!state.features.builtinCalendar) {
+		if (!state.features.calendarView) {
 			page.append(h('p', { class: 'imp-empty' }, tr('Your blocks are in your calendar app.')))
 			return page
 		}
@@ -3277,7 +3280,7 @@
 			if (!scope) { render(); return false }
 		}
 		try {
-			await api('PUT', `blocks/${b.series}/${b.occurrence}`, { ...changes, scope })
+			await api('PUT', `blocks/${b.series}/${b.occurrence}`, { ...changes, scope, tz: userTz() })
 		} catch (e) { render(); return false }
 		await render()
 		return true
@@ -3368,7 +3371,8 @@
 			const day = h('input', { type: 'date', required: true, value: dateValue(at(b.start)), 'aria-label': tr('Day') })
 			const from = h('input', { type: 'time', required: true, step: 300, value: timeValue(b.start), 'aria-label': tr('From') })
 			const to = h('input', { type: 'time', required: true, step: 300, value: timeValue(b.end), 'aria-label': tr('Until') })
-			const repeat = h('select', { 'aria-label': tr('Repeat'), onchange: () => { endsRow.hidden = !repeat.value } }, REPEATS().map(([k, label]) => h('option', { value: k, selected: k === (b.repeat || '') }, label)))
+			const choices = b.repeat === 'custom' ? [...REPEATS(), ['custom', tr('Custom (as set in your calendar)')]] : REPEATS()
+			const repeat = h('select', { 'aria-label': tr('Repeat'), onchange: () => { endsRow.hidden = !repeat.value } }, choices.map(([k, label]) => h('option', { value: k, selected: k === (b.repeat || '') }, label)))
 			const ends = h('select', { 'aria-label': tr('End repeat'), onchange: () => { untilIn.hidden = ends.value !== 'on' } },
 				h('option', { value: 'never', selected: !b.until }, tr('Never')), h('option', { value: 'on', selected: !!b.until }, tr('On date')))
 			const untilIn = h('input', { type: 'date', value: b.until ? dateValue(at(b.until)) : dateValue(addDays(at(b.start), 28)), 'aria-label': tr('End repeat on'), hidden: !b.until })
@@ -3383,12 +3387,15 @@
 				const body = { commitmentId: Number(who.value), title: title.value.trim(), start: s, end: en, repeat: repeat.value, until }
 				localStorageSet('calCommitment', who.value)
 				if (isNew) {
-					try { await api('POST', 'blocks', { ...body, title: body.title || null }) } catch (err) { return }
+					try { await api('POST', 'blocks', { ...body, title: body.title || null, tz: userTz() }) } catch (err) { return }
 					closeCalPanel()
 					toast(tr('Block planned'))
 					await render()
 					return
 				}
+				// Only what changed: a rule made in another calendar app stays as it is
+				if (body.repeat === (b.repeat || '') && until === (b.until || null)) { delete body.repeat; delete body.until }
+				if (body.commitmentId === b.commitmentId) delete body.commitmentId
 				closeCalPanel()
 				await changeBlock(anchor, b, body)
 			}

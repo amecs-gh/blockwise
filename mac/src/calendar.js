@@ -87,7 +87,7 @@ function appleCalendar({ helperPath, run }) {
 			return { uid: `${r.uid}#${start}`, eventUid: r.uid }
 		},
 		/** An event's old copy (one occurrence with `start`, else the series), by its iCalendar UID */
-		async deleteEvent({ url, uid, start }) {
+		async removeCopy({ url, uid, start }) {
 			const calendar = appleId(url)
 			if (!calendar || typeof uid !== 'string' || !uid || uid.length > 1000) return
 			await call('deleteEvent', Number.isFinite(start) ? { calendar, uid, start } : { calendar, uid })
@@ -109,7 +109,7 @@ function nextcloudCalendar({ api, now = Date.now }) {
 	let calsAt = 0
 	let cache = [] // last events from the server
 	let recent = null // the last answer, reused for a few seconds (every refresh asks)
-	return {
+	const self = {
 		kind: 'nextcloud',
 		async calendars() {
 			if (cals && now() - calsAt < 5 * 60 * 1000) return cals.map(({ url, name, color }) => ({ url, name, color }))
@@ -123,14 +123,18 @@ function nextcloudCalendar({ api, now = Date.now }) {
 		},
 		async events(from, to, urls) {
 			try {
-				if (!cals) await this.calendars()
+				if (!cals) await self.calendars()
 				const key = `${Math.floor(from)}-${Math.ceil(to)}`
 				if (!recent || recent.key !== key || now() - recent.at > 20000) recent = { key, at: now(), blocks: (await api('GET', `blocks?from=${Math.floor(from)}&to=${Math.ceil(to)}`)).blocks }
 				const { blocks } = recent
 				const out = []
 				for (const b of blocks || []) {
 					const cal = cals.find((c) => c.id === b.calendarId)
-					if (cal && urls.includes(cal.url)) out.push({ uid: b.uid, title: b.title, start: b.start, end: b.end, url: cal.url })
+					if (!cal || !urls.includes(cal.url)) continue
+					const ev = { uid: b.uid, title: b.title, start: b.start, end: b.end, url: cal.url }
+					// Which event and occurrence (to change it on the calendar page)
+					if (Number.isInteger(b.series) && b.series > 0) Object.assign(ev, { series: b.series, occurrence: b.occurrence, repeat: b.repeat || '', until: b.until ?? null })
+					out.push(ev)
 				}
 				cache = [...cache.filter((e) => e.end <= from || e.start >= to), ...out].slice(-5000)
 				return out
@@ -141,7 +145,35 @@ function nextcloudCalendar({ api, now = Date.now }) {
 				return out
 			}
 		},
+		/** Plan a block: an event in the commitment's Nextcloud calendar */
+		async createEvent({ url, title, start, end, repeat = '', until = null, tz }) {
+			const cal = await calOf(url)
+			const r = await api('POST', 'blocks', { calendarId: cal.id, title, start, end, repeat, until, tz })
+			recent = null
+			return { uid: r.uid }
+		},
+		/** Move or change one (this / future / all); `url`: to another commitment's calendar */
+		async updateEvent(series, occurrence, ch) {
+			const body = { ...ch }
+			delete body.url
+			if (ch.url) body.calendarId = (await calOf(ch.url)).id
+			const r = await api('PUT', `blocks/${series}/${occurrence}`, body)
+			recent = null
+			return r
+		},
+		async deleteEvent(series, occurrence, scope) {
+			const r = await api('DELETE', `blocks/${series}/${occurrence}?scope=${scope}`)
+			recent = null
+			return r
+		},
 	}
+	async function calOf(url) {
+		if (!cals) await self.calendars()
+		const cal = cals.find((c) => c.url === url)
+		if (!cal) throw new Error('This commitment has no calendar yet. Try again in a moment.')
+		return cal
+	}
+	return self
 }
 
 /** No calendars at all (the engine still works; no blocks). */

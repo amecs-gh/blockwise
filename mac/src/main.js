@@ -352,7 +352,7 @@ async function setCalendarMode(mode) {
 				if (theirs.length) {
 					// Only where it was found: in this commitment's calendar
 					const where = theirs[0].url
-					try { await apple.deleteEvent(one ? { url: where, uid: baseUid(key), start: Number(one[1]) } : { url: where, uid: baseUid(key) }) } catch (e) { failed++; continue }
+					try { await apple.removeCopy(one ? { url: where, uid: baseUid(key), start: Number(one[1]) } : { url: where, uid: baseUid(key) }) } catch (e) { failed++; continue }
 				}
 			}
 			try {
@@ -787,8 +787,8 @@ function notifyChanged(except) {
 
 /** Opens Apple Calendar, on the day of `ts` (unix seconds) if given. */
 function openCalendar(ts) {
-	// The built-in calendar: in Blockwise's window, on that day
-	if (engine && config.provider !== 'nextcloud' && calendarMode() === 'builtin') {
+	// Blockwise's calendar page (built in, or Nextcloud's calendars): in Blockwise's window, on that day
+	if (engine && (config.provider === 'nextcloud' || calendarMode() === 'builtin')) {
 		const d = Number.isFinite(ts) ? new Date(ts * 1000) : new Date()
 		return showMain(`calendar/${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`)
 	}

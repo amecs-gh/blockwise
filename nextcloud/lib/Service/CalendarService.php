@@ -174,7 +174,7 @@ class CalendarService {
 
 		$blocks = [];
 		foreach ($objects as $object) {
-			array_push($blocks, ...$this->blocksFromData((string)$object['calendardata'], $calendarId, $start, $end));
+			array_push($blocks, ...$this->blocksFromData((string)$object['calendardata'], $calendarId, $start, $end, (int)($object['id'] ?? 0)));
 		}
 		usort($blocks, fn ($a, $b) => $a['start'] <=> $b['start']);
 		return $blocks;
@@ -183,10 +183,18 @@ class CalendarService {
 	/**
 	 * @return list<array{uid: string, title: string, start: int, end: int, calendarId: int}>
 	 */
-	public function blocksFromData(string $data, int $calendarId, DateTimeImmutable $from, DateTimeImmutable $to): array {
+	public function blocksFromData(string $data, int $calendarId, DateTimeImmutable $from, DateTimeImmutable $to, int $objectId = 0): array {
 		try {
 			/** @var VCalendar $vcal */
 			$vcal = Reader::read($data);
+			// The series: its repeat (to change it from the calendar page)
+			$rule = ['repeat' => '', 'until' => null];
+			foreach ($vcal->select('VEVENT') as $ev) {
+				if (!isset($ev->{'RECURRENCE-ID'})) {
+					$rule = BlockService::describeRule($ev);
+					break;
+				}
+			}
 			$vcal = $vcal->expand($from, $to);
 		} catch (Throwable $e) {
 			$this->logger->debug('Skipping unreadable event', ['exception' => $e]);
@@ -220,6 +228,11 @@ class CalendarService {
 				'start' => $s,
 				'end' => $e,
 				'calendarId' => $calendarId,
+				// Which event and which of its occurrences (to move, change or delete it)
+				'series' => $objectId,
+				'occurrence' => isset($event->{'RECURRENCE-ID'}) ? $event->{'RECURRENCE-ID'}->getDateTime()->getTimestamp() : $s,
+				'repeat' => $rule['repeat'],
+				'until' => $rule['until'],
 			];
 		}
 		return $out;

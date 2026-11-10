@@ -1,7 +1,7 @@
 {
   "name": "blockwise-mac",
   "productName": "Blockwise",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Blockwise for the Mac: time blocks, tasks and a menu bar timer, synced with Nextcloud, Dropbox or Google Drive.",
   "private": true,
   "main": "src/main.js",

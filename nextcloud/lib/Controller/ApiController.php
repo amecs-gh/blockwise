@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\Tracker\Controller;
 
 use OCA\Tracker\AppInfo\Application;
+use OCA\Tracker\Service\BlockService;
 use OCA\Tracker\Service\CalendarService;
 use OCA\Tracker\Service\CommitmentService;
 use OCA\Tracker\Service\NoteService;
@@ -35,6 +36,7 @@ class ApiController extends Controller {
 		private SyncService $sync,
 		private NoteService $notes,
 		private ITimeFactory $time,
+		private BlockService $blockService,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -85,6 +87,8 @@ class ApiController extends Controller {
 				'running' => $this->sessions->running($this->uid()),
 				'longBreakUntil' => $this->settings->getLongBreakUntil($this->uid()),
 				'now' => $this->time->getTime(),
+				// The calendar page: plan, move and change blocks (events in the commitments' calendars)
+				'features' => ['calendarView' => true, 'createBlocks' => true, 'calendars' => true],
 			];
 		});
 	}
@@ -261,6 +265,92 @@ class ApiController extends Controller {
 			$blocks = $this->commitments->blocks($this->uid(), $from, $to);
 			return ['blocks' => $blocks, 'overlaps' => CommitmentService::findOverlaps($blocks)];
 		});
+	}
+
+	/**
+	 * Plan a block: an event in the commitment's calendar. `calendarId` instead
+	 * of `commitmentId` (the apps, which have their own ids for commitments).
+	 */
+	#[NoAdminRequired]
+	public function createBlock(?int $commitmentId = null, ?int $calendarId = null, mixed $start = null, mixed $end = null, mixed $title = null, mixed $repeat = '', mixed $until = null, mixed $tz = null): JSONResponse {
+		return $this->handle(function () use ($commitmentId, $calendarId, $start, $end, $title, $repeat, $until, $tz) {
+			$cal = $this->blockService->commitmentCalendar($this->uid(), $commitmentId, $calendarId);
+			$c = $this->commitmentForCalendar($cal);
+			$name = $this->blockTitle($title) ?? $c->getName();
+			[$repeat, $until] = $this->repeatOf($repeat, $until);
+			if ($repeat === 'custom') {
+				$repeat = '';
+			}
+			$r = $this->blockService->create($this->uid(), $cal, $name, $this->int($start), $this->int($end), $repeat, $until, is_string($tz) ? $tz : null);
+			return $r + ['title' => $name, 'start' => $this->int($start), 'end' => $this->int($end), 'calendarId' => $cal, 'commitmentId' => $c->getId(), 'repeat' => $repeat, 'until' => $until];
+		});
+	}
+
+	/** Move or change a block: this one only, this and all future ones, or all (`scope`) */
+	#[NoAdminRequired]
+	public function updateBlock(int $id, int $occurrence, mixed $start = null, mixed $end = null, mixed $title = null, ?int $commitmentId = null, ?int $calendarId = null, mixed $repeat = null, mixed $until = 'keep', mixed $scope = 'all', mixed $tz = null): JSONResponse {
+		return $this->handle(function () use ($id, $occurrence, $start, $end, $title, $commitmentId, $calendarId, $repeat, $until, $scope, $tz) {
+			$ch = [];
+			if ($start !== null) {
+				$ch['start'] = $this->int($start);
+			}
+			if ($end !== null) {
+				$ch['end'] = $this->int($end);
+			}
+			if ($title !== null) {
+				$ch['title'] = $this->blockTitle($title) ?? '';
+			}
+			if ($repeat !== null) {
+				[$ch['repeat']] = $this->repeatOf($repeat, null);
+			}
+			if ($until !== 'keep') {
+				$ch['until'] = $until === null || $until === '' ? null : $this->int($until);
+			}
+			$to = $commitmentId !== null || $calendarId !== null ? $this->blockService->commitmentCalendar($this->uid(), $commitmentId, $calendarId) : null;
+			if (isset($ch['title']) && $ch['title'] === '' && $to !== null) {
+				$ch['title'] = $this->commitmentForCalendar($to)->getName();
+			}
+			$scope = in_array($scope, ['this', 'future', 'all'], true) ? $scope : 'all';
+			return $this->blockService->update($this->uid(), $id, $occurrence, $ch, $scope, $to, is_string($tz) ? $tz : null);
+		});
+	}
+
+	#[NoAdminRequired]
+	public function deleteBlock(int $id, int $occurrence, mixed $scope = 'all'): JSONResponse {
+		return $this->handle(function () use ($id, $occurrence, $scope) {
+			$this->blockService->delete($this->uid(), $id, $occurrence, in_array($scope, ['this', 'future', 'all'], true) ? $scope : 'all');
+			return ['ok' => true];
+		});
+	}
+
+	private function int(mixed $v): int {
+		if (!is_numeric($v) || !is_finite((float)$v)) {
+			throw new ServiceException('Invalid time');
+		}
+		return (int)$v;
+	}
+
+	private function blockTitle(mixed $t): ?string {
+		if (!is_string($t) || trim($t) === '') {
+			return null;
+		}
+		return mb_substr(trim($t), 0, 255);
+	}
+
+	/** @return array{0: string, 1: ?int} */
+	private function repeatOf(mixed $repeat, mixed $until): array {
+		$repeat = is_string($repeat) && in_array($repeat, [...BlockService::REPEATS, 'custom'], true) ? $repeat : '';
+		$until = $repeat !== '' && is_numeric($until) ? (int)$until : null;
+		return [$repeat, $until];
+	}
+
+	private function commitmentForCalendar(int $calendarId): \OCA\Tracker\Db\Commitment {
+		foreach ($this->commitments->listSynced($this->uid()) as $c) {
+			if ($c->getCalendarId() === $calendarId) {
+				return $c;
+			}
+		}
+		throw new ServiceException('Not found');
 	}
 
 	#[NoAdminRequired]

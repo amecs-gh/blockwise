@@ -526,7 +526,7 @@
 					running: running(),
 					longBreakUntil: longBreakUntil(),
 					now: now(),
-					features: { createBlocks: typeof o.calendar.createEvent === 'function', calendars: o.calendar.kind !== 'none', builtinCalendar: builtin },
+					features: { createBlocks: typeof o.calendar.createEvent === 'function', calendars: o.calendar.kind !== 'none', builtinCalendar: builtin, calendarView: builtin || typeof o.calendar.updateEvent === 'function' },
 					sync: { pending: pendingCount(), lastSync: db.lastSync, server: !!o.remote, refused: db.refused || null },
 				}
 			}],
@@ -831,12 +831,24 @@
 				if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end - start > 24 * 3600) throw new ApiError('Invalid time')
 				if (!calUrlOf(cu, c)) throw new ApiError('This commitment gets its calendar at the next sync. Try again then.')
 				const title = text(typeof body.title === 'string' && body.title.trim() ? body.title : c.f.name, 255)
-				const extra = builtin ? repeatOf(body, start) : {}
+				// Repeats: in the built-in calendar, or a calendar that can change events (Nextcloud)
+				const extra = builtin || typeof o.calendar.updateEvent === 'function' ? { ...repeatOf(body, start), tz: typeof body.tz === 'string' ? body.tz : undefined } : {}
 				const ev = await o.calendar.createEvent({ url: calUrlOf(cu, c), title, start, end, ...extra })
 				return { uid: ev.uid, title, start, end, calendarId: calLid(calUrlOf(cu, c)), commitmentId: lid(cu) }
 			}],
 			// Built-in calendar: change a block (this occurrence, this and the following ones, or all)
 			['PUT', /^blocks\/(\d+)\/(\d+)$/, async (m, q, body) => {
+				if (!builtin && typeof o.calendar.updateEvent === 'function') {
+					// Nextcloud: the event changes in the commitment's calendar on the server
+					const ch = {}
+					for (const k of ['start', 'end', 'title', 'repeat', 'until', 'scope', 'tz']) if (body[k] !== undefined) ch[k] = body[k]
+					if (body.commitmentId !== undefined) {
+						const [cu, c] = byLid('commitment', body.commitmentId)
+						if (!calUrlOf(cu, c)) throw new ApiError('This commitment gets its calendar at the next sync. Try again then.')
+						ch.url = calUrlOf(cu, c)
+					}
+					return o.calendar.updateEvent(Number(m[1]), Number(m[2]), ch)
+				}
 				if (!builtin) throw new ApiError('Not found', 404)
 				const [bu, b] = byLid('block', m[1])
 				if (!complete('block', b)) throw new ApiError('Not found', 404)
@@ -880,6 +892,7 @@
 				return { ok: true, series: lid(bu), occurrence: start }
 			}],
 			['DELETE', /^blocks\/(\d+)\/(\d+)$/, async (m, q) => {
+				if (!builtin && typeof o.calendar.updateEvent === 'function' && typeof o.calendar.deleteEvent === 'function') return o.calendar.deleteEvent(Number(m[1]), Number(m[2]), ['this', 'future'].includes(q.scope) ? q.scope : 'all')
 				if (!builtin) throw new ApiError('Not found', 404)
 				const [bu, b] = byLid('block', m[1])
 				const occ = Number(m[2])

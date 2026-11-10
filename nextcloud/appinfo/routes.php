@@ -33,6 +33,9 @@ return [
 		['name' => 'api#reorderNotes', 'url' => '/api/notes-order', 'verb' => 'POST'],
 
 		['name' => 'api#blocks', 'url' => '/api/blocks', 'verb' => 'GET'],
+		['name' => 'api#createBlock', 'url' => '/api/blocks', 'verb' => 'POST'],
+		['name' => 'api#updateBlock', 'url' => '/api/blocks/{id}/{occurrence}', 'verb' => 'PUT'],
+		['name' => 'api#deleteBlock', 'url' => '/api/blocks/{id}/{occurrence}', 'verb' => 'DELETE'],
 		['name' => 'api#done', 'url' => '/api/done', 'verb' => 'GET'],
 
 		['name' => 'api#sessions', 'url' => '/api/sessions', 'verb' => 'GET'],

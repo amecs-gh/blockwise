@@ -20,12 +20,15 @@ it to the sync you choose next; **remove** leaves it only where it is synced now
 
 | Choice | Sync | Calendar blocks come from |
 | --- | --- | --- |
-| **Nextcloud** | With the Blockwise app on your Nextcloud (0.5.1 or newer) and the Android app | Nextcloud's calendars |
+| **Nextcloud** | With the Blockwise app on your Nextcloud (0.6.0 or newer) and the Android app | Nextcloud's calendars |
 | **Dropbox** | Through `Apps/Blockwise` in your Dropbox, end-to-end encrypted | Apple Calendar |
 | **Google Drive** | Through Blockwise's hidden app folder in your Drive, end-to-end encrypted | Apple Calendar |
 | **This Mac only** | None; connect a sync later and your data comes along | Apple Calendar |
 
-**Calendar:** without Nextcloud, your blocks are in Blockwise's **built-in
+**Calendar:** the sidebar's **Calendar** shows your blocks: with Nextcloud,
+they are events in your commitments' Nextcloud calendars (changes show in
+Nextcloud Calendar and on your phone; needs a connection). Without Nextcloud,
+they are in Blockwise's **built-in
 calendar** (sidebar → Calendar): day, week and month, drag on the grid to plan a
 block, drag a block to move it, drag its lower edge to change its length,
 repeats (every day, weekday, week, 2 weeks, month, with an end date) and "this
