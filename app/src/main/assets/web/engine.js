@@ -78,15 +78,17 @@
 		return /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#0082c9'
 	}
 
-	/** A note's text: trimmed, at most 2000 characters (like the server) */
+	/** A note's text (markdown): trimmed, at most 20000 characters (like the server) */
 	const noteText = (v) => {
 		const s = typeof v === 'string' ? v.replace(/\r\n/g, '\n').trim() : ''
 		if (!s) throw new ApiError('Text is required')
-		return [...s].slice(0, 2000).join('')
+		return [...s].slice(0, 20000).join('')
 	}
-	/** A note in lists: its first line, at most 120 characters */
-	const noteTitle = (t) => {
-		const line = String(t || '').split('\n')[0].trim()
+	/** A note in lists (Done): first line, markdown removed. Same as js/markdown.js plainTitle() and the server. */
+	const noteTitle = (text) => {
+		let line = String(text || '').replace(/\r\n?/g, '\n').trim().split('\n')[0].trim()
+		line = line.replace(/^(#{1,6}\s+|>\s*|```\S*|~~~\S*)/, '').replace(/^([-*+]|\d{1,9}[.)])\s+/, '').replace(/^\[[ xX]\]\s*/, '')
+		line = line.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/(\*\*|__|~~|`)/g, '').replace(/(^|\W)[*_](\S(?:.*?\S)?)[*_](?=\W|$)/g, '$1$2').trim()
 		const chars = [...line]
 		return chars.length > 120 ? chars.slice(0, 119).join('').trimEnd() + '…' : line
 	}

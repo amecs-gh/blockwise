@@ -185,8 +185,10 @@
 		calMonth: 0, // months from now in the mini calendar
 		doneWeek: 0, // weeks back from this one on the Done page
 		notesFor: null, // commitment id on the Notes page
-		noteDraft: null, // { for, text }: a note being written (kept across re-renders)
+		noteDraft: null, // { for, text, open }: a note being written (kept across re-renders)
 		notesTickedOpen: false, // Notes page: ticked notes shown
+		noteEdit: null, // { id, text }: the note open in the editor
+		expandedNotes: new Set(), // long notes shown in full
 		tasks: [],
 		period: localStorageGet('period', 'week'),
 		offset: 0,
@@ -1739,7 +1741,7 @@
 	document.addEventListener('keydown', (e) => {
 		if (state.route === 'notes' && !e.metaKey && !e.ctrlKey && !e.altKey && (e.key === 'n' || e.key === 'N') && !document.activeElement?.matches('input, textarea, select, [contenteditable]')) {
 			const field = document.getElementById('imp-note-new')
-			if (field) { e.preventDefault(); field.focus() }
+			if (field) { e.preventDefault(); field.tagName === 'BUTTON' ? field.click() : field.focus() }
 			return
 		}
 		if (state.route !== 'tasks' || e.metaKey || e.ctrlKey || e.altKey || (e.key !== 'n' && e.key !== 'N')) return
@@ -1866,17 +1868,22 @@
 			'aria-selected': x.id === c.id ? 'true' : 'false',
 			class: x.id === c.id ? 'active' : '',
 			style: { '--c': x.color },
-			onclick: () => { state.notesFor = x.id; render() },
+			onclick: () => { state.notesFor = x.id; state.noteEdit = null; render() },
 		}, h('span', { class: 'imp-dot', style: { background: x.color } }), x.name))))
 
-		page.append(h('p', { class: 'imp-muted imp-notes__summary' },
-			open.length ? trn('%n open note', '%n open notes', open.length) : tr('No notes for {name} yet.', { name: c.name }),
-			ticked.length ? [' · ', trn('%n ticked', '%n ticked', ticked.length)] : null))
+		page.append(h('div', { class: 'imp-notes__top' },
+			h('p', { class: 'imp-muted' },
+				open.length ? trn('%n open note', '%n open notes', open.length) : tr('No notes for {name} yet.', { name: c.name }),
+				ticked.length ? [' · ', trn('%n ticked', '%n ticked', ticked.length)] : null)))
 
+		page.append(noteComposer(c))
 		if (open.length) {
 			page.append(h('ul', { class: 'imp-notes__list', 'aria-label': tr('Notes') }, open.map((n, i) => noteItem(n, i, open, c))))
+		} else {
+			page.append(h('div', { class: 'imp-notes__empty' },
+				h('p', null, tr('Notes are for everything that isn\'t a task: ideas, things to ask, links, checklists.')),
+				h('p', { class: 'imp-muted' }, tr('Tick a note when it\'s dealt with: it shows in Done.'))))
 		}
-		page.append(noteComposer(c))
 
 		if (ticked.length) {
 			page.append(h('details', { class: 'imp-notes__ticked', open: state.notesTickedOpen ? true : null, ontoggle: (e) => { state.notesTickedOpen = e.target.open } },
@@ -1886,15 +1893,78 @@
 		return page
 	}
 
+	// --- markdown (js/markdown.js parses; elements are built here, never from HTML) ---
+
+	/**
+	 * @param {string} text markdown
+	 * @param {{onToggle?: (line: number, done: boolean) => void}} opts checklist items tickable if given
+	 */
+	function markdown(text, opts = {}) {
+		const MD = window.TrackerMarkdown
+		const wrap = h('div', { class: 'imp-md' })
+		if (!MD) { wrap.append(h('p', { class: 'imp-md__plain' }, text)); return wrap }
+		const inl = (nodes) => nodes.map((x) => {
+			switch (x.t) {
+				case 'text': return x.v
+				case 'br': return h('br')
+				case 'code': return h('code', null, x.v)
+				case 'strong': return h('strong', null, inl(x.c))
+				case 'em': return h('em', null, inl(x.c))
+				case 'del': return h('del', null, inl(x.c))
+				case 'link': {
+					const href = MD.safeUrl(x.href)
+					return href ? h('a', { href, target: '_blank', rel: 'noopener noreferrer nofollow', onclick: (e) => e.stopPropagation() }, inl(x.c)) : inl(x.c)
+				}
+				default: return null
+			}
+		})
+		const blk = (list) => list.map((b) => {
+			switch (b.t) {
+				case 'h': return h(['h3', 'h4', 'h5', 'h6', 'h6', 'h6'][b.level - 1], { class: `imp-md__h${b.level}` }, inl(b.c))
+				case 'p': return h('p', null, inl(b.c))
+				case 'code': return h('pre', null, h('code', null, b.v))
+				case 'quote': return h('blockquote', null, blk(b.b))
+				case 'hr': return h('hr')
+				case 'ul':
+				case 'ol': {
+					const isTasks = b.items.some((i) => i.task !== null)
+					return h(b.t, { class: isTasks ? 'is-tasks' : '', start: b.t === 'ol' && b.start !== 1 ? String(b.start) : null },
+						b.items.map((i) => h('li', { class: i.task === null ? '' : `is-task ${i.task ? 'is-checked' : ''}` },
+							i.task === null ? null : h('input', {
+								type: 'checkbox',
+								checked: i.task,
+								disabled: !opts.onToggle,
+								'aria-label': MD.plainTitle(nodeText(i.c)) || tr('Checklist item'),
+								onclick: (e) => e.stopPropagation(),
+								onchange: (e) => opts.onToggle && opts.onToggle(i.line, e.target.checked),
+							}),
+							h('span', { class: 'imp-md__li' }, inl(i.c)),
+							i.b.length ? blk(i.b) : null)))
+				}
+				default: return null
+			}
+		})
+		wrap.append(...[blk(MD.parse(text))].flat(Infinity).filter((x) => x !== null && x !== undefined))
+		return wrap
+	}
+	const nodeText = (nodes) => nodes.map((x) => (x.t === 'text' || x.t === 'code' ? x.v : x.c ? nodeText(x.c) : ' ')).join('')
+
 	async function saveNoteOrder(c, ids) {
 		await api('POST', 'notes-order', { commitmentId: c.id, ids })
 		await render()
 	}
 
+	const noteFirstLine = (text) => {
+		const t = window.TrackerMarkdown ? window.TrackerMarkdown.plainTitle(text) : String(text || '').split('\n')[0]
+		return t.length > 60 ? t.slice(0, 59) + '…' : t
+	}
+
 	function noteItem(n, index, list, c) {
 		const open = !n.done
+		const editing = state.noteEdit && state.noteEdit.id === n.id
 		const li = h('li', {
-			class: `imp-check imp-note ${n.done ? 'is-done' : ''}`,
+			class: `imp-note ${n.done ? 'is-done' : ''} ${editing ? 'is-editing' : ''}`,
+			style: { '--c': c.color },
 			ondragstart: (e) => {
 				if (e.target !== li) return
 				e.dataTransfer.setData('text/plain', String(n.id))
@@ -1902,7 +1972,7 @@
 				li.classList.add('is-dragging')
 			},
 			ondragend: () => { li.classList.remove('is-dragging'); li.draggable = false },
-			ondragover: (e) => { if (open) { e.preventDefault(); li.classList.add('is-over') } },
+			ondragover: (e) => { if (open && !editing) { e.preventDefault(); li.classList.add('is-over') } },
 			ondragleave: () => li.classList.remove('is-over'),
 			ondrop: async (e) => {
 				e.preventDefault()
@@ -1913,22 +1983,75 @@
 				ids.splice(ids.indexOf(n.id), 0, dragged)
 				await saveNoteOrder(c, ids)
 			},
-			onkeydown: (e) => {
-				// Alt+↑/↓ moves an open note
-				if (!open || !e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') || !e.target.matches('.imp-note__text')) return
-				e.preventDefault()
-				const j = index + (e.key === 'ArrowUp' ? -1 : 1)
-				if (j < 0 || j >= list.length) return
-				const ids = list.map((x) => x.id)
-				;[ids[index], ids[j]] = [ids[j], ids[index]]
-				state.refocus = `imp-nt-${n.id}`
-				saveNoteOrder(c, ids)
-			},
 		})
-		// (append() would write a missing part as the text "null")
+
+		if (editing) {
+			li.append(noteEditor({
+				id: `imp-ne-${n.id}`,
+				value: state.noteEdit.text,
+				label: tr('Edit note'),
+				saveLabel: tr('Save'),
+				onInput: (v) => { state.noteEdit.text = v },
+				onCancel: () => { state.noteEdit = null; state.refocus = `imp-nt-${n.id}`; render() },
+				onSave: async (v) => {
+					if (!v.trim()) {
+						if (!window.confirm(tr('Delete this note?'))) return false
+						await api('DELETE', `notes/${n.id}`)
+					} else {
+						await api('PUT', `notes/${n.id}`, { text: v })
+					}
+					state.noteEdit = null
+					state.refocus = `imp-nt-${n.id}`
+					await render()
+				},
+			}))
+			return li
+		}
+
+		const [doneTasks, allTasks] = window.TrackerMarkdown ? window.TrackerMarkdown.taskCount(n.text) : [0, 0]
+		const content = markdown(n.text, {
+			onToggle: open ? async (line, done) => {
+				const text = window.TrackerMarkdown.toggleTask(n.text, line, done)
+				state.refocus = null
+				await api('PUT', `notes/${n.id}`, { text })
+				await render()
+			} : null,
+		})
+		const expanded = state.expandedNotes.has(n.id)
+		content.classList.add('imp-note__content')
+		if (!expanded) content.classList.add('is-clamped')
+		const startEdit = () => {
+			state.noteEdit = { id: n.id, text: n.text }
+			// One editor at a time: an empty composer closes (a draft stays)
+			if (state.noteDraft && !String(state.noteDraft.text || '').trim()) state.noteDraft.open = false
+			render()
+		}
+		content.addEventListener('click', (e) => {
+			if (window.getSelection && String(window.getSelection())) return // selecting text, not editing
+			if (e.target.closest('a, input, button')) return
+			startEdit()
+		})
+		const more = h('button', {
+			type: 'button',
+			class: 'imp-link imp-note__more',
+			hidden: true,
+			onclick: () => {
+				if (state.expandedNotes.has(n.id)) state.expandedNotes.delete(n.id)
+				else state.expandedNotes.add(n.id)
+				render()
+			},
+		}, expanded ? tr('Show less') : tr('Show more'))
+		// Only offer "Show more" when the note really is cut off
+		requestAnimationFrame(() => {
+			const limit = parseFloat(getComputedStyle(content).maxHeight)
+			const cut = !expanded && Number.isFinite(limit) && content.scrollHeight > limit + 8
+			content.classList.toggle('is-cut', cut)
+			if (expanded || cut) more.hidden = false
+		})
+
 		li.append(...[
 			open ? h('span', {
-				class: 'imp-qitem__handle imp-note__handle',
+				class: 'imp-note__handle',
 				title: tr('Drag to reorder'),
 				'aria-hidden': 'true',
 				onmousedown: () => { li.draggable = true },
@@ -1936,93 +2059,258 @@
 			}, '⋮⋮') : null,
 			h('input', {
 				type: 'checkbox',
+				class: 'imp-note__tick',
 				id: `imp-nc-${n.id}`,
 				checked: n.done,
 				'aria-label': tr(n.done ? 'Untick: {title}' : 'Tick: {title}', { title: noteFirstLine(n.text) }),
+				title: n.done ? tr('Untick') : tr('Tick off (shows in Done)'),
 				onchange: async (e) => {
-					state.refocus = e.target.checked ? 'imp-note-new' : `imp-nc-${n.id}`
+					state.refocus = `imp-nc-${n.id}`
 					await api('PUT', `notes/${n.id}`, { done: e.target.checked })
 					await render()
 				},
 			}),
 			h('div', { class: 'imp-note__body' },
-				editableText(n.text, {
+				content,
+				more,
+				(allTasks || (n.done && n.doneAt)) ? h('div', { class: 'imp-note__meta' },
+					allTasks ? h('span', { class: `imp-note__progress ${doneTasks === allTasks ? 'is-complete' : ''}`, title: tr('Checklist') },
+						h('span', { class: 'imp-note__bar', 'aria-hidden': 'true' }, h('span', { style: { width: `${(doneTasks / allTasks) * 100}%` } })),
+						tr('{done} of {total}', { done: doneTasks, total: allTasks })) : null,
+					n.done && n.doneAt ? h('span', null, tr('Ticked {date}', { date: fmt.dateTime.format(at(n.doneAt)) })) : null) : null),
+			h('div', { class: 'imp-note__actions' },
+				open ? h('button', {
+					type: 'button',
 					id: `imp-nt-${n.id}`,
-					label: tr('Note'),
-					className: 'imp-note__text',
-					multiline: true,
-					onSave: async (v) => {
-						if (!v.trim()) {
-							// Emptied: delete it
-							await api('DELETE', `notes/${n.id}`)
-						} else {
-							await api('PUT', `notes/${n.id}`, { text: v })
-						}
+					class: 'imp-icon-btn',
+					'aria-label': tr('Edit note: {title}', { title: noteFirstLine(n.text) }),
+					title: tr('Edit'),
+					onclick: startEdit,
+					onkeydown: (e) => {
+						// Alt+↑/↓ moves an open note
+						if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return
+						e.preventDefault()
+						const j = index + (e.key === 'ArrowUp' ? -1 : 1)
+						if (j < 0 || j >= list.length) return
+						const ids = list.map((x) => x.id)
+						;[ids[index], ids[j]] = [ids[j], ids[index]]
+						state.refocus = `imp-nt-${n.id}`
+						saveNoteOrder(c, ids)
+					},
+				}, icon('M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4', 18)) : null,
+				h('button', {
+					type: 'button',
+					class: 'imp-icon-btn imp-note__del',
+					'aria-label': tr('Delete note: {title}', { title: noteFirstLine(n.text) }),
+					title: tr('Delete note'),
+					onclick: async () => {
+						if (!window.confirm(tr('Delete this note?'))) return
+						await api('DELETE', `notes/${n.id}`)
 						await render()
 					},
-				}),
-				n.done && n.doneAt ? h('span', { class: 'imp-muted imp-note__when' }, tr('Ticked {date}', { date: fmt.dateTime.format(at(n.doneAt)) })) : null),
-			h('button', {
-				type: 'button',
-				class: 'imp-icon-btn imp-note__del',
-				'aria-label': tr('Delete note: {title}', { title: noteFirstLine(n.text) }),
-				title: tr('Delete note'),
-				onclick: async () => {
-					if (!window.confirm(tr('Delete this note?'))) return
-					await api('DELETE', `notes/${n.id}`)
-					await render()
-				},
-			}, '×'),
+				}, icon('M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3', 18))),
 		].filter(Boolean))
 		return li
 	}
 
-	const noteFirstLine = (text) => {
-		const line = String(text || '').split('\n')[0].trim()
-		return line.length > 60 ? line.slice(0, 59) + '…' : line
+	/** New note: a calm field that opens the editor. */
+	function noteComposer(c) {
+		if (state.noteDraft && state.noteDraft.for === c.id && state.noteDraft.open) {
+			return h('div', { class: 'imp-notes__composer is-open' }, noteEditor({
+				id: 'imp-note-new',
+				value: state.noteDraft.text || '',
+				label: tr('New note for {name}', { name: c.name }),
+				placeholder: tr('Write a note… Markdown works: **bold**, - [ ] checklists, links'),
+				saveLabel: tr('Add note'),
+				autofocus: true,
+				onInput: (v) => { state.noteDraft.text = v },
+				onCancel: () => { state.noteDraft = { for: c.id, text: state.noteDraft.text, open: false }; render() },
+				onSave: async (v) => {
+					if (!v.trim()) return false
+					await api('POST', 'notes', { commitmentId: c.id, text: v })
+					// ready for the next one on a computer; on a phone the editor would fill the screen
+					state.noteDraft = { for: c.id, text: '', open: !window.matchMedia('(hover: none)').matches }
+					await render()
+				},
+			}))
+		}
+		const draft = state.noteDraft && state.noteDraft.for === c.id && state.noteDraft.text ? state.noteDraft.text : ''
+		return h('button', {
+			type: 'button',
+			id: 'imp-note-new',
+			class: 'imp-notes__composer',
+			onclick: () => { state.noteDraft = { for: c.id, text: draft, open: true }; render() },
+		}, icon('M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4', 18),
+		h('span', null, draft ? noteFirstLine(draft) || tr('Write a note…') : tr('Write a note…')),
+		draft ? h('span', { class: 'imp-chip is-default' }, tr('Draft')) : null)
 	}
 
-	/** Write a note: Enter adds it, Shift+Enter starts a new line. */
-	function noteComposer(c) {
-		const field = h('textarea', {
-			id: 'imp-note-new',
-			class: 'imp-note__new',
-			rows: 1,
-			maxlength: 2000,
-			placeholder: tr('Write a note…'),
-			'aria-label': tr('New note for {name}', { name: c.name }),
-		})
-		if (state.noteDraft && state.noteDraft.for === c.id) field.value = state.noteDraft.text
-		const grow = () => { field.style.height = 'auto'; field.style.height = `${Math.min(field.scrollHeight, 240)}px` }
-		const add = h('button', { type: 'submit', class: 'imp-button imp-button--primary', disabled: !field.value.trim() }, tr('Add'))
-		const submit = async (e) => {
-			if (e) e.preventDefault()
-			const text = field.value.trim()
-			if (!text) return
-			add.disabled = true
+	/**
+	 * Markdown editor: formatting toolbar, Write/Preview, shortcuts
+	 * (Ctrl/⌘ B I K, Ctrl/⌘+Enter saves, Esc cancels), lists continue on Enter.
+	 * onSave returns false to keep the editor open.
+	 */
+	function noteEditor({ id, value, label, placeholder = '', saveLabel, autofocus = true, onInput, onSave, onCancel }) {
+		const field = h('textarea', { id, class: 'imp-ned__field', 'aria-label': label, placeholder, maxlength: 20000, rows: 4, spellcheck: 'true' })
+		field.value = value || ''
+		const preview = h('div', { class: 'imp-ned__preview', hidden: true, 'aria-live': 'polite' })
+		const grow = () => { field.style.height = 'auto'; field.style.height = `${Math.min(field.scrollHeight + 2, Math.round(window.innerHeight * 0.6))}px` }
+		let busy = false
+		const save = async () => {
+			if (busy) return
+			busy = true
+			saveBtn.disabled = true
 			try {
-				await api('POST', 'notes', { commitmentId: c.id, text })
-			} catch (err) {
-				add.disabled = false
+				if ((await onSave(field.value)) === false) { busy = false; saveBtn.disabled = !field.value.trim() }
+			} catch (e) {
+				busy = false
+				saveBtn.disabled = false
+			}
+		}
+		const changed = () => { if (onInput) onInput(field.value); saveBtn.disabled = !field.value.trim(); grow() }
+
+		// Replaces [start, end) and selects [selStart, selEnd) (undo keeps working where the browser allows)
+		const replace = (start, end, text, selStart, selEnd) => {
+			field.focus()
+			field.setSelectionRange(start, end)
+			let done = false
+			try { done = document.execCommand('insertText', false, text) } catch (e) { done = false }
+			if (!done || field.value.slice(start, start + text.length) !== text) field.setRangeText(text, start, end, 'end')
+			field.setSelectionRange(selStart, selEnd)
+			changed()
+		}
+		const wrapWith = (mark, placeholderText) => {
+			const { selectionStart: s, selectionEnd: e, value: v } = field
+			if (v.slice(s - mark.length, s) === mark && v.slice(e, e + mark.length) === mark) {
+				// already formatted: undo it
+				replace(s - mark.length, e + mark.length, v.slice(s, e), s - mark.length, e - mark.length)
 				return
 			}
-			state.noteDraft = null
-			state.refocus = 'imp-note-new'
-			await render()
+			const inner = s === e ? placeholderText : v.slice(s, e)
+			replace(s, e, mark + inner + mark, s + mark.length, s + mark.length + inner.length)
 		}
-		field.addEventListener('input', () => {
-			state.noteDraft = { for: c.id, text: field.value }
-			add.disabled = !field.value.trim()
-			grow()
-		})
+		const lineRange = () => {
+			const v = field.value
+			const s = v.lastIndexOf('\n', field.selectionStart - 1) + 1
+			let e = v.indexOf('\n', field.selectionEnd)
+			if (e < 0) e = v.length
+			return [s, e]
+		}
+		/** Adds the prefix to each selected line, or removes it when all have it */
+		const prefixLines = (make, test) => {
+			const [s, e] = lineRange()
+			const lines = field.value.slice(s, e).split('\n')
+			const all = lines.every((l) => test.test(l))
+			const out = lines.map((l, i) => (all ? l.replace(test, '') : make(i) + l.replace(/^(\s*)([-*+]|\d+[.)])\s+(\[[ xX]\]\s+)?/, '$1').replace(/^(#{1,6}|>)\s?/, ''))).join('\n')
+			replace(s, e, out, s + out.length, s + out.length)
+		}
+		const link = () => {
+			const { selectionStart: s, selectionEnd: e, value: v } = field
+			const selected = v.slice(s, e)
+			if (/^https?:\/\/\S+$/.test(selected)) {
+				replace(s, e, `[${tr('link')}](${selected})`, s + 1, s + 1 + tr('link').length)
+				return
+			}
+			const text = selected || tr('link')
+			const url = 'https://'
+			replace(s, e, `[${text}](${url})`, s + text.length + 3, s + text.length + 3 + url.length)
+		}
+
+		const tool = (title, glyph, run, extra = {}) => h('button', {
+			type: 'button', class: 'imp-ned__tool', title, 'aria-label': title,
+			onmousedown: (e) => e.preventDefault(), // keep the selection in the field
+			onclick: () => { if (!preview.hidden) setMode(false); run() },
+			...extra,
+		}, glyph)
+		const MOD = IS_MAC ? '⌘' : 'Ctrl+'
+		const bar = h('div', { class: 'imp-ned__bar', role: 'toolbar', 'aria-label': tr('Formatting') },
+			h('div', { class: 'imp-ned__tools' },
+				tool(`${tr('Bold')} (${MOD}B)`, h('strong', null, 'B'), () => wrapWith('**', tr('bold'))),
+				tool(`${tr('Italic')} (${MOD}I)`, h('em', null, 'I'), () => wrapWith('*', tr('italic'))),
+				tool(tr('Strikethrough'), h('del', null, 'S'), () => wrapWith('~~', tr('text'))),
+				h('span', { class: 'imp-ned__sep', 'aria-hidden': 'true' }),
+				tool(tr('Heading'), 'H', () => prefixLines(() => '## ', /^#{1,6}\s+/)),
+				tool(tr('Bulleted list'), icon('M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01', 18), () => prefixLines(() => '- ', /^\s*[-*+]\s+(?!\[[ xX]\])/)),
+				tool(tr('Numbered list'), icon('M10 6h10M10 12h10M10 18h10M4 5h1v4M4 9h2M4 14.5a1 1 0 0 1 2 .5L4 18h2', 18), () => prefixLines((i) => `${i + 1}. `, /^\s*\d+[.)]\s+/)),
+				tool(tr('Checklist'), icon('M4 5h4v4H4zM4 15h4v4H4zM5 17l1 1 1.5-2M11 7h9M11 17h9', 18), () => prefixLines(() => '- [ ] ', /^\s*[-*+]\s+\[[ xX]\]\s+/)),
+				h('span', { class: 'imp-ned__sep', 'aria-hidden': 'true' }),
+				tool(tr('Quote'), icon('M7 7h4v5H7l-1 4M14 7h4v5h-4l-1 4', 18), () => prefixLines(() => '> ', /^>\s?/)),
+				tool(tr('Code'), icon('M8 8l-4 4 4 4M16 8l4 4-4 4', 18), () => wrapWith('`', tr('code'))),
+				tool(`${tr('Link')} (${MOD}K)`, icon('M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1', 18), link)),
+			h('div', { class: 'imp-ned__modes', role: 'tablist', 'aria-label': tr('Editor view') },
+				h('button', { type: 'button', role: 'tab', class: 'is-active', 'aria-selected': 'true', onclick: () => setMode(false) }, tr('Write')),
+				h('button', { type: 'button', role: 'tab', 'aria-selected': 'false', onclick: () => setMode(true) }, tr('Preview'))))
+		const [writeTab, previewTab] = bar.querySelectorAll('[role=tab]')
+		function setMode(showPreview) {
+			preview.hidden = !showPreview
+			field.hidden = showPreview
+			writeTab.classList.toggle('is-active', !showPreview)
+			previewTab.classList.toggle('is-active', showPreview)
+			writeTab.setAttribute('aria-selected', String(!showPreview))
+			previewTab.setAttribute('aria-selected', String(showPreview))
+			if (showPreview) {
+				preview.replaceChildren(field.value.trim() ? markdown(field.value) : h('p', { class: 'imp-muted' }, tr('Nothing to preview yet.')))
+			} else {
+				field.focus()
+			}
+		}
+
+		field.addEventListener('input', changed)
 		field.addEventListener('keydown', (e) => {
-			if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) submit(e)
-			if (e.key === 'Escape') { field.value = ''; state.noteDraft = null; add.disabled = true; grow(); field.blur() }
+			const mod = e.metaKey || e.ctrlKey
+			if (mod && e.key === 'Enter') { e.preventDefault(); save(); return }
+			if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onCancel(); return }
+			if (mod && !e.shiftKey && !e.altKey) {
+				const k = e.key.toLowerCase()
+				if (k === 'b') { e.preventDefault(); wrapWith('**', tr('bold')); return }
+				if (k === 'i') { e.preventDefault(); wrapWith('*', tr('italic')); return }
+				if (k === 'k') { e.preventDefault(); link(); return }
+			}
+			const v = field.value
+			const s = field.selectionStart
+			const lineStart = v.lastIndexOf('\n', s - 1) + 1
+			const line = v.slice(lineStart, v.indexOf('\n', s) < 0 ? v.length : v.indexOf('\n', s))
+			const lm = /^(\s*)([-*+]|(\d+)([.)]))\s+(\[[ xX]\]\s+)?/.exec(line)
+			if (e.key === 'Enter' && !e.shiftKey && !mod && !e.isComposing && lm && s === field.selectionEnd) {
+				e.preventDefault()
+				if (line.length === lm[0].length) {
+					// Enter on an empty item ends the list
+					replace(lineStart, lineStart + line.length, '', lineStart, lineStart)
+					return
+				}
+				const marker = lm[3] ? `${Number(lm[3]) + 1}${lm[4]}` : lm[2]
+				const next = `\n${lm[1]}${marker} ${lm[5] ? '[ ] ' : ''}`
+				replace(s, s, next, s + next.length, s + next.length)
+				return
+			}
+			if (e.key === 'Tab' && lm && !mod) {
+				// Tab / Shift+Tab: nest list items
+				e.preventDefault()
+				if (e.shiftKey) {
+					if (line.startsWith('  ')) replace(lineStart, lineStart + 2, '', Math.max(lineStart, s - 2), Math.max(lineStart, s - 2))
+				} else {
+					replace(lineStart, lineStart, '  ', s + 2, s + 2)
+				}
+			}
 		})
-		setTimeout(grow, 0)
-		return h('form', { class: 'imp-note__composer', onsubmit: submit },
-			field, add,
-			h('span', { class: 'imp-muted imp-note__keys' }, tr('Enter adds · Shift+Enter for a new line')))
+
+		const saveBtn = h('button', { type: 'button', class: 'imp-button imp-button--primary', disabled: !field.value.trim(), onclick: save }, saveLabel)
+		const editor = h('div', { class: 'imp-ned' },
+			bar,
+			field,
+			preview,
+			h('div', { class: 'imp-ned__foot' },
+				h('span', { class: 'imp-muted imp-ned__hint' }, tr('Markdown'), ' · ', `${MOD}↵ ${tr('to save')}`),
+				h('button', { type: 'button', class: 'imp-button', onclick: () => onCancel() }, tr('Cancel')),
+				saveBtn))
+		setTimeout(() => {
+			grow()
+			if (autofocus && document.body.contains(field)) {
+				field.focus()
+				field.setSelectionRange(field.value.length, field.value.length)
+			}
+		}, 0)
+		return editor
 	}
 
 	// ---------------------------------------------------------------------------
