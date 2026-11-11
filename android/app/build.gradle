@@ -67,13 +67,16 @@ def webDir = file('src/main/assets/web')
 tasks.register('syncWeb') {
     description = 'Copies the interface from ../nextcloud into the app.'
     onlyIf { new File(trackerDir, 'appinfo/info.xml').exists() }
-    inputs.files(new File(trackerDir, 'js/tracker.js'), new File(trackerDir, 'js/engine.js'), new File(trackerDir, 'js/markdown.js'), new File(trackerDir, 'css/tracker.css'), new File(trackerDir, 'l10n/it.json'))
+    inputs.files(new File(trackerDir, 'js/tracker.js'), new File(trackerDir, 'js/engine.js'), new File(trackerDir, 'js/markdown.js'), new File(trackerDir, 'css/tracker.css'), new File(trackerDir, 'css/fonts'), new File(trackerDir, 'l10n/it.json'))
     outputs.dir(webDir)
     doLast {
         webDir.mkdirs()
         ['js/tracker.js': 'tracker.js', 'js/engine.js': 'engine.js', 'js/markdown.js': 'markdown.js', 'css/tracker.css': 'tracker.css'].each { from, to ->
             new File(webDir, to).bytes = new File(trackerDir, from).bytes
         }
+        // The bundled font (Poppins, SIL Open Font License)
+        new File(webDir, 'fonts').mkdirs()
+        new File(trackerDir, 'css/fonts').eachFile { f -> new File(webDir, 'fonts/' + f.name).bytes = f.bytes }
         def italian = new groovy.json.JsonSlurper().parse(new File(trackerDir, 'l10n/it.json'), 'UTF-8').translations
         new File(webDir, 'l10n.js').setText('window.__trackerL10n = ' + groovy.json.JsonOutput.toJson([it: italian]) + '\n', 'UTF-8')
         def version = (new File(trackerDir, 'appinfo/info.xml').getText('UTF-8') =~ /<version>([^<]+)<\/version>/)[0][1]

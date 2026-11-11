@@ -50,7 +50,7 @@ body.desktop {
 	overflow: hidden;
 	background: #f6f5fb;
 	color: var(--color-main-text);
-	font: 13px/1.45 ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+	font: 13px/1.45 Poppins, -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
 	-webkit-font-smoothing: antialiased;
 }
 @media (prefers-color-scheme: dark) {

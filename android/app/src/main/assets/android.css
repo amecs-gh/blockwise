@@ -113,7 +113,7 @@ body.android {
 	overflow: hidden;
 	background: var(--md-surface);
 	color: var(--md-onSurface);
-	font: 400 15px/1.45 Roboto, "Google Sans Text", system-ui, sans-serif;
+	font: 400 15px/1.45 Poppins, Roboto, system-ui, sans-serif;
 	letter-spacing: 0.01em;
 	-webkit-tap-highlight-color: transparent;
 	-webkit-text-size-adjust: 100%;
@@ -711,7 +711,7 @@ body.android .imp-composer {
 	background: var(--md-surfaceContainer);
 	color: var(--md-onSurface);
 	box-shadow: var(--md-elev-2);
-	font: 400 14px/20px Roboto, system-ui, sans-serif;
+	font: 400 14px/20px Poppins, Roboto, system-ui, sans-serif;
 }
 .m3 .imp-menu .imp-menu__item {
 	min-height: 48px;

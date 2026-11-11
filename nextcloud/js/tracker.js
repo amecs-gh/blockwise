@@ -380,8 +380,8 @@
 		const link = (href, label, d, active, onclick) => h('li', null, h('a', { href, title: label, class: active ? 'active' : '', 'aria-current': active ? 'page' : null, onclick },
 			icon(d), h('span', null, label), onclick ? h('span', { class: 'imp-nav__ext', 'aria-hidden': 'true' }, '↗') : null))
 		// Calendar: Blockwise's calendar page where blocks can be changed; else the calendar app
-		const cal = state.features.calendarView ? link('#calendar', tr('Calendar'), ICON_CAL, state.route === 'calendar')
-			: desktop ? link('#', tr('Calendar'), ICON_CAL, false, (e) => { e.preventDefault(); desktop.openCalendar() }) : null
+		const cal = calendarShown() ? link('#calendar', tr('Calendar'), ICON_CAL, state.route === 'calendar')
+			: desktop && !state.features.calendarView ? link('#', tr('Calendar'), ICON_CAL, false, (e) => { e.preventDefault(); desktop.openCalendar() }) : null
 		const routes = ROUTES.map((r) => link(`#${r.id}`, r.label(), r.icon, state.route === r.id))
 		// Phones keep the calendar and the account sheet in the top bar, the rest in the bottom tabs
 		const phone = !!(desktop && desktop.account)
@@ -397,8 +397,20 @@
 						h('span', { class: 'imp-dot', style: { background: c.color } }),
 						h('span', { class: 'imp-nav__name' }, c.name),
 						c.calendarId === null && state.features.calendars !== false ? h('span', { class: 'imp-nav__warn', title: tr('No calendar linked') }, '!') : null))),
-				h('li', null, h('a', { href: '#settings', class: 'imp-nav__add', title: tr('New commitment') }, '+ ', h('span', null, tr('New commitment'))))),
+				h('li', null, h('a', { href: '#settings', class: 'imp-nav__add', title: tr('New commitment'), onclick: () => { state.creatingCommitment = true; state.editingCommitment = null } }, '+ ', h('span', null, tr('New commitment'))))),
 		)
+	}
+
+	/** The Calendar page: where the app has one, unless turned off in Settings */
+	const calendarShown = () => !!state.features.calendarView && state.settings.showCalendar !== false
+
+	/** A page's title: its icon on an accent tile, the name, a line of context, and actions on the right */
+	function pageHeader(route, subtitle, ...actions) {
+		const r = ROUTES.find((x) => x.id === route)
+		return h('header', { class: 'imp-phead' },
+			h('span', { class: 'imp-phead__icon', 'aria-hidden': 'true' }, icon(r.icon, 22)),
+			h('div', { class: 'imp-phead__text' }, h('h1', null, r.label()), subtitle ? h('p', null, subtitle) : null),
+			actions.length ? h('div', { class: 'imp-phead__actions' }, actions) : null)
 	}
 
 	let rendering = false
@@ -415,7 +427,11 @@
 			main.append(h('p', { class: 'imp-empty' }, tr('This page could not be loaded. Reload to try again.')))
 		}
 		const scroll = document.getElementById('imp-main')?.scrollTop || 0
-		root.replaceChildren(h('div', { class: 'imp-layout' }, navigation(), main))
+		// An open calendar panel stays open across a re-render
+		root.replaceChildren(h('div', { class: 'imp-layout' }, navigation(), main), ...root.querySelectorAll(':scope > .imp-cvpanel'))
+		// The window's (or browser tab's) title says where you are
+		const here = state.route === 'commitment' ? commitmentById(state.commitmentId)?.name : state.route === 'calendar' ? tr('Calendar') : ROUTES.find((r) => r.id === state.route)?.label()
+		if (here) document.title = `${here} · Blockwise`
 		main.scrollTop = scroll
 		if (state.refocus) {
 			document.getElementById(state.refocus)?.focus()
@@ -824,7 +840,7 @@
 			!blocks ? h('p', { class: 'imp-muted imp-day__empty', 'data-loading': '' }, tr('Loading…'))
 				: blocks.length
 					? h('ol', { class: 'imp-day__list' }, blocks.map(item))
-				: h('p', { class: 'imp-muted imp-day__empty' }, tr('No blocks planned.'), ' ', state.features.calendarView ? h('a', { href: '#calendar' }, tr('Plan a block')) : null))
+				: h('p', { class: 'imp-muted imp-day__empty' }, tr('No blocks planned.'), ' ', calendarShown() ? h('a', { href: '#calendar' }, tr('Plan a block')) : null))
 	}
 
 	/** You started before pressing play: move the running session's start back */
@@ -1249,6 +1265,9 @@
 			Promise.all(state.commitments.map((c) => api('GET', `tasks?commitmentId=${c.id}&status=open`))),
 			api('GET', `blocks?from=${now - 86400}&to=${now + 14 * 86400}`).catch(() => ({ blocks: [] })),
 		])
+		const open = all.reduce((n, list) => n + list.length, 0)
+		const work = all.reduce((n, list) => n + list.reduce((m, t) => m + remainingMin(t), 0), 0)
+		page.append(pageHeader('tasks', open ? `${trn('%n open task', '%n open tasks', open)} · ${tr('{time} of work', { time: fmtMin(work) })} · ${tr('each block takes tasks from the top')}` : tr('No open tasks')))
 		// Every commitment side by side, each a column of its queue (scrolls inside on wide windows)
 		page.append(h('div', { class: 'imp-tcols' }, state.commitments.map((c, k) => taskColumn(c, all[k], blockData.blocks, now))))
 		return page
@@ -1878,18 +1897,16 @@
 		const open = all.filter((n) => !n.done)
 		const ticked = all.filter((n) => n.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0))
 
-		page.append(h('div', { class: 'imp-tabs', role: 'tablist', 'aria-label': tr('Commitments') }, state.commitments.map((x) => h('button', {
-			role: 'tab',
-			'aria-selected': x.id === c.id ? 'true' : 'false',
-			class: x.id === c.id ? 'active' : '',
-			style: { '--c': x.color },
-			onclick: () => { state.notesFor = x.id; state.noteEdit = null; render() },
-		}, h('span', { class: 'imp-dot', style: { background: x.color } }), x.name))))
-
-		page.append(h('div', { class: 'imp-notes__top' },
-			h('p', { class: 'imp-muted' },
-				open.length ? trn('%n open note', '%n open notes', open.length) : tr('No notes for {name} yet.', { name: c.name }),
-				ticked.length ? [' · ', trn('%n ticked', '%n ticked', ticked.length)] : null)))
+		page.append(pageHeader('notes',
+			[open.length ? trn('%n open note', '%n open notes', open.length) : tr('No notes for {name} yet.', { name: c.name }),
+				ticked.length ? [' · ', trn('%n ticked', '%n ticked', ticked.length)] : null],
+			h('div', { class: 'imp-tabs', role: 'tablist', 'aria-label': tr('Commitments') }, state.commitments.map((x) => h('button', {
+				role: 'tab',
+				'aria-selected': x.id === c.id ? 'true' : 'false',
+				class: x.id === c.id ? 'active' : '',
+				style: { '--c': x.color },
+				onclick: () => { state.notesFor = x.id; state.noteEdit = null; render() },
+			}, h('span', { class: 'imp-dot', style: { background: x.color } }), x.name)))))
 
 		page.append(noteComposer(c))
 		if (open.length) {
@@ -2334,7 +2351,7 @@
 
 	/** One week on the timeline; hover a block to see what was done in it. */
 	async function pageDone() {
-		const page = h('div', { class: 'imp-page imp-report imp-done' }, h('h1', null, tr('Done')))
+		const page = h('div', { class: 'imp-page imp-report imp-done' })
 		const ws = addPeriod(startOfWeek(new Date()), 'week', -state.doneWeek)
 		const from = Math.floor(ws / 1000)
 		const to = Math.floor(addPeriod(ws, 'week', 1) / 1000)
@@ -2344,15 +2361,13 @@
 			api('GET', `sessions?from=${from}&to=${to}`),
 		])
 
-		page.append(h('div', { class: 'imp-done__bar' },
+		page.append(pageHeader('done',
+			[doneCount(done), ' · ', tr('tracked {time}', { time: duration(sessions.reduce((sum, x) => sum + overlapSeconds(x.start, x.end ?? nowTs(), from, to), 0), { short: true }) })],
 			h('div', { class: 'imp-pager' },
 				h('button', { class: 'imp-icon-btn', 'aria-label': tr('Previous week'), onclick: () => { state.doneWeek++; render() } }, '‹'),
 				h('span', { class: 'imp-done__week' }, state.doneWeek === 0 ? tr('This week') : tr('Week of {date}', { date: fmt.day.format(ws) })),
 				h('button', { class: 'imp-icon-btn', 'aria-label': tr('Next week'), disabled: state.doneWeek === 0, onclick: () => { state.doneWeek--; render() } }, '›'),
-				state.doneWeek > 0 ? h('button', { class: 'imp-link', onclick: () => { state.doneWeek = 0; render() } }, tr('This week')) : null),
-			h('span', { class: 'imp-muted' },
-				doneCount(done), ' · ',
-				tr('tracked {time}', { time: duration(sessions.reduce((sum, x) => sum + overlapSeconds(x.start, x.end ?? nowTs(), from, to), 0), { short: true }) }))))
+				state.doneWeek > 0 ? h('button', { class: 'imp-link', onclick: () => { state.doneWeek = 0; render() } }, tr('This week')) : null)))
 
 		page.append(h('figure', { class: 'imp-figure' },
 			weekTimeline({ start: from, blocks: blocks.blocks, overlaps: blocks.overlaps, sessions, done }, true),
@@ -2377,7 +2392,7 @@
 			api('GET', `blocks?from=${from}&to=${to}`),
 		])
 		const now = nowTs()
-		const page = h('div', { class: 'imp-page imp-report' }, h('h1', null, tr('Time')))
+		const page = h('div', { class: 'imp-page imp-report' }, pageHeader('time', tr('Hours per commitment: planned in blocks and tracked')))
 		if (state.commitments.length) page.append(await hoursOverview())
 		page.append(h('h2', { class: 'imp-report__sub' }, tr('Over time')), periodControls())
 
@@ -2538,7 +2553,7 @@
 					h('span', { style: { width: `${Math.min(100, (trackedWeek / 60 / c.weeklyGoal) * 100)}%` } })) : null),
 			h('div', { class: 'imp-cpage__actions' },
 				h('a', { class: 'imp-button', href: '#tasks', onclick: () => { state.tasksFor = c.id } }, tr('Tasks')),
-				h('a', { class: 'imp-button', href: '#settings', title: cal ? tr('Calendar "{name}"', { name: cal.name }) : tr('No calendar linked') }, tr('Edit')),
+				h('a', { class: 'imp-button', href: '#settings', title: cal ? tr('Calendar "{name}"', { name: cal.name }) : tr('No calendar linked'), onclick: () => { state.editingCommitment = c.id; state.creatingCommitment = false } }, tr('Edit')),
 				h('button', {
 					class: `imp-button imp-cpage__start ${running ? 'is-running' : ''}`,
 					onclick: () => (running ? stopTracking() : startTracking(c.id)),
@@ -2790,7 +2805,7 @@
 	async function pageSettings() {
 		await loadState()
 		// No title: the bar already says where you are, and everything fits on one screen
-		const page = h('div', { class: 'imp-page imp-settings', 'aria-label': tr('Settings') })
+		const page = h('div', { class: 'imp-page imp-settings' }, pageHeader('settings', tr('Commitments, calendar, timer and reminders')))
 
 		// Commitments
 		const sec = h('section', { class: 'imp-settings__section' }, h('h2', null, tr('Commitments')),
@@ -2805,10 +2820,11 @@
 
 		// Pomodoro & reminders
 		const s = state.settings
-		const num = (key, label, min, max) => h('label', { class: 'imp-field imp-field--num' },
+		const num = (key, label, min, max) => h('div', { class: 'imp-field imp-field--num' },
 			h('span', null, label),
-			h('span', { class: 'imp-field__input' }, h('input', { type: 'number', min, max, value: s[key], name: key, required: true }), h('span', { class: 'imp-muted' }, key === 'sessionsBeforeLongBreak' ? '' : tr('min'))))
+			stepper(key, s[key], { min, max, step: key === 'defaultEstimate' ? 5 : 1, unit: key === 'sessionsBeforeLongBreak' ? '' : tr('min'), label }))
 		const pomoToggle = h('input', { type: 'checkbox', id: 'imp-pomo', name: 'pomodoro', checked: s.pomodoro })
+		const calToggle = h('input', { type: 'checkbox', id: 'imp-showcal', name: 'showCalendar', checked: s.showCalendar !== false })
 		page.append(h('section', { class: 'imp-settings__section' },
 			h('h2', null, tr('Pomodoro mode')),
 			h('form', {
@@ -2817,6 +2833,7 @@
 					e.preventDefault()
 					const data = Object.fromEntries(new FormData(e.target).entries())
 					data.pomodoro = pomoToggle.checked
+					data.showCalendar = calToggle.checked
 					state.settings = await api('PUT', 'settings', data)
 					toast(tr('Settings saved'))
 					render()
@@ -2833,6 +2850,8 @@
 			h('div', { class: 'imp-grid' },
 				num('reminderMinutes', tr('Remind me before a block ends'), 0, 120),
 				num('defaultEstimate', tr('Estimate for subtasks without one'), 5, 600)),
+			state.features.calendarView ? h('div', { class: 'imp-check imp-settings__toggle' }, calToggle,
+				h('label', { for: 'imp-showcal' }, h('strong', null, tr('Show the Calendar page')), h('span', { class: 'imp-muted' }, tr('Off: plan blocks in your calendar app instead. Blocks keep working either way.')))) : null,
 			h('button', { class: 'imp-button imp-button--primary', type: 'submit' }, tr('Save settings')))))
 		return page
 	}
@@ -2871,66 +2890,118 @@
 		return sec
 	}
 
+	const PALETTE = ['#6c5ce7', '#e8590c', '#0fa37f', '#0082c9', '#d4a017', '#c2185b', '#2e9b5f', '#24223a']
+
+	/** Color swatches, the last one opens the system color picker */
+	function swatches(value, onPick) {
+		const custom = h('input', { type: 'color', value, 'aria-label': tr('Other color'), oninput: (e) => pick(e.target.value) })
+		const wrap = h('div', { class: 'imp-swatches', role: 'radiogroup', 'aria-label': tr('Color') })
+		const pick = (v) => {
+			value = v
+			for (const b of wrap.querySelectorAll('button')) b.setAttribute('aria-checked', b.dataset.color === v ? 'true' : 'false')
+			wrap.querySelector('.imp-swatches__custom').classList.toggle('is-on', !PALETTE.includes(v))
+			onPick(v)
+		}
+		wrap.append(...PALETTE.map((p) => h('button', { type: 'button', role: 'radio', 'aria-checked': p === value ? 'true' : 'false', 'aria-label': p, 'data-color': p, style: { '--sw': p }, onclick: () => pick(p) })),
+			h('label', { class: `imp-swatches__custom ${PALETTE.includes(value) ? '' : 'is-on'}`, title: tr('Other color') }, custom))
+		return wrap
+	}
+
+	/** − 25 + : a number with buttons (no browser spinners) */
+	function stepper(name, value, { min, max, step = 1, unit = '', label, placeholder } = {}) {
+		const input = h('input', { type: 'number', name, min, max, step, value: value ?? '', placeholder, inputmode: 'decimal', 'aria-label': label })
+		const nudge = (d) => {
+			const v = input.value === '' ? (d > 0 ? min : min) : Number(input.value) + d * step
+			input.value = String(Math.round(Math.min(max, Math.max(min, v)) * 100) / 100)
+			input.dispatchEvent(new Event('input', { bubbles: true }))
+		}
+		return h('span', { class: 'imp-stepper' },
+			h('button', { type: 'button', 'aria-label': tr('Less'), onclick: () => nudge(-1) }, '−'),
+			input, unit ? h('span', { class: 'imp-stepper__unit' }, unit) : null,
+			h('button', { type: 'button', 'aria-label': tr('More'), onclick: () => nudge(1) }, '+'))
+	}
+
+	/** A commitment in Settings: its tile, name and goal; Edit opens the editor in place */
 	function commitmentRow(c) {
-		const name = h('input', { type: 'text', value: c.name, 'aria-label': tr('Name'), maxlength: 255 })
-		const color = h('input', { type: 'color', value: c.color, 'aria-label': tr('Color') })
-		const goal = h('input', { type: 'number', min: 0, max: 168, step: 0.5, value: c.weeklyGoal ? Math.round((c.weeklyGoal / 60) * 10) / 10 : '', placeholder: '–', class: 'imp-input-num imp-input-num--sm', 'aria-label': tr('Weekly goal in hours') })
-		const calendars = state.calendars.filter((cal) => !cal.linked || cal.id === c.calendarId)
-		const calSelect = h('select', { 'aria-label': tr('Calendar') },
-			c.calendarId === null ? h('option', { value: '', selected: true }, tr('No calendar')) : null,
-			calendars.map((cal) => h('option', { value: cal.id, selected: cal.id === c.calendarId }, cal.name)),
-			h('option', { value: 'new' }, tr('New calendar')))
-		return h('li', { class: 'imp-clist__item', style: { '--c': c.color } },
-			h('form', {
-				onsubmit: async (e) => {
-					e.preventDefault()
-					const body = { name: name.value, color: color.value, weeklyGoal: goal.value ? Math.round(Number(goal.value) * 60) : null }
-					const sel = state.features.builtinCalendar ? '' : calSelect.value
-					if (sel === 'new') Object.assign(body, { relink: true, calendarId: null })
-					else if (sel && Number(sel) !== c.calendarId) Object.assign(body, { relink: true, calendarId: Number(sel) })
-					await api('PUT', `commitments/${c.id}`, body)
-					toast(tr('Saved'))
-					await refresh()
-				},
-			},
-			color, name, state.features.builtinCalendar ? null : calSelect,
-			h('label', { class: 'imp-newtask__est', title: tr('Weekly goal') }, goal, h('span', null, tr('h/week'))),
-			h('button', { class: 'imp-button', type: 'submit' }, tr('Save')),
-			h('button', {
-				class: 'imp-button imp-button--danger', type: 'button',
-				onclick: async () => {
-					if (!window.confirm(state.features.builtinCalendar
-						? tr('Delete "{name}" with its tasks, notes and blocks? Tracked time stays as unplanned time.', { name: c.name })
-						: tr('Delete "{name}" and its tasks? The calendar and its events are kept; tracked time stays as unplanned time.', { name: c.name }))) return
-					await api('DELETE', `commitments/${c.id}`)
-					await refresh()
-				},
-			}, tr('Delete'))))
+		if (state.editingCommitment === c.id) return h('li', null, commitmentEditor(c))
+		const cal = state.calendars.find((x) => x.id === c.calendarId)
+		return h('li', { class: 'imp-clist__item' }, tile(c),
+			h('div', { class: 'imp-clist__text' },
+				h('strong', null, c.name),
+				h('span', { class: 'imp-muted' },
+					c.weeklyGoal ? tr('{time} per week', { time: fmtMin(c.weeklyGoal) }) : tr('No weekly goal'),
+					!state.features.builtinCalendar ? ` · ${cal ? tr('Calendar "{name}"', { name: cal.name }) : tr('No calendar linked')}` : '')),
+			h('button', { type: 'button', class: 'imp-icon-btn imp-clist__edit', 'aria-label': tr('Edit {name}', { name: c.name }), title: tr('Edit'), onclick: () => { state.editingCommitment = c.id; state.creatingCommitment = false; render() } },
+				icon('M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4', 18)))
+	}
+
+	/** Create or edit a commitment: name, color, weekly goal and (with Nextcloud) its calendar */
+	function commitmentEditor(c) {
+		const used = state.commitments.map((x) => x.color.toLowerCase())
+		let color = c ? c.color : PALETTE.find((p) => !used.includes(p)) || PALETTE[state.commitments.length % PALETTE.length]
+		const card = h('form', { class: 'imp-ceditor', style: { '--c': color } })
+		const name = h('input', { type: 'text', value: c ? c.name : '', placeholder: tr('e.g. Thesis'), 'aria-label': tr('Name'), maxlength: 255, required: true })
+		const preview = h('span', { class: 'imp-tile', 'aria-hidden': 'true' }, (c ? c.name : '').trim().charAt(0).toUpperCase() || '+')
+		name.addEventListener('input', () => { preview.textContent = name.value.trim().charAt(0).toUpperCase() || '+' })
+		const goal = stepper('goal', c && c.weeklyGoal ? Math.round((c.weeklyGoal / 60) * 10) / 10 : '', { min: 0, max: 168, step: 0.5, unit: tr('h/week'), label: tr('Weekly goal in hours'), placeholder: '–' })
+		// With Nextcloud a commitment is a calendar: a new one, or one of yours
+		const free = state.calendars.filter((x) => !x.linked || (c && x.id === c.calendarId))
+		const calSelect = state.features.builtinCalendar ? null : h('select', { 'aria-label': tr('Calendar'), onchange: () => { if (!c) name.disabled = calSelect.value !== 'new' } },
+			c && c.calendarId === null ? h('option', { value: '', selected: true }, tr('No calendar')) : null,
+			c ? null : h('option', { value: 'new' }, tr('Create a new calendar')),
+			free.map((x) => h('option', { value: x.id, selected: c && x.id === c.calendarId }, c ? x.name : tr('Use calendar "{name}"', { name: x.name }))),
+			c ? h('option', { value: 'new' }, tr('New calendar')) : null)
+		const close = () => { state.editingCommitment = null; state.creatingCommitment = false; render() }
+		card.addEventListener('submit', async (e) => {
+			e.preventDefault()
+			const hours = goal.querySelector('input').value
+			const weeklyGoal = hours ? Math.round(Number(hours) * 60) : null
+			if (c) {
+				const body = { name: name.value, color, weeklyGoal }
+				const sel = calSelect ? calSelect.value : ''
+				if (sel === 'new') Object.assign(body, { relink: true, calendarId: null })
+				else if (sel && Number(sel) !== c.calendarId) Object.assign(body, { relink: true, calendarId: Number(sel) })
+				await api('PUT', `commitments/${c.id}`, body)
+				toast(tr('Saved'))
+			} else {
+				const fromCal = calSelect && calSelect.value !== 'new'
+				if (!fromCal && !name.value.trim()) { name.focus(); return }
+				const made = await api('POST', 'commitments', fromCal ? { calendarId: Number(calSelect.value) } : { name: name.value, color })
+				if (weeklyGoal && made && made.id) await api('PUT', `commitments/${made.id}`, { weeklyGoal })
+				toast(tr('Commitment created'))
+			}
+			state.editingCommitment = null
+			state.creatingCommitment = false
+			await refresh()
+		})
+		card.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close() } })
+		card.append(...[
+			h('div', { class: 'imp-ceditor__head' }, preview, name),
+			h('div', { class: 'imp-ceditor__row' }, h('span', { class: 'imp-ceditor__label' }, tr('Color')), swatches(color, (v) => { color = v; card.style.setProperty('--c', v) })),
+			h('div', { class: 'imp-ceditor__row' }, h('span', { class: 'imp-ceditor__label' }, tr('Weekly goal')), goal),
+			calSelect ? h('div', { class: 'imp-ceditor__row' }, h('span', { class: 'imp-ceditor__label' }, tr('Calendar')), calSelect) : null,
+			h('div', { class: 'imp-ceditor__foot' },
+				c ? h('button', {
+					type: 'button', class: 'imp-button imp-button--danger',
+					onclick: async () => {
+						if (!window.confirm(state.features.builtinCalendar
+							? tr('Delete "{name}" with its tasks, notes and blocks? Tracked time stays as unplanned time.', { name: c.name })
+							: tr('Delete "{name}" and its tasks? The calendar and its events are kept; tracked time stays as unplanned time.', { name: c.name }))) return
+						await api('DELETE', `commitments/${c.id}`)
+						state.editingCommitment = null
+						await refresh()
+					},
+				}, tr('Delete')) : null,
+				h('span', { class: 'imp-ceditor__spacer' }),
+				h('button', { type: 'button', class: 'imp-button', onclick: close }, tr('Cancel')),
+				h('button', { type: 'submit', class: 'imp-button imp-button--primary' }, c ? tr('Save') : tr('Create')))].filter(Boolean))
+		setTimeout(() => { if (card.isConnected && !c) name.focus() })
+		return card
 	}
 
 	function newCommitmentForm() {
-		const name = h('input', { type: 'text', placeholder: tr('e.g. Thesis'), 'aria-label': tr('Name'), maxlength: 255 })
-		const palette = ['#0082c9', '#7b3fe4', '#e4573f', '#2e9b5f', '#d4a017', '#c2185b']
-		const used = state.commitments.map((c) => c.color.toLowerCase())
-		const color = h('input', { type: 'color', value: palette.find((p) => !used.includes(p)) || palette[state.commitments.length % palette.length], 'aria-label': tr('Color') })
-		const free = state.calendars.filter((c) => !c.linked)
-		const source = h('select', { 'aria-label': tr('Calendar'), onchange: () => { const n = source.value === 'new'; name.disabled = !n; color.disabled = !n } },
-			h('option', { value: 'new' }, tr('Create a new calendar')),
-			free.map((cal) => h('option', { value: cal.id }, tr('Use calendar "{name}"', { name: cal.name }))))
-		return h('form', {
-			class: 'imp-newcommitment',
-			onsubmit: async (e) => {
-				e.preventDefault()
-				const body = source.value === 'new' ? { name: name.value, color: color.value } : { calendarId: Number(source.value) }
-				if (source.value === 'new' && !name.value.trim()) { name.focus(); return }
-				await api('POST', 'commitments', body)
-				toast(tr('Commitment created'))
-				await refresh()
-			},
-		},
-		h('h3', null, tr('New commitment')),
-		h('div', { class: 'imp-newcommitment__row' }, state.features.builtinCalendar ? null : source, color, name,
-			h('button', { class: 'imp-button imp-button--primary', type: 'submit' }, tr('Create'))))
+		if (state.creatingCommitment) return commitmentEditor(null)
+		return h('button', { type: 'button', class: 'imp-clist__new', onclick: () => { state.creatingCommitment = true; state.editingCommitment = null; render() } }, '+ ', tr('New commitment'))
 	}
 
 	// ---------------------------------------------------------------------------
@@ -2992,8 +3063,9 @@
 	async function pageCalendar() {
 		await loadState()
 		const page = h('div', { class: 'imp-page imp-cv' })
-		if (!state.features.calendarView) {
-			page.append(h('p', { class: 'imp-empty' }, tr('Your blocks are in your calendar app.')))
+		if (!calendarShown()) {
+			page.append(h('div', { class: 'imp-empty' }, h('p', null, tr('Your blocks are in your calendar app.')),
+				state.features.calendarView ? h('a', { class: 'imp-button', href: '#settings' }, tr('Show the Calendar page')) : null))
 			return page
 		}
 		if (!state.commitments.length) {
@@ -3091,11 +3163,14 @@
 		const body = h('div', { class: 'imp-cv__body', style: { '--days': n, height: `${24 * HOUR_PX}px` } }, hours, h('div', { class: 'imp-cv__cols' }, cols))
 		const scroll = h('div', { class: 'imp-cv__scroll', onscroll: (e) => { state.calScroll = e.target.scrollTop } }, body)
 		// Opens at the current hour (or 7:00), then where you left it
-		requestAnimationFrame(() => {
-			if (!document.contains(scroll)) return
+		// (once the grid is on the page: it may be added a few frames later)
+		let tries = 60
+		const place = () => {
+			if (!document.contains(scroll) || !scroll.clientHeight) { if (tries--) requestAnimationFrame(place); return }
 			const inView = days.some((d) => sameDay(d, today))
 			scroll.scrollTop = state.calScroll ?? Math.max(0, ((inView ? today.getHours() - 1.5 : 7) * HOUR_PX))
-		})
+		}
+		requestAnimationFrame(place)
 		calPointer(body)
 		return h('div', { class: 'imp-cv__grid' }, head, scroll)
 	}
@@ -3255,7 +3330,8 @@
 		el.onClose = onClose
 		el.addEventListener('mousedown', (e) => e.stopPropagation())
 		el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeCalPanel() } })
-		document.body.append(el)
+		// Inside the app (its look and colors), fixed to the window
+		document.getElementById('tracker-app').append(el)
 		calPanelEl = el
 		calBusy = true
 		const place = () => {
@@ -3267,8 +3343,8 @@
 			if (left + w > window.innerWidth - 8) left = r.left - w - 10
 			if (left < 8) left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8)
 			const top = Math.min(Math.max(8, r.top), window.innerHeight - hgt - 8)
-			el.style.left = `${left + window.scrollX}px`
-			el.style.top = `${top + window.scrollY}px`
+			el.style.left = `${left}px`
+			el.style.top = `${top}px`
 		}
 		const fill = async () => {
 			const focused = el.contains(document.activeElement) && document.activeElement.id ? document.activeElement.id : null

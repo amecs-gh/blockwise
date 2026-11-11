@@ -13,6 +13,9 @@ if (!fs.existsSync(path.join(src, 'appinfo', 'info.xml'))) {
 }
 fs.mkdirSync(dst, { recursive: true })
 for (const [from, to] of Object.entries(files)) fs.copyFileSync(path.join(src, from), path.join(dst, to))
+// The bundled font (Poppins, SIL Open Font License)
+fs.mkdirSync(path.join(dst, 'fonts'), { recursive: true })
+for (const f of fs.readdirSync(path.join(src, 'css', 'fonts'))) fs.copyFileSync(path.join(src, 'css', 'fonts', f), path.join(dst, 'fonts', f))
 // Translations as a script, so they're there before the interface starts
 const it = JSON.parse(fs.readFileSync(path.join(src, 'l10n', 'it.json'), 'utf8')).translations
 fs.writeFileSync(path.join(dst, 'l10n.js'), `window.__trackerL10n = ${JSON.stringify({ it })}\n`)

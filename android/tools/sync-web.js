@@ -6,6 +6,8 @@ fs.copyFileSync(path.join(src, 'js/tracker.js'), path.join(dst, 'tracker.js'))
 fs.copyFileSync(path.join(src, 'js/engine.js'), path.join(dst, 'engine.js'))
 fs.copyFileSync(path.join(src, 'js/markdown.js'), path.join(dst, 'markdown.js'))
 fs.copyFileSync(path.join(src, 'css/tracker.css'), path.join(dst, 'tracker.css'))
+fs.mkdirSync(path.join(dst, 'fonts'), { recursive: true })
+for (const f of fs.readdirSync(path.join(src, 'css/fonts'))) fs.copyFileSync(path.join(src, 'css/fonts', f), path.join(dst, 'fonts', f))
 const it = JSON.parse(fs.readFileSync(path.join(src, 'l10n/it.json'), 'utf8')).translations
 fs.writeFileSync(path.join(dst, 'l10n.js'), `window.__trackerL10n = ${JSON.stringify({ it })}\n`)
 console.log('copied')

@@ -28,7 +28,7 @@
 		reminderMinutes: [15, 0, 120],
 		defaultEstimate: [15, 5, 600],
 	}
-	const SETTINGS_BOOL = { pomodoro: false }
+	const SETTINGS_BOOL = { pomodoro: false, showCalendar: true }
 	const TYPES = ['commitment', 'task', 'subtask', 'note', 'session', 'block']
 	const MAX_SUBTASKS = 200
 	const MAX_NOTES = 1000
@@ -41,7 +41,7 @@
 		session: ['commitment', 'start', 'end', 'blockUid', 'pomodoro'],
 		// The built-in calendar's blocks (only on devices without Nextcloud; never sent to a Nextcloud server)
 		block: ['commitment', 'title', 'start', 'end', 'repeat', 'until', 'skip', 'origin', 'created'],
-		settings: [...Object.keys({ focusMinutes: 0, shortBreakMinutes: 0, longBreakMinutes: 0, sessionsBeforeLongBreak: 0, reminderMinutes: 0, defaultEstimate: 0 }), 'pomodoro', 'longBreakUntil'],
+		settings: [...Object.keys({ focusMinutes: 0, shortBreakMinutes: 0, longBreakMinutes: 0, sessionsBeforeLongBreak: 0, reminderMinutes: 0, defaultEstimate: 0 }), 'pomodoro', 'showCalendar', 'longBreakUntil'],
 	}
 	const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 	/** "Carried over" marks: a set, at most 500 (the newest), like the server */

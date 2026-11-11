@@ -1,3 +1,32 @@
+/* The font: Poppins (SIL Open Font License 1.1), bundled with the interface */
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url("web/fonts/Poppins-Regular.woff") format("woff");
+}
+@font-face {
+	font-family: "Poppins";
+	font-style: italic;
+	font-weight: 400;
+	font-display: swap;
+	src: url("web/fonts/Poppins-Italic.woff") format("woff");
+}
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 500;
+	font-display: swap;
+	src: url("web/fonts/Poppins-Medium.woff") format("woff");
+}
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 600 800;
+	font-display: swap;
+	src: url("web/fonts/Poppins-Bold.woff") format("woff");
+}
 /* Shared look for the app's own windows: native macOS type, light and dark. */
 :root {
 	--bg: #f6f5fb;
@@ -32,7 +61,7 @@
 html,
 body {
 	margin: 0;
-	font: 13px/1.4 ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+	font: 13px/1.4 Poppins, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
 	color: var(--text);
 	font-variant-numeric: tabular-nums;
 	-webkit-font-smoothing: antialiased;

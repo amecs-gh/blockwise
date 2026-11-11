@@ -495,7 +495,7 @@ class SyncService {
 			$v = $fields[$k];
 			// Each setting has one type: a wrong one is ignored (and its clock not taken)
 			$ok = match ($k) {
-				'pomodoro' => is_bool($v),
+				'pomodoro', 'showCalendar' => is_bool($v),
 				'longBreakUntil' => $v === null || is_int($v),
 				default => is_int($v),
 			};

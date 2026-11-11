@@ -21,6 +21,8 @@ class SettingsService {
 	];
 	public const BOOLS = [
 		'pomodoro' => false,
+		// the Calendar page in the apps (blocks keep working without it)
+		'showCalendar' => true,
 	];
 
 	public function __construct(

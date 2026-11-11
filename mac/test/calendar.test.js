@@ -73,6 +73,9 @@ function bridge() {
 		})
 		await page.evaluate(() => { location.hash = '#calendar' })
 		await page.waitForSelector('.imp-cv__col')
+		// The font must be in before measuring the grid for drags (it changes the layout)
+		await page.evaluate(() => document.fonts.ready)
+		await page.waitForTimeout(300)
 
 		// Week view
 		assert.equal(await page.locator('.imp-cv__col').count(), 7)
@@ -124,7 +127,8 @@ function bridge() {
 		await page.waitForSelector('.imp-cv__ev:has-text("Weekend writing")')
 		ok(`${locale}: drag on the grid → new block 14:00–15:30`)
 
-		// Move it to Sunday 16:00 by dragging
+		// Move it to Sunday 16:00 by dragging (once the grid has scrolled back to where it was)
+		await page.waitForTimeout(300)
 		const ev = page.locator('.imp-cv__ev:has-text("Weekend writing")')
 		const eb = await ev.boundingBox()
 		const sun = await page.locator('.imp-cv__col').nth(6).boundingBox()
@@ -132,8 +136,10 @@ function bridge() {
 		await page.mouse.down()
 		await page.mouse.move(sun.x + 20, eb.y + 10 + 2 * 48, { steps: 10 })
 		await page.mouse.up()
-		await page.waitForTimeout(200)
-		const moved = await page.evaluate(async () => (await window.trackerApp.api('GET', `blocks?from=${Math.floor(new Date(2026, 10, 15).getTime() / 1000)}&to=${Math.floor(new Date(2026, 10, 16).getTime() / 1000)}`)).blocks.find((b) => b.title === 'Weekend writing'))
+		// Saving the move takes a moment: wait for it (up to 3 s)
+		const sunday = () => page.evaluate(async () => (await window.trackerApp.api('GET', `blocks?from=${Math.floor(new Date(2026, 10, 15).getTime() / 1000)}&to=${Math.floor(new Date(2026, 10, 16).getTime() / 1000)}`)).blocks.find((b) => b.title === 'Weekend writing'))
+		let moved
+		for (let i = 0; i < 30 && !(moved = await sunday()); i++) await page.waitForTimeout(100)
 		if (process.env.DEBUG) console.log('moved', new Date(moved.start * 1000).toString(), eb, sun)
 		assert.ok(moved, 'now on Sunday')
 		assert.equal(new Date(moved.start * 1000).getHours(), 16)
@@ -141,6 +147,7 @@ function bridge() {
 		ok(`${locale}: drag a block to another day and time`)
 
 		// Resize it from its lower edge to 18:00
+		await page.waitForTimeout(300)
 		const ev2 = page.locator('.imp-cv__ev:has-text("Weekend writing")')
 		const rb = await ev2.boundingBox()
 		await page.mouse.move(rb.x + rb.width / 2, rb.y + rb.height - 2)
@@ -153,6 +160,7 @@ function bridge() {
 		ok(`${locale}: drag the lower edge to make it longer`)
 
 		// Move one weekday block: "this block only"
+		await page.waitForTimeout(300)
 		const wed = page.locator('.imp-cv__col').nth(2).locator('.imp-cv__ev:has-text("Thesis")')
 		const wb = await wed.boundingBox()
 		await page.mouse.move(wb.x + 20, wb.y + 10)

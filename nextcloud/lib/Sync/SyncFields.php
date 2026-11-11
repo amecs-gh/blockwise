@@ -58,7 +58,7 @@ final class SyncFields {
 	];
 
 	/** Settings sync as one record per user; its fields are these keys. */
-	public const SETTINGS = ['focusMinutes', 'shortBreakMinutes', 'longBreakMinutes', 'sessionsBeforeLongBreak', 'reminderMinutes', 'defaultEstimate', 'pomodoro', 'longBreakUntil'];
+	public const SETTINGS = ['focusMinutes', 'shortBreakMinutes', 'longBreakMinutes', 'sessionsBeforeLongBreak', 'reminderMinutes', 'defaultEstimate', 'pomodoro', 'showCalendar', 'longBreakUntil'];
 
 	/** Fields that hold another record (as its uuid on the wire) => its type */
 	public const REFS = [
