@@ -1,0 +1,32 @@
+# Packages the Nextcloud app as blockwise-nextcloud.tar.gz (a "tracker" folder,
+# the app's id, ready for the server's apps folder) and, from main, publishes it
+# as the "nextcloud-latest" release, the file the website links to.
+name: Nextcloud app
+on:
+  push:
+    paths: ['nextcloud/**', '.github/workflows/nextcloud.yml']
+  workflow_dispatch:
+permissions:
+  contents: write # only to publish the release
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package
+        run: |
+          mkdir -p out/tracker
+          cp -r nextcloud/appinfo nextcloud/css nextcloud/img nextcloud/js nextcloud/l10n nextcloud/lib nextcloud/templates nextcloud/README.md nextcloud/LICENSE out/tracker/
+          tar -C out -czf blockwise-nextcloud.tar.gz tracker
+          tar -tzf blockwise-nextcloud.tar.gz | head -20
+      - name: Publish as the "nextcloud-latest" release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(sed -n 's:.*<version>\(.*\)</version>.*:\1:p' nextcloud/appinfo/info.xml)
+          gh release delete nextcloud-latest --yes --cleanup-tag || true
+          gh release create nextcloud-latest blockwise-nextcloud.tar.gz \
+            --title "Blockwise for Nextcloud $VERSION (latest build)" \
+            --notes "Built from ${GITHUB_SHA::7}. Nextcloud 32 to 35: extract into your server's apps folder (it makes a folder called tracker), then enable Blockwise under Apps." \
+            --prerelease

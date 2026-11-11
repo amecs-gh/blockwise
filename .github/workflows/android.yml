@@ -68,9 +68,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VARIANT: ${{ steps.key.outputs.variant }}
         run: |
-          APK=$( [ "$VARIANT" = release ] && echo Blockwise.apk || echo Blockwise-debug.apk )
+          # Always Blockwise.apk: the website links to that name
+          [ "$VARIANT" = release ] || mv Blockwise-debug.apk Blockwise.apk
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest "$APK" \
+          gh release create latest Blockwise.apk \
             --title "Blockwise for Android (latest build)" \
-            --notes "Built from ${GITHUB_SHA::7} ($VARIANT). Download $APK on your phone and open it to install." \
+            --notes "Built from ${GITHUB_SHA::7} ($VARIANT). Download Blockwise.apk on your phone and open it to install." \
             --prerelease

@@ -1,6 +1,7 @@
 # Builds the Mac app on GitHub's Apple silicon machines: tests, the Apple
-# Calendar helper, Blockwise.app (signed ad hoc), uploaded as a build artifact
-# (Actions → the run → Artifacts). Not notarized: see mac/README.md.
+# Calendar helper, Blockwise.app (signed ad hoc), and from main a disk image
+# published as the "mac-latest" release (Blockwise-mac.dmg), the file the
+# website links to. Not notarized: see mac/README.md.
 #
 # Dropbox and Google Drive appear in the app when these repository variables
 # are set (Settings → Secrets and variables → Actions → Variables; they are app
@@ -11,7 +12,7 @@ on:
     paths: ['mac/**', 'nextcloud/js/**', 'nextcloud/css/**', 'nextcloud/l10n/**', 'nextcloud/appinfo/info.xml', '.github/workflows/mac.yml']
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write # only to publish the release
 defaults:
   run:
     working-directory: mac
@@ -55,9 +56,19 @@ jobs:
             exit 1
           fi
           echo "running after 20 s"; kill $PID
-          ditto -c -k --keepParent "$APP" Blockwise-mac.zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Blockwise-mac
-          path: mac/Blockwise-mac.zip
-          retention-days: 30
+      - name: Disk image
+        run: |
+          # The app next to a link to Applications: drag one onto the other
+          mkdir dmg && ditto dist/mac-arm64/Blockwise.app dmg/Blockwise.app && ln -s /Applications dmg/Applications
+          hdiutil create -volname Blockwise -srcfolder dmg -ov -format UDZO Blockwise-mac.dmg
+          hdiutil verify Blockwise-mac.dmg
+      - name: Publish as the "mac-latest" release
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete mac-latest --yes --cleanup-tag || true
+          gh release create mac-latest Blockwise-mac.dmg \
+            --title "Blockwise for Mac (latest build)" \
+            --notes "Built from ${GITHUB_SHA::7}. Apple silicon, macOS 13 or later. Not notarized: the first time, open it from System Settings → Privacy & Security → Open Anyway." \
+            --prerelease

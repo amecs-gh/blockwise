@@ -32,6 +32,12 @@ All three show the same interface: it is written once, in `nextcloud/js` and
 
 ## Installing
 
+Ready-made builds come from GitHub Actions on every push to `main`: the
+releases **mac-latest** (`Blockwise-mac.dmg`), **latest** (`Blockwise.apk`) and
+**nextcloud-latest** (`blockwise-nextcloud.tar.gz`). The [`website/`](website)
+folder is a download page for them, in English and Italian.
+
+
 **Nextcloud** (version 32 to 35): copy the `nextcloud` folder into your
 server's `apps` folder **named `tracker`** (the app's id), then enable it:
 

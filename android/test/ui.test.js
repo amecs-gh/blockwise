@@ -70,7 +70,7 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '' 
 		for (const pg of ['now', 'tasks', 'notes', 'done', 'time', 'settings', firstC]) {
 			await a.page.evaluate((h) => { location.hash = h }, '#' + pg)
 			// wait until the page has loaded (some make several requests)
-			await a.page.waitForFunction((pg) => { const h = document.querySelector('.imp-page h1'); const want = { now: null, tasks: 'Tasks|Task', done: 'Done|Fatto', time: 'Time|Tempo', settings: 'Settings|Impostazioni' }[pg]; return pg === 'now' ? !!document.querySelector('.imp-timer') : pg === 'tasks' ? !!document.querySelector('.imp-tq__top') : pg === 'notes' ? !!document.querySelector('#imp-note-new') : pg.startsWith('c/') ? !!document.querySelector('.imp-cpage') : !!h && new RegExp('^(' + want + ')$').test(h.textContent.trim()) }, pg, { timeout: 15000 })
+			await a.page.waitForFunction((pg) => { const h = document.querySelector('.imp-page h1'); const want = { now: null, tasks: 'Tasks|Task', done: 'Done|Fatto', time: 'Time|Tempo', settings: 'Settings|Impostazioni' }[pg]; return pg === 'now' ? !!document.querySelector('.imp-timer') && !!document.querySelector('.imp-day h2') && !document.querySelector('.imp-day [data-loading]') : pg === 'tasks' ? !!document.querySelector('.imp-tq__top') : pg === 'notes' ? !!document.querySelector('#imp-note-new') : pg.startsWith('c/') ? !!document.querySelector('.imp-cpage') : !!h && new RegExp('^(' + want + ')$').test(h.textContent.trim()) }, pg, { timeout: 15000 })
 			await a.page.waitForTimeout(400)
 			const info = await a.page.evaluate(() => {
 				const m = document.querySelector('.imp-main')

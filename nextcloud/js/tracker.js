@@ -771,13 +771,21 @@
 		const day = addPeriod(new Date(new Date().setHours(0, 0, 0, 0)), 'day', state.nowDay)
 		const from = Math.floor(day / 1000)
 		const to = Math.floor(addPeriod(day, 'day', 1) / 1000)
+		// Drawn at once with what was loaded last time (the phone's calendar can be slow), then updated
+		const cached = state.dayCache && state.dayCache.from === from ? state.dayCache.blocks : null
+		drawDay(el, day, from, to, cached)
 		let blocks = []
 		try { blocks = (await api('GET', `blocks?from=${from}&to=${to}`)).blocks } catch (e) { /* toast shown */ }
 		blocks = blocks.filter((b) => b.start < to && b.end > from).sort((a, b) => a.start - b.start)
+		state.dayCache = { from, blocks }
+		drawDay(el, day, from, to, blocks)
+	}
+
+	function drawDay(el, day, from, to, blocks) {
 		const now = nowTs()
 		const d = state.dashboard
 		const nav = (delta) => { state.nowDay = delta && state.nowDay + delta; fillDay(el) }
-		const planned = blocks.reduce((sum, b) => sum + Math.min(b.end, to) - Math.max(b.start, from), 0)
+		const planned = (blocks || []).reduce((sum, b) => sum + Math.min(b.end, to) - Math.max(b.start, from), 0)
 		const item = (b) => {
 			const c = commitmentById(b.commitmentId) || { id: b.commitmentId, name: nameOf(b.commitmentId), color: colorOf(b.commitmentId) }
 			const entry = d && d.commitments.find((e) => e.commitment.id === c.id)
@@ -809,8 +817,9 @@
 					state.nowDay ? h('button', { class: 'imp-button', onclick: () => nav(0) }, tr('Today')) : null,
 					h('button', { class: 'imp-icon-btn', 'aria-label': tr('Previous day'), onclick: () => nav(-1) }, '‹'),
 					h('button', { class: 'imp-icon-btn', 'aria-label': tr('Next day'), onclick: () => nav(1) }, '›'))),
-			blocks.length
-				? h('ol', { class: 'imp-day__list' }, blocks.map(item))
+			!blocks ? h('p', { class: 'imp-muted imp-day__empty', 'data-loading': '' }, tr('Loading…'))
+				: blocks.length
+					? h('ol', { class: 'imp-day__list' }, blocks.map(item))
 				: h('p', { class: 'imp-muted imp-day__empty' }, tr('No blocks planned.'), ' ', state.features.calendarView ? h('a', { href: '#calendar' }, tr('Plan a block')) : null))
 	}
 
@@ -906,7 +915,7 @@
 				h('h2', null, entry.currentBlock ? tr('In this block') : block ? tr('For the next block') : tr('Up next')),
 				h('span', { class: 'imp-muted' }, h('span', { class: 'imp-dot', style: { background: c.color } }), c.name, block ? ` · ${blockTime(block)}` : '')),
 			planned.length
-				? planned.map((t) => taskChecklist(t, { addable: true }))
+				? planned.map((t) => taskChecklist(t, { addable: true, hideDone: true }))
 				: h('p', { class: 'imp-muted' }, tr('No open tasks.'), ' ', h('a', { href: '#tasks', onclick: () => { state.tasksFor = c.id } }, tr('Add tasks'))),
 			later.length
 				? h('details', { class: 'imp-later' },
@@ -926,15 +935,17 @@
 		const single = t.subtasks.length === 1 && t.subtasks[0].title === t.title
 		const badge = t.carried > 0 ? h('span', { class: 'imp-badge', title: tr('Not finished in an earlier block') }, tr('carried over')) : null
 		const est = (x) => (x.estimate ? h('span', { class: 'imp-est', title: tr('Estimate') }, fmtMin(x.estimate)) : null)
+		// On Now only what is left to do (checked ones are in Done); reordering is on the Tasks page then
+		const sortable = t.subtasks.length > 1 && !opts.hideDone
 		const box = (x, isTitle) => {
 			const sid = `imp-sub-${x.id}`
 			const el = h(isTitle ? 'div' : 'li', { class: `imp-check ${isTitle ? 'imp-task__title' : ''}` },
-				!isTitle && t.subtasks.length > 1 ? subtaskHandle(t) : null,
+				!isTitle && sortable ? subtaskHandle(t) : null,
 				h('input', { type: 'checkbox', id: sid, checked: x.done, onchange: (e) => setSubtaskDone(t, x, e.target.checked) }),
 				h('label', { for: sid }, x.title),
 				isTitle ? badge : null,
 				est(x))
-			if (!isTitle && t.subtasks.length > 1) makeSubtaskDraggable(el, x, t)
+			if (!isTitle && sortable) makeSubtaskDraggable(el, x, t)
 			return el
 		}
 		const left = remainingMin(t)
@@ -949,7 +960,7 @@
 				h('span', { class: 'imp-muted imp-task__count' },
 					`${doneCount}/${t.subtasks.length}`,
 					left && doneCount < t.subtasks.length ? ` · ${tr('{time} left', { time: fmtMin(left) })}` : '')),
-			h('ul', { class: 'imp-subtasks' }, t.subtasks.map((x) => box(x, false))),
+			h('ul', { class: 'imp-subtasks' }, t.subtasks.filter((x) => !opts.hideDone || !x.done).map((x) => box(x, false))),
 			adder)
 	}
 

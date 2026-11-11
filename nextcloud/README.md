@@ -22,9 +22,9 @@ calendars.
   a goal line on the Time page. A block takes tasks from the top until their
   estimates fill it. Unfinished tasks stay on top, so they show up in the next
   block and get a "carried over" badge.
-- **Now page**: a small month calendar colored by blocks (overlaps marked), the
-  current block's subtasks, and "+ Add subtask" right there. While tracking, the other
-  commitments shrink to one line each (focus view).
+- **Now page**: the day as a timeline of blocks (‹ › for other days), the
+  timer, the open subtasks of the current or next block with "+ Add subtask"
+  right there, and every commitment on one line with play and its weekly goal.
 - **Done page**: a week timeline of planned blocks, tracked time and checked-off
   subtasks; hovering a block shows what you did in it.
 - Reorder subtasks by dragging their handle (or Alt+↑/↓ on the checkbox).
