@@ -41,6 +41,7 @@ return [
 		['name' => 'api#sessions', 'url' => '/api/sessions', 'verb' => 'GET'],
 		['name' => 'api#startSession', 'url' => '/api/sessions/start', 'verb' => 'POST'],
 		['name' => 'api#stopSession', 'url' => '/api/sessions/stop', 'verb' => 'POST'],
+		['name' => 'api#updateSession', 'url' => '/api/sessions/{id}', 'verb' => 'PUT'],
 		['name' => 'api#deleteSession', 'url' => '/api/sessions/{id}', 'verb' => 'DELETE'],
 
 		// Sync for local-first apps (see Sync\SyncService)

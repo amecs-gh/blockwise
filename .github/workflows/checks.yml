@@ -30,5 +30,7 @@ jobs:
         run: node nextcloud/tests/filesync.test.js
       - name: Built-in calendar
         run: TZ=Europe/Zurich node nextcloud/tests/blocks.test.js
+      - name: Started earlier (moving the start)
+        run: node nextcloud/tests/start.test.js
       - name: Dropbox and Google Drive (stand-in servers)
         run: node mac/test/drives.test.js

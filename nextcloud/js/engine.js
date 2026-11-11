@@ -30,10 +30,8 @@
 	}
 	const SETTINGS_BOOL = { pomodoro: false }
 	const TYPES = ['commitment', 'task', 'subtask', 'note', 'session', 'block']
-	const REFS = { task: { commitment: 'commitment' }, subtask: { task: 'task' }, note: { commitment: 'commitment' }, session: { commitment: 'commitment' }, block: { commitment: 'commitment' } }
 	const MAX_SUBTASKS = 200
 	const MAX_NOTES = 1000
-	const NOTE_MAX = 2000
 	// Fields each record type may have (the server's lib/Sync/SyncFields.php); anything else from a server is ignored
 	const FIELDS = {
 		commitment: ['name', 'color', 'goal', 'position', 'calendarUrl', 'created'],
@@ -959,6 +957,26 @@
 				if (body.longBreak) writeSettings({ longBreakUntil: end + settings().longBreakMinutes * 60 })
 				changed()
 				return { session: sessionJson(run[0], db.records.session[run[0]]), longBreakUntil: longBreakUntil() }
+			}],
+			// You started earlier than you pressed play: the running session starts earlier (at most 12 hours
+			// back). Right after a switch, the session before ends then too; else it can't reach into it.
+			['PUT', /^sessions\/(\d+)$/, async (m, q, body) => {
+				const [su, s] = byLid('session', m[1])
+				if (!complete('session', s) || (s.f.end !== null && s.f.end !== undefined)) throw new ApiError('Only the running session can be changed')
+				const t = now()
+				const want = Math.trunc(Number(body.start))
+				if (!Number.isFinite(want)) throw new ApiError('Invalid time')
+				let start = Math.max(t - 12 * 3600, Math.min(want, t))
+				const prev = Object.entries(db.records.session)
+					.filter(([u, r]) => u !== su && complete('session', r) && r.f.end !== null && r.f.end !== undefined && r.f.end <= s.f.start)
+					.sort(([, a], [, b]) => b.f.end - a.f.end)[0]
+				if (prev && s.f.start - prev[1].f.end <= 1) {
+					start = Math.max(start, prev[1].f.start + 60) // the one before keeps at least a minute
+					write('session', prev[0], { end: start })
+				} else if (prev) start = Math.max(start, prev[1].f.end)
+				write('session', su, { start })
+				changed()
+				return { ...sessionJson(su, db.records.session[su]), clamped: start !== want }
 			}],
 			['DELETE', /^sessions\/(\d+)$/, async (m) => {
 				const [su] = byLid('session', m[1])

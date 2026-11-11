@@ -362,7 +362,6 @@ body.android .imp-page h3 {
 	letter-spacing: 0.1px;
 }
 body.android .imp-muted,
-body.android .imp-lead,
 body.android .imp-note {
 	color: var(--md-onSurfaceVariant);
 }

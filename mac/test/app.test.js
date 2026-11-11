@@ -166,7 +166,7 @@ async function openWindow(browser, file, winName, opts = {}) {
 
 	step('"Calendar" opens the calendar page (Nextcloud\'s calendars), in the app')
 	await win.page.click('.imp-nav a[href="#calendar"]')
-	await win.page.waitForSelector('.imp-cal__col')
+	await win.page.waitForSelector('.imp-cv__col')
 	assert.ok(!T.log.some((l) => l.includes('openPath /System/Applications/Calendar.app')), 'not Apple Calendar')
 	await win.page.screenshot({ path: `${shots}/mac-nc-calendar.png` })
 

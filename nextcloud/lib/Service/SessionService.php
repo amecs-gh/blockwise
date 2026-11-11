@@ -90,6 +90,37 @@ class SessionService {
 		return $s;
 	}
 
+	/**
+	 * You started earlier than you pressed play: the running session starts
+	 * earlier (at most 12 hours back). Right after a switch, the session before
+	 * ends then too; otherwise the start can't reach into it.
+	 * @return array the session, and `clamped` when the start had to move
+	 */
+	public function moveStart(string $userId, int $id, int $want): array {
+		$s = $this->sessions->find($id, $userId);
+		if ($s->getEnd() !== null) {
+			throw new ServiceException('Only the running session can be changed');
+		}
+		$now = $this->time->getTime();
+		$start = max($now - 12 * 3600, min($want, $now));
+		$prev = null;
+		foreach ($this->sessions->findBetween($userId, $now - 36 * 3600, (int)$s->getStart() + 1) as $o) {
+			if ($o->getId() !== $s->getId() && $o->getEnd() !== null && $o->getEnd() <= $s->getStart() && ($prev === null || $o->getEnd() > $prev->getEnd())) {
+				$prev = $o;
+			}
+		}
+		if ($prev !== null && $s->getStart() - $prev->getEnd() <= 1) {
+			$start = max($start, (int)$prev->getStart() + 60); // the one before keeps at least a minute
+			$prev->setEnd($start);
+			$this->sessions->update($prev);
+		} elseif ($prev !== null) {
+			$start = max($start, (int)$prev->getEnd());
+		}
+		$s->setStart($start);
+		$this->sessions->update($s);
+		return $s->jsonSerialize() + ['clamped' => $start !== $want];
+	}
+
 	/** @return Session[] */
 	public function list(string $userId, int $from, int $to): array {
 		return $this->sessions->findBetween($userId, $from, $to);

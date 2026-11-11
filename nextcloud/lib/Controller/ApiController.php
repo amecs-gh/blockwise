@@ -381,6 +381,17 @@ class ApiController extends Controller {
 		return $this->handle(fn () => ['session' => $this->sessions->stop($this->uid(), $at, $longBreak), 'longBreakUntil' => $this->settings->getLongBreakUntil($this->uid())]);
 	}
 
+	/** The running session started earlier than play was pressed */
+	#[NoAdminRequired]
+	public function updateSession(int $id, mixed $start = null): JSONResponse {
+		return $this->handle(function () use ($id, $start) {
+			if (!is_numeric($start)) {
+				throw new ServiceException('Invalid time');
+			}
+			return $this->sessions->moveStart($this->uid(), $id, (int)$start);
+		});
+	}
+
 	#[NoAdminRequired]
 	public function deleteSession(int $id): JSONResponse {
 		return $this->handle(function () use ($id) {

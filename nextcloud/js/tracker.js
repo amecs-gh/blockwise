@@ -849,6 +849,40 @@
 				cells))
 	}
 
+	/** You started before pressing play: move the running session's start back */
+	function startMenu(anchor, r) {
+		const move = async (start, close) => {
+			close()
+			try {
+				const s = await api('PUT', `sessions/${r.id}`, { start })
+				if (s.clamped) toast(tr('Started at {time}: the session before ended then.', { time: fmt.time.format(at(s.start)) }))
+			} catch (e) { /* toast shown */ }
+			refresh()
+		}
+		// Like the estimate menu: preset chips, or type the time and press Enter
+		const input = h('input', {
+			type: 'time',
+			class: 'imp-menu__input',
+			value: `${String(at(r.start).getHours()).padStart(2, '0')}:${String(at(r.start).getMinutes()).padStart(2, '0')}`,
+			'aria-label': tr('Started at'),
+			onkeydown: (e) => {
+				if (e.key !== 'Enter' || !input.value) return
+				e.preventDefault()
+				const [hh, mm] = input.value.split(':').map(Number)
+				const d = at(nowTs())
+				d.setHours(hh, mm, 0, 0)
+				// A time later than now: yesterday (past midnight)
+				if (d.getTime() / 1000 > nowTs()) d.setDate(d.getDate() - 1)
+				move(Math.floor(d.getTime() / 1000), closeMenu)
+			},
+		})
+		openMenu(anchor, (close) => [
+			h('p', { class: 'imp-menu__hint' }, tr('I started earlier')),
+			h('div', { class: 'imp-menu__chips' }, [5, 10, 15, 30].map((m) => h('button', { type: 'button', class: 'imp-chip', autofocus: m === 5, onclick: () => move(r.start - m * 60, close) }, `−${tr('{n} min', { n: m })}`))),
+			input,
+		], { label: tr('Change the start') })
+	}
+
 	function timerStrip(d) {
 		const r = d.running
 		const now = nowTs()
@@ -870,6 +904,8 @@
 				h('span', { class: 'imp-timer__label' }, nameOf(r.commitmentId),
 					block ? h('span', { class: 'imp-timer__block' }, ` · ${block.title || tr('Block')} ${fmt.time.format(at(block.start))}–${fmt.time.format(at(block.end))}`) : null),
 				h('span', { class: 'imp-timer__clock', 'data-live': 'elapsed', 'data-ts': r.start }, clock(now - r.start)),
+				h('button', { type: 'button', class: 'imp-timer__since', title: tr('Started earlier? Change the start'), onclick: (e) => startMenu(e.currentTarget, r) },
+					tr('Started {time}', { time: fmt.time.format(at(r.start)) }), h('span', { 'aria-hidden': 'true' }, ' ✎')),
 				block ? h('span', { class: 'imp-timer__sub' }, h('span', { 'data-live': 'left-short', 'data-ts': block.end }, duration(block.end - now)), ' ', tr('left in this block')) : null),
 			h('button', { class: 'imp-timer__stop', onclick: () => stopTracking(), 'aria-label': tr('Stop tracking') }, icon(ICON_STOP, 16, true), tr('Stop')))
 
@@ -2970,7 +3006,7 @@
 
 	async function pageCalendar() {
 		await loadState()
-		const page = h('div', { class: 'imp-page imp-cal' })
+		const page = h('div', { class: 'imp-page imp-cv' })
 		if (!state.features.calendarView) {
 			page.append(h('p', { class: 'imp-empty' }, tr('Your blocks are in your calendar app.')))
 			return page
@@ -2994,13 +3030,13 @@
 			: state.calView === 'day' ? calFmt.day.format(d)
 				: calFmt.range.formatRange ? calFmt.range.formatRange(days[0], days[6]) : `${calFmt.dayShort.format(days[0])} – ${calFmt.dayShort.format(days[6])} ${days[6].getFullYear()}`
 		const seg = (v, label, key) => h('button', { type: 'button', class: state.calView === v ? 'active' : '', 'aria-pressed': state.calView === v ? 'true' : 'false', title: `${label} (${key})`, onclick: () => calSetView(v) }, label)
-		return h('header', { class: 'imp-cal__head' },
+		return h('header', { class: 'imp-cv__head' },
 			h('h1', null, title),
-			h('div', { class: 'imp-cal__nav' },
-				h('button', { type: 'button', class: 'imp-button imp-cal__arrow', 'aria-label': tr('Previous'), title: tr('Previous (←)'), onclick: () => calMove(-1) }, '‹'),
+			h('div', { class: 'imp-cv__nav' },
+				h('button', { type: 'button', class: 'imp-button imp-cv__arrow', 'aria-label': tr('Previous'), title: tr('Previous (←)'), onclick: () => calMove(-1) }, '‹'),
 				h('button', { type: 'button', class: 'imp-button', title: tr('Today (T)'), onclick: () => { state.calDate = startOfDay(new Date()); state.calScroll = null; render() } }, tr('Today')),
-				h('button', { type: 'button', class: 'imp-button imp-cal__arrow', 'aria-label': tr('Next'), title: tr('Next (→)'), onclick: () => calMove(1) }, '›')),
-			h('div', { class: 'imp-cal__views', role: 'group', 'aria-label': tr('View') }, seg('day', tr('Day'), 'D'), seg('week', tr('Week'), 'W'), seg('month', tr('Month'), 'M')),
+				h('button', { type: 'button', class: 'imp-button imp-cv__arrow', 'aria-label': tr('Next'), title: tr('Next (→)'), onclick: () => calMove(1) }, '›')),
+			h('div', { class: 'imp-cv__views', role: 'group', 'aria-label': tr('View') }, seg('day', tr('Day'), 'D'), seg('week', tr('Week'), 'W'), seg('month', tr('Month'), 'M')),
 			h('button', {
 				type: 'button', class: 'imp-button imp-button--primary', title: tr('New block (N)'),
 				onclick: (e) => {
@@ -3038,18 +3074,18 @@
 	function timeGrid(days, blocks) {
 		const today = new Date()
 		const n = days.length
-		const head = h('div', { class: 'imp-cal__dayheads', style: { '--days': n } },
-			h('div', { class: 'imp-cal__corner' }),
+		const head = h('div', { class: 'imp-cv__dayheads', style: { '--days': n } },
+			h('div', { class: 'imp-cv__corner' }),
 			days.map((d) => h('button', {
 				type: 'button',
-				class: `imp-cal__dayhead ${sameDay(d, today) ? 'is-today' : ''}`,
+				class: `imp-cv__dayhead ${sameDay(d, today) ? 'is-today' : ''}`,
 				title: calFmt.day.format(d),
 				onclick: () => { state.calDate = d; calSetView('day') },
-			}, h('span', { class: 'imp-cal__wd' }, calFmt.weekday.format(d)), h('span', { class: 'imp-cal__dn' }, d.getDate()))))
-		const hours = h('div', { class: 'imp-cal__hours', 'aria-hidden': 'true' },
+			}, h('span', { class: 'imp-cv__wd' }, calFmt.weekday.format(d)), h('span', { class: 'imp-cv__dn' }, d.getDate()))))
+		const hours = h('div', { class: 'imp-cv__hours', 'aria-hidden': 'true' },
 			Array.from({ length: 23 }, (_, i) => h('span', { style: { top: `${(i + 1) * HOUR_PX}px` } }, calFmt.hour.format(new Date(2000, 0, 1, i + 1)))))
 		const cols = days.map((d) => {
-			const col = h('div', { class: `imp-cal__col ${sameDay(d, today) ? 'is-today' : ''}`, 'data-day': tsOf(d), role: 'group', 'aria-label': calFmt.day.format(d) })
+			const col = h('div', { class: `imp-cv__col ${sameDay(d, today) ? 'is-today' : ''}`, 'data-day': tsOf(d), role: 'group', 'aria-label': calFmt.day.format(d) })
 			const dayStart = tsOf(d)
 			const dayEnd = tsOf(addDays(d, 1))
 			const items = blocks.filter((b) => b.end > dayStart && b.start < dayEnd).map((b) => {
@@ -3060,12 +3096,12 @@
 			for (const x of layoutDay(items)) col.append(calEvent(x))
 			if (sameDay(d, today)) {
 				const m = today.getHours() * 60 + today.getMinutes()
-				col.append(h('div', { class: 'imp-cal__now', style: { top: `${(m / 60) * HOUR_PX}px` }, 'aria-hidden': 'true' }))
+				col.append(h('div', { class: 'imp-cv__now', style: { top: `${(m / 60) * HOUR_PX}px` }, 'aria-hidden': 'true' }))
 			}
 			return col
 		})
-		const body = h('div', { class: 'imp-cal__body', style: { '--days': n, height: `${24 * HOUR_PX}px` } }, hours, h('div', { class: 'imp-cal__cols' }, cols))
-		const scroll = h('div', { class: 'imp-cal__scroll', onscroll: (e) => { state.calScroll = e.target.scrollTop } }, body)
+		const body = h('div', { class: 'imp-cv__body', style: { '--days': n, height: `${24 * HOUR_PX}px` } }, hours, h('div', { class: 'imp-cv__cols' }, cols))
+		const scroll = h('div', { class: 'imp-cv__scroll', onscroll: (e) => { state.calScroll = e.target.scrollTop } }, body)
 		// Opens at the current hour (or 7:00), then where you left it
 		requestAnimationFrame(() => {
 			if (!document.contains(scroll)) return
@@ -3073,7 +3109,7 @@
 			scroll.scrollTop = state.calScroll ?? Math.max(0, ((inView ? today.getHours() - 1.5 : 7) * HOUR_PX))
 		})
 		calPointer(body)
-		return h('div', { class: 'imp-cal__grid' }, head, scroll)
+		return h('div', { class: 'imp-cv__grid' }, head, scroll)
 	}
 
 	function calEvent({ b, top, bottom, col, cols, clipEnd }) {
@@ -3082,7 +3118,7 @@
 		const title = b.title || (c ? c.name : '')
 		const short = bottom - top < 40
 		const el = h('div', {
-			class: `imp-cal__ev ${short ? 'is-short' : ''} ${b.end <= nowTs() ? 'is-past' : ''}`,
+			class: `imp-cv__ev ${short ? 'is-short' : ''} ${b.end <= nowTs() ? 'is-past' : ''}`,
 			role: 'button',
 			tabindex: '0',
 			'aria-label': `${title}, ${blockTime(b)}${b.repeat ? `, ${repeatLabel(b.repeat)}` : ''}`,
@@ -3092,9 +3128,9 @@
 				if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteBlock(el, b) }
 			},
 		},
-		h('span', { class: 'imp-cal__evtitle' }, title, b.repeat ? h('span', { class: 'imp-cal__rep', title: repeatLabel(b.repeat), 'aria-hidden': 'true' }, ' ↻') : null),
-		short ? null : h('span', { class: 'imp-cal__evtime' }, `${fmt.time.format(at(b.start))}–${fmt.time.format(at(b.end))}`),
-		clipEnd ? null : h('span', { class: 'imp-cal__resize', 'aria-hidden': 'true' }))
+		h('span', { class: 'imp-cv__evtitle' }, title, b.repeat ? h('span', { class: 'imp-cv__rep', title: repeatLabel(b.repeat), 'aria-hidden': 'true' }, ' ↻') : null),
+		short ? null : h('span', { class: 'imp-cv__evtime' }, `${fmt.time.format(at(b.start))}–${fmt.time.format(at(b.end))}`),
+		clipEnd ? null : h('span', { class: 'imp-cv__resize', 'aria-hidden': 'true' }))
 		el.calBlock = b
 		return el
 	}
@@ -3103,20 +3139,20 @@
 	function calPointer(body) {
 		let drag = null
 		const snap = (min) => Math.round(min / SNAP_MIN) * SNAP_MIN
-		const colAt = (x) => [...body.querySelectorAll('.imp-cal__col')].find((c) => { const r = c.getBoundingClientRect(); return x >= r.left && x < r.right })
+		const colAt = (x) => [...body.querySelectorAll('.imp-cv__col')].find((c) => { const r = c.getBoundingClientRect(); return x >= r.left && x < r.right })
 		const minAt = (col, y) => Math.max(0, Math.min(24 * 60, ((y - col.getBoundingClientRect().top) / HOUR_PX) * 60))
 		const dayOf = (col) => at(Number(col.dataset.day))
 		body.addEventListener('pointerdown', (e) => {
 			if (e.button !== 0) return
-			const ev = e.target.closest('.imp-cal__ev')
-			const col = e.target.closest('.imp-cal__col')
+			const ev = e.target.closest('.imp-cv__ev')
+			const col = e.target.closest('.imp-cv__col')
 			if (!col) return
 			if (ev) {
 				const b = ev.calBlock
-				drag = { kind: e.target.classList.contains('imp-cal__resize') ? 'resize' : 'move', el: ev, b, x0: e.clientX, y0: e.clientY, moved: false, col, grab: minAt(col, e.clientY) - minutesOf(b.start), dur: (b.end - b.start) / 60 }
+				drag = { kind: e.target.classList.contains('imp-cv__resize') ? 'resize' : 'move', el: ev, b, x0: e.clientX, y0: e.clientY, moved: false, col, grab: minAt(col, e.clientY) - minutesOf(b.start), dur: (b.end - b.start) / 60 }
 			} else {
 				const m = snap(minAt(col, e.clientY) - SNAP_MIN / 2)
-				const ghost = h('div', { class: 'imp-cal__ev imp-cal__ghost', style: { top: `${(m / 60) * HOUR_PX}px`, height: `${HOUR_PX - 2}px`, left: '1px', width: 'calc(100% - 3px)' } }, h('span', { class: 'imp-cal__evtime' }, ''))
+				const ghost = h('div', { class: 'imp-cv__ev imp-cv__ghost', style: { top: `${(m / 60) * HOUR_PX}px`, height: `${HOUR_PX - 2}px`, left: '1px', width: 'calc(100% - 3px)' } }, h('span', { class: 'imp-cv__evtime' }, ''))
 				drag = { kind: 'create', col, start: m, end: m + 60, ghost, x0: e.clientX, y0: e.clientY, moved: false }
 			}
 			calBusy = true
@@ -3182,28 +3218,28 @@
 	function monthGrid(days, blocks) {
 		const today = new Date()
 		const month = state.calDate.getMonth()
-		const grid = h('div', { class: 'imp-cal__month' },
-			days.slice(0, 7).map((d) => h('div', { class: 'imp-cal__mwd', 'aria-hidden': 'true' }, calFmt.weekday.format(d))))
+		const grid = h('div', { class: 'imp-cv__month' },
+			days.slice(0, 7).map((d) => h('div', { class: 'imp-cv__mwd', 'aria-hidden': 'true' }, calFmt.weekday.format(d))))
 		for (const d of days) {
 			const s = tsOf(d)
 			const e = tsOf(addDays(d, 1))
 			const list = blocks.filter((b) => b.end > s && b.start < e)
 			const MAX = 4
 			const cell = h('div', {
-				class: `imp-cal__mday ${d.getMonth() !== month ? 'is-other' : ''} ${sameDay(d, today) ? 'is-today' : ''}`,
-				ondblclick: (ev) => { if (ev.target === cell || ev.target.classList.contains('imp-cal__mlist')) blockEditor(cell, { start: atMinutes(d, 9 * 60), end: atMinutes(d, 10 * 60) }) },
+				class: `imp-cv__mday ${d.getMonth() !== month ? 'is-other' : ''} ${sameDay(d, today) ? 'is-today' : ''}`,
+				ondblclick: (ev) => { if (ev.target === cell || ev.target.classList.contains('imp-cv__mlist')) blockEditor(cell, { start: atMinutes(d, 9 * 60), end: atMinutes(d, 10 * 60) }) },
 			},
-			h('button', { type: 'button', class: 'imp-cal__mnum', title: calFmt.day.format(d), onclick: () => { state.calDate = d; calSetView('day') } }, d.getDate()),
-			h('ul', { class: 'imp-cal__mlist' },
+			h('button', { type: 'button', class: 'imp-cv__mnum', title: calFmt.day.format(d), onclick: () => { state.calDate = d; calSetView('day') } }, d.getDate()),
+			h('ul', { class: 'imp-cv__mlist' },
 				list.slice(0, list.length > MAX ? MAX - 1 : MAX).map((b) => {
 					const c = commitmentById(b.commitmentId)
-					const chip = h('button', { type: 'button', class: 'imp-cal__chip', style: { '--c': c ? c.color : '#888' }, onclick: () => blockSummary(chip, b), title: `${b.title || (c && c.name) || ''}, ${blockTime(b)}` },
+					const chip = h('button', { type: 'button', class: 'imp-cv__chip', style: { '--c': c ? c.color : '#888' }, onclick: () => blockSummary(chip, b), title: `${b.title || (c && c.name) || ''}, ${blockTime(b)}` },
 						h('span', { class: 'imp-dot', style: { background: c ? c.color : '#888' } }),
-						h('span', { class: 'imp-cal__chiptime' }, fmt.time.format(at(b.start))),
-						h('span', { class: 'imp-cal__chiptitle' }, b.title || (c ? c.name : '')))
+						h('span', { class: 'imp-cv__chiptime' }, fmt.time.format(at(b.start))),
+						h('span', { class: 'imp-cv__chiptitle' }, b.title || (c ? c.name : '')))
 					return h('li', null, chip)
 				}),
-				list.length > MAX ? h('li', null, h('button', { type: 'button', class: 'imp-cal__more', onclick: () => { state.calDate = d; calSetView('day') } }, tr('{n} more', { n: list.length - MAX + 1 }))) : null))
+				list.length > MAX ? h('li', null, h('button', { type: 'button', class: 'imp-cv__more', onclick: () => { state.calDate = d; calSetView('day') } }, tr('{n} more', { n: list.length - MAX + 1 }))) : null))
 			grid.append(cell)
 		}
 		return grid
@@ -3225,7 +3261,7 @@
 	function calPanel(anchor, build, { label, onClose } = {}) {
 		closeCalPanel()
 		closeMenu()
-		const el = h('div', { class: 'imp-calpanel', role: 'dialog', 'aria-label': label || '' })
+		const el = h('div', { class: 'imp-cvpanel', role: 'dialog', 'aria-label': label || '' })
 		el.returnFocus = anchor
 		el.onClose = onClose
 		el.addEventListener('mousedown', (e) => e.stopPropagation())
@@ -3263,9 +3299,9 @@
 			let answered = false
 			const pick = (v) => { answered = true; closeCalPanel(); resolve(v) }
 			calPanel(anchor, () => [
-				h('p', { class: 'imp-calpanel__q' }, del ? tr('Delete this block, or all future ones too?') : tr('Change this block, or all future ones too?')),
+				h('p', { class: 'imp-cvpanel__q' }, del ? tr('Delete this block, or all future ones too?') : tr('Change this block, or all future ones too?')),
 				h('p', { class: 'imp-muted' }, tr('It is a repeating block.')),
-				h('div', { class: 'imp-calpanel__actions imp-calpanel__actions--stack' },
+				h('div', { class: 'imp-cvpanel__actions imp-cvpanel__actions--stack' },
 					h('button', { type: 'button', class: 'imp-button imp-button--primary', autofocus: true, onclick: () => pick('this') }, del ? tr('Delete this block only') : tr('This block only')),
 					h('button', { type: 'button', class: `imp-button ${del ? 'imp-button--danger' : ''}`, onclick: () => pick('future') }, del ? tr('Delete all future blocks') : tr('All future blocks')),
 					h('button', { type: 'button', class: 'imp-button', onclick: () => pick(null) }, tr('Cancel'))),
@@ -3327,34 +3363,34 @@
 						h('label', { for: id }, s.title),
 						s.estimate ? h('span', { class: 'imp-est' }, fmtMin(s.estimate)) : null)
 				}
-				if (single) return h('li', { class: 'imp-calpanel__task' }, box(t.subtasks[0], true))
-				return h('li', { class: 'imp-calpanel__task' },
-					h('div', { class: 'imp-calpanel__tname' }, t.title, h('span', { class: 'imp-muted' }, ` ${t.subtasks.filter((x) => x.done).length}/${t.subtasks.length}`)),
+				if (single) return h('li', { class: 'imp-cvpanel__task' }, box(t.subtasks[0], true))
+				return h('li', { class: 'imp-cvpanel__task' },
+					h('div', { class: 'imp-cvpanel__tname' }, t.title, h('span', { class: 'imp-muted' }, ` ${t.subtasks.filter((x) => x.done).length}/${t.subtasks.length}`)),
 					h('ul', { class: 'imp-subtasks' }, t.subtasks.map((s) => box(s, false))))
 			}
 			const length = b.end - b.start
 			const work = mine.reduce((sum, t) => sum + remainingMin(t) * 60, 0)
 			const list = past ? [] : slotIndex >= 0 ? mine : tasks
 			return [
-				h('div', { class: 'imp-calpanel__head', style: { '--c': c.color } },
+				h('div', { class: 'imp-cvpanel__head', style: { '--c': c.color } },
 					h('h2', null, b.title || c.name),
 					h('p', null, h('span', { class: 'imp-dot', style: { background: c.color } }), ' ', c.name),
 					h('p', { class: 'imp-muted' }, `${calFmt.day.format(at(b.start))}`, h('br'), `${fmt.time.format(at(b.start))}–${fmt.time.format(at(b.end))} · ${duration(length, { short: true })}`,
 						b.repeat ? [h('br'), `↻ ${repeatLabel(b.repeat)}`, b.until ? `, ${tr('until {date}', { date: calFmt.dayShort.format(at(b.until)) })}` : ''] : null)),
-				h('div', { class: 'imp-calpanel__actions' },
+				h('div', { class: 'imp-cvpanel__actions' },
 					!past ? h('button', { type: 'button', class: 'imp-button imp-button--primary', onclick: async () => { closeCalPanel(); await startTracking(c.id) } }, isNow ? tr('Start now') : tr('Start')) : null,
 					h('button', { type: 'button', class: 'imp-button', onclick: () => blockEditor(anchor, b) }, tr('Edit')),
 					h('button', { type: 'button', class: 'imp-button imp-button--danger', onclick: () => deleteBlock(anchor, b) }, tr('Delete'))),
-				h('h3', { class: 'imp-calpanel__sub' }, past ? tr('This block is over') : slotIndex >= 0 ? tr('To do in this block') : tr('Open tasks')),
+				h('h3', { class: 'imp-cvpanel__sub' }, past ? tr('This block is over') : slotIndex >= 0 ? tr('To do in this block') : tr('Open tasks')),
 				past ? h('p', { class: 'imp-muted' }, tr('Unfinished tasks stay on top for the next block.'))
 					: list.length
 						? [h('p', { class: 'imp-muted' }, slotIndex >= 0
 							? [tr('{used} of {time}', { used: duration(work, { short: true }), time: duration(plan.slots[slotIndex].seconds, { short: true }) }), before ? ` · ${trn('%n task in earlier blocks', '%n tasks in earlier blocks', before)}` : '']
 							: tr('From the top of the queue.')),
-						h('ul', { class: 'imp-calpanel__tasks' }, list.slice(0, 12).map(taskRow)),
+						h('ul', { class: 'imp-cvpanel__tasks' }, list.slice(0, 12).map(taskRow)),
 						list.length > 12 ? h('p', { class: 'imp-muted' }, tr('{n} more', { n: list.length - 12 })) : null]
 						: h('p', { class: 'imp-muted' }, tasks.length ? tr('Earlier blocks take all open tasks.') : tr('No open tasks for {name}.', { name: c.name })),
-				h('a', { class: 'imp-calpanel__link', href: `#c/${c.id}`, onclick: () => closeCalPanel() }, tr('Open {name}', { name: c.name }), ' →'),
+				h('a', { class: 'imp-cvpanel__link', href: `#c/${c.id}`, onclick: () => closeCalPanel() }, tr('Open {name}', { name: c.name }), ' →'),
 			]
 		}, { label: b.title || c.name })
 	}
@@ -3376,7 +3412,7 @@
 			const ends = h('select', { 'aria-label': tr('End repeat'), onchange: () => { untilIn.hidden = ends.value !== 'on' } },
 				h('option', { value: 'never', selected: !b.until }, tr('Never')), h('option', { value: 'on', selected: !!b.until }, tr('On date')))
 			const untilIn = h('input', { type: 'date', value: b.until ? dateValue(at(b.until)) : dateValue(addDays(at(b.start), 28)), 'aria-label': tr('End repeat on'), hidden: !b.until })
-			const endsRow = h('label', { class: 'imp-calpanel__field', hidden: !b.repeat }, h('span', null, tr('End repeat')), h('span', { class: 'imp-calpanel__pair' }, ends, untilIn))
+			const endsRow = h('label', { class: 'imp-cvpanel__field', hidden: !b.repeat }, h('span', null, tr('End repeat')), h('span', { class: 'imp-cvpanel__pair' }, ends, untilIn))
 			const save = async (e) => {
 				e.preventDefault()
 				const s = fromInputs(day.value, from.value)
@@ -3399,17 +3435,17 @@
 				closeCalPanel()
 				await changeBlock(anchor, b, body)
 			}
-			return h('form', { class: 'imp-calpanel__form', onsubmit: save },
+			return h('form', { class: 'imp-cvpanel__form', onsubmit: save },
 				h('h2', null, isNew ? tr('New block') : tr('Edit block')),
-				h('label', { class: 'imp-calpanel__field' }, h('span', null, tr('Title')), title),
-				h('label', { class: 'imp-calpanel__field' }, h('span', null, tr('Commitment')), who),
-				h('label', { class: 'imp-calpanel__field' }, h('span', null, tr('Day')), day),
-				h('div', { class: 'imp-calpanel__field' }, h('span', null, tr('Time')), h('span', { class: 'imp-calpanel__pair' }, from, h('span', { 'aria-hidden': 'true' }, '–'), to)),
-				h('label', { class: 'imp-calpanel__field' }, h('span', null, tr('Repeat')), repeat),
+				h('label', { class: 'imp-cvpanel__field' }, h('span', null, tr('Title')), title),
+				h('label', { class: 'imp-cvpanel__field' }, h('span', null, tr('Commitment')), who),
+				h('label', { class: 'imp-cvpanel__field' }, h('span', null, tr('Day')), day),
+				h('div', { class: 'imp-cvpanel__field' }, h('span', null, tr('Time')), h('span', { class: 'imp-cvpanel__pair' }, from, h('span', { 'aria-hidden': 'true' }, '–'), to)),
+				h('label', { class: 'imp-cvpanel__field' }, h('span', null, tr('Repeat')), repeat),
 				endsRow,
-				h('div', { class: 'imp-calpanel__actions' },
+				h('div', { class: 'imp-cvpanel__actions' },
 					!isNew ? h('button', { type: 'button', class: 'imp-button imp-button--danger', onclick: () => deleteBlock(anchor, b) }, tr('Delete')) : null,
-					h('span', { class: 'imp-calpanel__spacer' }),
+					h('span', { class: 'imp-cvpanel__spacer' }),
 					h('button', { type: 'button', class: 'imp-button', onclick: () => closeCalPanel() }, tr('Cancel')),
 					h('button', { type: 'submit', class: 'imp-button imp-button--primary' }, isNew ? tr('Add') : tr('Save'))))
 		}, { label: isNew ? tr('New block') : tr('Edit block'), onClose })
@@ -3426,7 +3462,7 @@
 		else if (k === 'd') calSetView('day')
 		else if (k === 'w') calSetView('week')
 		else if (k === 'm') calSetView('month')
-		else if (k === 'n') document.querySelector('.imp-cal__head .imp-button--primary')?.click()
+		else if (k === 'n') document.querySelector('.imp-cv__head .imp-button--primary')?.click()
 		else return
 		e.preventDefault()
 	})
