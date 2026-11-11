@@ -36,7 +36,8 @@ class CommitmentMapper extends QBMapper {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')->from($this->getTableName())
 			->where($qb->expr()->eq('user_id', $qb->createNamedParameter($userId)))
-			->orderBy('position', 'ASC')->addOrderBy('id', 'ASC');
+			// Same position (e.g. made on two devices): by creation, then uuid, like the apps
+			->orderBy('position', 'ASC')->addOrderBy('created', 'ASC')->addOrderBy('uuid', 'ASC');
 		return $this->findEntities($qb);
 	}
 

@@ -324,7 +324,8 @@
 				: type === 'subtask' ? complete('task', db.records.task[r.f.task]) : true)
 		const commitments = () => Object.entries(db.records.commitment)
 			.filter(([, r]) => complete('commitment', r))
-			.sort(([ua, a], [ub, b]) => (a.f.position || 0) - (b.f.position || 0) || lid(ua) - lid(ub))
+			// Same position (made on two devices): by creation, then uuid, like the server
+			.sort(([ua, a], [ub, b]) => (a.f.position || 0) - (b.f.position || 0) || (a.f.created || 0) - (b.f.created || 0) || (ua < ub ? -1 : ua > ub ? 1 : 0))
 			.map(([u, r]) => commitmentJson(u, r))
 
 		const subtaskJson = (u, r) => ({
@@ -333,7 +334,8 @@
 		})
 		const subtasksOf = (taskUuid) => Object.entries(db.records.subtask)
 			.filter(([, r]) => r.f.task === taskUuid && complete('subtask', r))
-			.sort(([ua, a], [ub, b]) => (a.f.position || 0) - (b.f.position || 0) || lid(ua) - lid(ub))
+			// Same position (made on two devices): by creation, then uuid, like the server
+			.sort(([ua, a], [ub, b]) => (a.f.position || 0) - (b.f.position || 0) || (a.f.created || 0) - (b.f.created || 0) || (ua < ub ? -1 : ua > ub ? 1 : 0))
 		const taskJson = (u, r) => {
 			const subs = subtasksOf(u).map(([su, sr]) => subtaskJson(su, sr))
 			const ests = subs.filter((s) => s.estimate !== null)
@@ -346,7 +348,8 @@
 		}
 		const tasks = (commitmentUuid = null, done = null) => Object.entries(db.records.task)
 			.filter(([, r]) => (commitmentUuid === null || r.f.commitment === commitmentUuid) && (done === null || !!r.f.done === done) && complete('task', r))
-			.sort(([ua, a], [ub, b]) => (a.f.position || 0) - (b.f.position || 0) || lid(ua) - lid(ub))
+			// Same position (made on two devices): by creation, then uuid, like the server
+			.sort(([ua, a], [ub, b]) => (a.f.position || 0) - (b.f.position || 0) || (a.f.created || 0) - (b.f.created || 0) || (ua < ub ? -1 : ua > ub ? 1 : 0))
 			.map(([u, r]) => taskJson(u, r))
 		const sessionJson = (u, r) => ({
 			id: lid(u), uuid: u, commitmentId: lid(r.f.commitment ?? null), start: r.f.start, end: r.f.end ?? null,
@@ -358,7 +361,8 @@
 		})
 		const notesOf = (commitmentUuid = null, done = null) => Object.entries(db.records.note)
 			.filter(([, r]) => (commitmentUuid === null || r.f.commitment === commitmentUuid) && (done === null || !!r.f.done === done) && complete('note', r))
-			.sort(([ua, a], [ub, b]) => (a.f.position || 0) - (b.f.position || 0) || lid(ua) - lid(ub))
+			// Same position (made on two devices): by creation, then uuid, like the server
+			.sort(([ua, a], [ub, b]) => (a.f.position || 0) - (b.f.position || 0) || (a.f.created || 0) - (b.f.created || 0) || (ua < ub ? -1 : ua > ub ? 1 : 0))
 		const runningEntry = () => {
 			const run = Object.entries(db.records.session).filter(([, r]) => (r.f.end === null || r.f.end === undefined) && complete('session', r))
 			run.sort(([, a], [, b]) => b.f.start - a.f.start)

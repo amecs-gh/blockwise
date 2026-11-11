@@ -21,7 +21,7 @@ contextBridge.exposeInMainWorld('trackerApp', {
 	login: (server) => call('login', server),
 	cancelLogin: () => call('cancelLogin'),
 	connectDrive: (provider) => call('connectDrive', provider),
-	unlockDrive: (passphrase) => call('unlockDrive', passphrase),
+	unlockDrive: (passphrase, encrypt = true) => call('unlockDrive', passphrase, encrypt !== false),
 	useThisMac: () => call('useThisMac'),
 	saveProviderKeys: (provider, keys) => call('saveProviderKeys', provider, keys),
 	syncNow: () => call('syncNow'),

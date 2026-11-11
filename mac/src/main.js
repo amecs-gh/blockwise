@@ -923,15 +923,18 @@ async function connectDrive(provider) {
 	const r = await flow
 	const store = driveStore(provider, r.refreshToken)
 	const account = r.account || (store.account ? await store.account().catch(() => null) : null)
-	const exists = !!(await store.read('blockwise.json'))
+	const { exists, encrypted } = await FileSync.inspect(store)
 	pendingDrive = { provider, refreshToken: r.refreshToken, account, store }
-	return { exists }
+	return { exists, encrypted }
 }
 
-/** The passphrase: sets up the folder, or opens the one other devices made. */
-async function unlockDrive(passphrase) {
+/**
+ * The passphrase: sets up the folder, or opens the one other devices made.
+ * `encrypt` false: a new folder without encryption, when you chose that (no passphrase).
+ */
+async function unlockDrive(passphrase, encrypt = true) {
 	if (!pendingDrive || !pendingDrive.store) throw new Error('Connect a drive first.')
-	const key = await FileSync.unlock(pendingDrive.store, String(passphrase || ''))
+	const key = await FileSync.unlock(pendingDrive.store, String(passphrase || ''), { encrypt: encrypt !== false })
 	const v = createVault({ safeStorage, dir: app.getPath('userData') })
 	const driveToken = await v.seal(pendingDrive.refreshToken)
 	const syncKey = await v.seal(Buffer.from(key).toString('base64'))
@@ -1018,7 +1021,7 @@ handle('cancelLogin', () => {
 	pendingDrive = null
 })
 handle('connectDrive', setupOnly((provider) => connectDrive(String(provider || ''))), 'setup.html')
-handle('unlockDrive', setupOnly((passphrase) => unlockDrive(typeof passphrase === 'string' ? passphrase : '')), 'setup.html')
+handle('unlockDrive', setupOnly((passphrase, encrypt) => unlockDrive(typeof passphrase === 'string' ? passphrase : '', encrypt !== false)), 'setup.html')
 handle('useThisMac', setupOnly(() => useThisMac()), 'setup.html')
 handle('saveProviderKeys', setupOnly((provider, keys) => saveProviderKeys(String(provider || ''), keys)), 'setup.html')
 handle('syncNow', () => syncNow())

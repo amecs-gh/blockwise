@@ -16,14 +16,15 @@ const ok = (n) => console.log('  ✔', n)
 		const calls = []
 		await page.addInitScript((loc) => {
 			let exists = false
+			let encrypted = true
 			window.trackerApp = {
 				getState: async () => ({ locale: loc, providers: ['nextcloud', 'local', 'gdrive', 'dropbox'], providersReady: { dropbox: true, gdrive: true } }),
-				connectDrive: async (p) => { window.__log('connect ' + p); await new Promise((r) => setTimeout(r, 300)); return { exists } },
-				unlockDrive: async (x) => { window.__log('unlock ' + x); if (x === 'wrong passphrase!') throw new Error('Wrong passphrase for this sync folder.') },
+				connectDrive: async (p) => { window.__log('connect ' + p); await new Promise((r) => setTimeout(r, 300)); return { exists, encrypted } },
+				unlockDrive: async (x, e = true) => { window.__log('unlock ' + x + (e === false ? ' plain' : '')); if (x === 'wrong passphrase!') throw new Error('Wrong passphrase for this sync folder.') },
 				useThisMac: async () => window.__log('local'),
 				login: async () => {}, cancelLogin: async () => window.__log('cancel'),
 			}
-			window.__setExists = (v) => { exists = v }
+			window.__setExists = (v, enc = true) => { exists = v; encrypted = enc }
 		}, locale)
 		await page.goto('file://' + path.join(__dirname, '..', 'renderer', 'setup.html'))
 		await page.waitForSelector('.u-choice')
@@ -58,6 +59,29 @@ const ok = (n) => console.log('  ✔', n)
 		await page.screenshot({ path: `${shots}/mac-setup-unlock-${locale}.png` })
 		ok(`${locale}: existing folder: one field; wrong passphrase shown, translated`)
 		assert.equal(await page.getAttribute('#pass', 'type'), 'password')
+		// Without encryption: asked once more, then no passphrase
+		await page.evaluate(() => window.__setExists(false))
+		await page.evaluate(() => document.querySelectorAll('.js-back')[1].click())
+		await page.click('.u-choice >> nth=3')
+		await page.waitForSelector('#step-passphrase:not([hidden])')
+		await page.click('#no-encrypt')
+		await page.waitForSelector('#step-plain:not([hidden])')
+		assert.match(await page.innerText('#plain-warning'), it ? /può leggere/ : /can read/)
+		await page.screenshot({ path: `${shots}/mac-setup-plain-${locale}.png` })
+		await page.click('#plain-back')
+		await page.waitForSelector('#step-passphrase:not([hidden])')
+		await page.click('#no-encrypt')
+		await page.click('#plain-go')
+		await page.waitForTimeout(100)
+		assert.ok(calls.includes('unlock  plain'), 'no passphrase, no encryption')
+		// A folder your other devices made without encryption: nothing to ask
+		await page.evaluate(() => window.__setExists(true, false))
+		await page.click('#cancel')
+		await page.waitForSelector('.u-choice')
+		await page.click('.u-choice >> nth=3')
+		await page.waitForTimeout(600)
+		assert.equal(calls.filter((c) => c === 'unlock  plain').length, 2)
+		ok(`${locale}: without encryption: a warning first; an unencrypted folder opens without a passphrase`)
 		assert.deepEqual(errors, [])
 		await page.close()
 	}

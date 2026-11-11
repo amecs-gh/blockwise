@@ -22,7 +22,7 @@ const memoryStorage = () => { let s = null; return { load: async () => (s ? JSON
 const noCalendar = { calendars: async () => [], events: async () => [] }
 
 async function device(drive, passphrase, extra = {}) {
-	const key = await FS.unlock(drive, passphrase)
+	const key = await FS.unlock(drive, passphrase, extra.unlock)
 	const storage = memoryStorage()
 	let remote = null
 	const engine = await createEngine({
@@ -160,5 +160,34 @@ const view = async (e) => {
 	assert.equal(({}).polluted, undefined)
 	assert.equal((await a.engine.api('GET', 'notes')).length, 0)
 	ok('malformed records from the folder are ignored')
+
+	// Without encryption, when chosen: no passphrase, plain JSON on the drive; modes never mix
+	{
+		const open = memoryDrive()
+		assert.deepEqual(await FS.inspect(open), { exists: false, encrypted: true })
+		const p = await device(open, '', { unlock: { encrypt: false } })
+		assert.deepEqual(await FS.inspect(open), { exists: true, encrypted: false })
+		const c = await p.engine.api('POST', 'commitments', { name: 'Plain sight', color: '#336699' })
+		await p.engine.sync()
+		const log = [...open.files.keys()].find((n) => n.startsWith('log-'))
+		assert.ok(Buffer.from(open.files.get(log)).toString().includes('Plain sight'), 'readable by the drive')
+		const q = await device(open, 'anything at all')
+		await q.engine.sync()
+		assert.ok((await q.engine.api('GET', 'state')).commitments.some((x) => x.uuid === c.uuid), 'joins without a passphrase')
+		assert.equal(q.remote.encrypted, false)
+		// Someone with access to the drive switches an encrypted folder to plain: refused
+		const enc = memoryDrive()
+		const e1 = await device(enc, 'correct horse battery')
+		enc.files.set('blockwise.json', new TextEncoder().encode(JSON.stringify({ format: 1, app: 'blockwise', encryption: 'none' })))
+		await e1.engine.api('POST', 'commitments', { name: 'Secret', color: '#336699' })
+		await assert.rejects(e1.engine.sync(), /changed/, 'sync stopped')
+		assert.ok(![...enc.files.values()].some((v) => Buffer.from(v).toString().includes('Secret')), 'nothing written in plain text')
+		await assert.rejects(FS.createRemote({ store: enc, key: e1.key, node: 'x' }).then((x) => x.pull(0)), /changed/)
+		// and the other way: a plain device never reads an encrypted folder
+		const enc2 = memoryDrive()
+		await FS.unlock(enc2, 'correct horse battery')
+		await assert.rejects(FS.createRemote({ store: enc2, key: p.key, node: 'y' }).then((x) => x.pull(0)), /changed/)
+		ok('without encryption if chosen; a folder that switched mode is refused')
+	}
 	console.log('all file sync checks passed')
 })().catch((err) => { console.error('✘', err); process.exit(1) })

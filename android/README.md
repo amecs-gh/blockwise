@@ -75,7 +75,9 @@ calendars); with a drive, they go along too.
 back and choose a passphrase (or enter the one from your Mac). Everything is
 encrypted with it on the phone before it goes to the drive; Blockwise only sees
 its own folder there (Dropbox: Apps/Blockwise; Google Drive: hidden app data).
-The drive login and the key are kept encrypted by the Android Keystore. The
+The drive login and the key are kept encrypted by the Android Keystore. You
+can also choose **Sync without encryption** (no passphrase; the drive's
+provider can read the files), with a warning first. The
 drives are offered when the build has the app ids (the repository variables
 `DROPBOX_APP_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, same as the Mac app).
 

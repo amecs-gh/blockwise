@@ -11,7 +11,7 @@
 	let ready = null // drives with app keys in this build
 	let creating = false // a new sync folder (else: open the one your other devices made)
 
-	const STEPS = ['step-choose', 'step-nextcloud', 'step-passphrase', 'waiting']
+	const STEPS = ['step-choose', 'step-nextcloud', 'step-passphrase', 'step-plain', 'waiting']
 	function show(step, { title, intro } = {}) {
 		for (const s of STEPS) $(s).hidden = s !== step
 		if (title) $('title').textContent = title
@@ -78,8 +78,10 @@
 		drive = p
 		waiting(t('Allow Blockwise in your browser. It can only see its own folder in your {drive}.', { drive: t(CHOICES[p][0]) }))
 		try {
-			const { exists } = await app.connectDrive(p)
-			passphrase(exists)
+			const { exists, encrypted } = await app.connectDrive(p)
+			// Your other devices sync without encryption: nothing to unlock
+			if (exists && encrypted === false) await unlock('', false)
+			else passphrase(exists)
 		} catch (e) {
 			if (e.message !== 'Cancelled.') { choose(); error(e.message) }
 		}
@@ -98,6 +100,8 @@
 			? t('At least {n} characters; a few unrelated words work well. Keep it in your password manager: without it nobody, not even you, can read the synced data.', { n: MIN_NEW })
 			: t('The passphrase you chose on your other device.')
 		$('pass-submit').textContent = creating ? t('Encrypt and sync') : t('Unlock')
+		$('no-encrypt').hidden = !creating
+		$('no-encrypt').textContent = t('Sync without encryption')
 		show('step-passphrase', {
 			title: creating ? t('Protect your data') : t('Unlock your data'),
 			intro: creating
@@ -135,6 +139,27 @@
 			$('pass').select()
 		}
 	})
+
+	/** Without encryption (chosen, or how your other devices sync) */
+	async function unlock(pass, encrypt) {
+		waiting(t('Setting up sync…'))
+		try {
+			await app.unlockDrive(pass, encrypt)
+		} catch (err) {
+			choose()
+			error(err.message)
+		}
+	}
+	$('no-encrypt').addEventListener('click', () => {
+		error(null)
+		$('plain-warning').textContent = t('Without encryption, {drive} (and anyone who gets into your account there) can read your commitments, tasks, notes and tracked time. You need no passphrase. Your other devices join without one, and this can\'t be turned on later for this folder.', { drive: t(CHOICES[drive][0]) })
+		$('plain-go').textContent = t('Sync without encryption')
+		$('plain-back').textContent = t('Back to the passphrase')
+		show('step-plain', { title: t('Sync without encryption?'), intro: '' })
+		$('plain-back').focus()
+	})
+	$('plain-back').addEventListener('click', () => passphrase(false))
+	$('plain-go').addEventListener('click', () => unlock('', false))
 
 	for (const b of document.querySelectorAll('.js-back')) b.addEventListener('click', () => { app.cancelLogin(); choose() })
 	$('cancel').addEventListener('click', () => { app.cancelLogin(); choose() })

@@ -129,3 +129,15 @@ body.setup {
 .setup #pass2-box label {
 	margin-top: 16px;
 }
+.setup .u-warning {
+	margin: 24px 0 0;
+	padding: 14px 16px;
+	border-radius: 16px;
+	background: color-mix(in srgb, var(--md-error) 12%, transparent);
+	color: var(--md-onSurface);
+	font-size: 14px;
+	line-height: 20px;
+}
+.setup #no-encrypt {
+	margin-top: 4px;
+}

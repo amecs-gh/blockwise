@@ -39,7 +39,7 @@ async function openWindow(browser, file, winName, opts = {}) {
 		window.trackerApp = {
 			getState: () => call('state'), onState: (cb) => { window.__onState = cb }, api: (m, p, b) => call('api', m, p, b),
 			refresh: () => call('refresh'), open: (v, h) => call('open', v, h), nav: (a) => call('nav', a), onNav: (cb) => { window.__onNav = cb },
-			login: (s) => call('login', s), cancelLogin: () => call('cancelLogin'), connectDrive: (p) => call('connectDrive', p), unlockDrive: (x) => call('unlockDrive', x), useThisMac: () => call('useThisMac'), syncNow: () => call('syncNow'), menu: () => call('menu'), setHeight: (h) => window.__send('popover:height', [h]),
+			login: (s) => call('login', s), cancelLogin: () => call('cancelLogin'), connectDrive: (p) => call('connectDrive', p), unlockDrive: (x, e) => call('unlockDrive', x, e), useThisMac: () => call('useThisMac'), syncNow: () => call('syncNow'), menu: () => call('menu'), setHeight: (h) => window.__send('popover:height', [h]),
 			openCalendar: (ts) => call('openCalendar', ts), onChanged: (cb) => { window.__onChanged = cb },
 		}
 	})

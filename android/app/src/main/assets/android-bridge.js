@@ -304,10 +304,12 @@
 		connectDrive: (provider) => call('connectDrive', provider),
 		cancelDrive: () => call('cancelDrive'),
 		/** The passphrase: sets up the drive's folder or opens it; then the app keeps the key */
-		unlockDrive: async (passphrase) => {
-			const key = await window.BlockwiseFileSync.unlock(driveStore, String(passphrase || ''))
+		unlockDrive: async (passphrase, encrypt = true) => {
+			const key = await window.BlockwiseFileSync.unlock(driveStore, String(passphrase || ''), { encrypt: encrypt !== false })
 			await call('saveDrive', b64(key))
 		},
+		/** Is Blockwise set up in the drive already, and encrypted? */
+		inspectDrive: () => window.BlockwiseFileSync.inspect(driveStore),
 		backToApp: () => call('backToApp'),
 		cancelLogin: () => call('cancelLogin'),
 		openCalendar: (ts) => call('openCalendar', typeof ts === 'number' ? ts : null),

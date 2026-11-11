@@ -162,6 +162,41 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		console.log('  ✔ Dropbox: passphrase, encrypted folder, a second phone gets everything')
 	}
 
+	// Without encryption, when chosen: a warning, no passphrase; the next phone isn't asked for one
+	{
+		folder.clear()
+		const devC = { db: null, snapshot: null, offline: false, remoteCalls: [] }
+		const c = await phone(browser, 'setup.html', { mode: null, dev: devC })
+		await c.page.waitForSelector('#dropbox:not([hidden])')
+		await c.page.click('#dropbox')
+		await c.page.waitForSelector('#pass:not([hidden])')
+		await c.page.click('#no-encrypt')
+		await c.page.waitForSelector('#plain:not([hidden])')
+		assert.match(await c.page.textContent('#plain-warning'), /can read your commitments/)
+		await c.page.screenshot({ path: `${shots}/setup-plain.png` })
+		await c.page.click('#plain-go')
+		for (let i = 0; i < 50 && !devC.key; i++) await c.page.waitForTimeout(100)
+		assert.equal(atob(devC.key), 'BLOCKWISE-UNENCRYPTED-FOLDER-V01')
+		assert.equal(JSON.parse(atob(folder.get('blockwise.json'))).encryption, 'none')
+		await c.ctx.close()
+		const a = await phone(browser, 'app.html', { mode: 'dropbox', dev: devC, hash: '#now' })
+		await a.page.waitForSelector('.imp-page', { timeout: 15000 })
+		await a.page.evaluate(() => window.trackerApp.api('POST', 'commitments', { name: 'Open book', color: '#0fa37f' }))
+		for (let i = 0; i < 80 && ![...folder.keys()].some((k) => k.startsWith('log-')); i++) await a.page.waitForTimeout(100)
+		assert.ok([...folder.keys()].filter((k) => k.startsWith('log-')).some((k) => atob(folder.get(k)).includes('Open book')), 'plain JSON on the drive')
+		await a.ctx.close()
+		const devD = { db: null, snapshot: null, offline: false, remoteCalls: [] }
+		const d2 = await phone(browser, 'setup.html', { mode: null, dev: devD })
+		await d2.page.waitForSelector('#dropbox:not([hidden])')
+		await d2.page.click('#dropbox')
+		for (let i = 0; i < 50 && !devD.key; i++) await d2.page.waitForTimeout(100)
+		assert.equal(devD.key, devC.key, 'joined without a passphrase')
+		assert.ok(await d2.page.locator('#pass').isHidden())
+		await d2.ctx.close()
+		folder.clear()
+		console.log('  ✔ without encryption: a warning first, no passphrase, the next phone just joins')
+	}
+
 	// On this phone only: no server, the built-in calendar; then Nextcloud, and the data comes along
 	{
 		const dev = { db: null, snapshot: null, offline: false, remoteCalls: [] }

@@ -181,6 +181,21 @@ body.setup {
 	background: none;
 	color: var(--accent);
 }
+.u-warning {
+	margin: 0;
+	padding: 10px 12px;
+	border-radius: var(--radius);
+	background: color-mix(in srgb, var(--error) 10%, transparent);
+	color: var(--text, inherit);
+	text-align: left;
+}
+#step-plain {
+	display: grid;
+	gap: 10px;
+}
+#step-plain[hidden] {
+	display: none;
+}
 #confirm-row {
 	display: grid;
 	gap: 8px;

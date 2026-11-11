@@ -39,8 +39,14 @@
 			</div>
 			<p id="pass-error" class="u-error" role="alert" hidden></p>
 			<button type="submit" id="pass-submit" class="u-primary"></button>
+			<button type="button" id="no-encrypt" class="u-text"></button>
 			<button type="button" id="pass-back" class="u-text"></button>
 		</form>
+		<div id="plain" hidden>
+			<p id="plain-warning" class="u-warning"></p>
+			<button type="button" id="plain-go" class="u-secondary"></button>
+			<button type="button" id="plain-back" class="u-text"></button>
+		</div>
 		<form id="form" hidden>
 			<label for="server" id="server-label"></label>
 			<input id="server" type="text" autocomplete="url" spellcheck="false" autocapitalize="off" required>

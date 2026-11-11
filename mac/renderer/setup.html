@@ -33,8 +33,16 @@
 			</div>
 			<p id="pass-hint" class="u-hint"></p>
 			<button type="submit" id="pass-submit" class="u-primary"></button>
+			<button type="button" id="no-encrypt" class="u-link"></button>
 			<button type="button" class="u-link js-back"></button>
 		</form>
+
+		<!-- 2c. Without encryption: asked once more -->
+		<div id="step-plain" hidden>
+			<p id="plain-warning" class="u-warning"></p>
+			<button type="button" id="plain-go" class="u-secondary"></button>
+			<button type="button" id="plain-back" class="u-link"></button>
+		</div>
 
 		<p id="error" class="u-error" role="alert" hidden></p>
 

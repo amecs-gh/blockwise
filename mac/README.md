@@ -56,6 +56,12 @@ PBKDF2-SHA256, 600,000 rounds). Dropbox or Google see only encrypted files named
 password manager**: without it nobody, not even you, can read the synced data
 (the copy on each Mac stays readable).
 
+If you'd rather not use a passphrase, choose **Sync without encryption** when you
+set up the folder. Then the files are plain JSON that Dropbox or Google (and
+anyone who gets into that account) can read; your other devices join without a
+passphrase. A folder keeps its choice: a device refuses a folder whose
+encryption was switched off (or on) after it joined.
+
 Blockwise can only see its own folder: in Dropbox the app folder, in Google
 Drive the hidden app data folder (scope `drive.appdata`), not your other files.
 

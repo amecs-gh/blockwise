@@ -80,7 +80,7 @@ fs.writeFileSync(keysFile, JSON.stringify({ dropboxAppKey: 'dbxtestkey12', googl
 
 	console.log('Dropbox')
 	const first = await call('connectDrive', 'dropbox')
-	assert.deepEqual(first, { exists: false }, 'a new sync folder')
+	assert.deepEqual(first, { exists: false, encrypted: true }, 'a new sync folder')
 	await assert.rejects(call('unlockDrive', 'short'), /at least 8/)
 	await call('unlockDrive', 'correct horse battery staple')
 	await sleep(1500)
@@ -146,7 +146,7 @@ fs.writeFileSync(keysFile, JSON.stringify({ dropboxAppKey: 'dbxtestkey12', googl
 	ok('disconnect: token revoked, secrets and data removed from this Mac, folder stays')
 
 	// Connecting again: the folder exists, so only the passphrase is asked
-	assert.deepEqual(await call('connectDrive', 'dropbox'), { exists: true })
+	assert.deepEqual(await call('connectDrive', 'dropbox'), { exists: true, encrypted: true })
 	await assert.rejects(call('unlockDrive', 'wrong horse battery staple'), /Wrong passphrase/)
 	await call('unlockDrive', 'correct horse battery staple')
 	await sleep(1500)

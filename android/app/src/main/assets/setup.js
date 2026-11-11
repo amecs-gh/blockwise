@@ -16,7 +16,7 @@
 	let busy = false
 
 	function show(view) {
-		for (const v of ['choose', 'form', 'waiting', 'pass']) $(v).hidden = v !== view
+		for (const v of ['choose', 'form', 'waiting', 'pass', 'plain']) $(v).hidden = v !== view
 		if (view === 'choose') {
 			$('title').textContent = connecting ? t('Sync Blockwise') : t('Welcome to Blockwise')
 			$('intro').textContent = connecting
@@ -28,12 +28,17 @@
 				? t('Your commitments, tasks, notes and tracked time on this phone go along to Nextcloud. You log in once; the app gets its own password, stored encrypted on this phone.')
 				: t('Blockwise uses your commitments, tasks and calendar from Nextcloud. You log in once; the app gets its own password, stored encrypted on this phone.')
 			$('server').focus()
+		} else if (view === 'plain') {
+			$('title').textContent = t('Sync without encryption?')
+			$('intro').textContent = ''
+			$('plain-warning').textContent = t('Without encryption, {drive} (and anyone who gets into your account there) can read your commitments, tasks, notes and tracked time. You need no passphrase. Your other devices join without one, and this can\'t be turned on later for this folder.', { drive: NAMES[drive.provider] })
 		} else if (view === 'pass') {
 			const name = NAMES[drive.provider]
 			$('title').textContent = drive.exists ? t('Enter your passphrase') : t('Choose a passphrase')
 			$('intro').textContent = drive.exists
 				? t('Blockwise is already set up in this {drive}. Enter the passphrase you chose on your other device.', { drive: name })
 				: t('It encrypts your data before it goes to {drive}: only your devices can read it. Nobody can recover it if you forget it, so write it down.', { drive: name })
+			$('no-encrypt').hidden = drive.exists
 			$('pass2-box').hidden = drive.exists
 			$('pass2').required = !drive.exists
 			$('pass1').value = ''
@@ -68,7 +73,10 @@
 		$('submit').textContent = t('Log in')
 		$('back').textContent = t('Back')
 		$('cancel').textContent = t('Cancel')
-		$('pass1-label').textContent = t('Passphrase (at least 8 characters)')
+		$('pass1-label').textContent = t('Passphrase')
+		$('no-encrypt').textContent = t('Sync without encryption')
+		$('plain-go').textContent = t('Sync without encryption')
+		$('plain-back').textContent = t('Back to the passphrase')
 		$('pass2-label').textContent = t('Passphrase again')
 		$('pass-submit').textContent = t('Continue')
 		$('pass-back').textContent = t('Cancel')
@@ -105,8 +113,12 @@
 			$('waiting-text').textContent = t('Allow Blockwise in your browser, then come back here.')
 			show('waiting')
 			try {
-				drive.exists = !!(await app.connectDrive(provider))
-				show('pass')
+				await app.connectDrive(provider)
+				const { exists, encrypted } = await app.inspectDrive()
+				drive.exists = exists
+				// Your other devices sync without encryption: nothing to unlock
+				if (exists && !encrypted) await unlock('', false)
+				else show('pass')
 			} catch (err) {
 				if (!drive) return // cancelled
 				drive = null
@@ -119,13 +131,29 @@
 	$('cancel').addEventListener('click', () => {
 		if (drive) { drive = null; app.cancelDrive(); show('choose') } else { app.cancelLogin(); show('form') }
 	})
+	async function unlock(pass, encrypt) {
+		$('waiting-text').textContent = t('Setting up sync…')
+		show('waiting')
+		try {
+			await app.unlockDrive(pass, encrypt)
+		} catch (x) {
+			drive = null
+			app.cancelDrive()
+			show('choose')
+			$('choose-error').textContent = (x && x.message) || t('Something went wrong.')
+			$('choose-error').hidden = false
+		}
+	}
+	$('no-encrypt').addEventListener('click', () => show('plain'))
+	$('plain-back').addEventListener('click', () => show('pass'))
+	$('plain-go').addEventListener('click', () => unlock('', false))
 	$('pass-back').addEventListener('click', () => { drive = null; app.cancelDrive(); show('choose') })
 	$('pass').addEventListener('submit', async (e) => {
 		e.preventDefault()
 		if (busy) return
 		const err = (m) => { $('pass-error').textContent = m; $('pass-error').hidden = false }
 		const p1 = $('pass1').value
-		if ([...p1].length < 8) return err(t('The passphrase needs at least 8 characters.'))
+		if (drive.exists ? [...p1].length < 8 : [...p1].length < 10) return err(drive.exists ? t('The passphrase needs at least 8 characters.') : t('The passphrase needs at least {n} characters.', { n: 10 }))
 		if (!drive.exists && p1 !== $('pass2').value) return err(t('The two passphrases are not the same.'))
 		busy = true
 		$('pass-submit').disabled = true

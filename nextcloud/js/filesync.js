@@ -8,11 +8,17 @@
  * merges them per field (the later change wins) as it does with Nextcloud.
  * Files never change once written, so devices never overwrite each other.
  *
- * Everything is end-to-end encrypted: a key made from your passphrase
+ * By default everything is end-to-end encrypted: a key made from your passphrase
  * (PBKDF2-SHA-256, 600 000 rounds, random salt) encrypts each file with
  * AES-256-GCM. The file's name is bound into the encryption, so files can't be
  * swapped or altered unnoticed. The drive only ever sees random-looking bytes;
  * "blockwise.json" holds the salt and a check value (no secrets).
+ *
+ * If you choose so when setting up the folder, it is not encrypted: the files
+ * are plain JSON ("BWP1"), readable by the drive's provider; no passphrase.
+ * blockwise.json says which; a device keeps the mode it joined with (the PLAIN
+ * key) and refuses a folder that changed mode, so nobody with access to the
+ * drive can switch an encrypted folder to plain text.
  *
  * The store is the drive, given by the app:
  *   list(): Promise<string[]>  names of the files in the folder
@@ -53,6 +59,11 @@
 	const COMPACT_AFTER = 40 // own files before they're merged into one
 	const LOG_RE = /^log-([A-Za-z0-9_-]{1,32})-(\d{9})\.bwx$/
 	const CHECK = 'blockwise-key-check'
+	const PLAIN_MAGIC = [0x42, 0x57, 0x50, 0x31] // "BWP1"
+	/** The "key" a device keeps for a folder without encryption (32 bytes, like a real key) */
+	const PLAIN_KEY = 'BLOCKWISE-UNENCRYPTED-FOLDER-V01'
+	const plainKey = () => enc.encode(PLAIN_KEY)
+	const isPlain = (key) => key instanceof Uint8Array && key.length === 32 && dec.decode(key) === PLAIN_KEY
 
 	class SyncError extends Error {
 		constructor(message, code) {
@@ -90,12 +101,31 @@
 		}
 	}
 
+	/** Is there a Blockwise folder, and is it encrypted? (Before asking for a passphrase.) */
+	async function inspect(store) {
+		const info = await readInfo(store)
+		return { exists: !!info, encrypted: !info || info.encryption !== 'none' }
+	}
+
 	/**
 	 * Sets up the folder (first device) or checks the passphrase against it.
+	 * `encrypt: false` sets up a new folder without encryption (no passphrase);
+	 * a folder made that way opens without one.
 	 * @return {Promise<Uint8Array>} the key, to keep on this device (encrypted by the system)
 	 */
-	async function unlock(store, passphrase) {
+	async function unlock(store, passphrase, opts = {}) {
 		let info = await readInfo(store)
+		if (!info && opts.encrypt === false) {
+			try {
+				await store.write(INFO, enc.encode(JSON.stringify({ format: 1, app: 'blockwise', encryption: 'none' }, null, '\t')), { create: true })
+				return plainKey()
+			} catch (e) {
+				if (!e || !e.exists) throw e
+				info = await readInfo(store) // another device set it up at the same moment: use theirs
+				if (!info) throw new SyncError('The sync folder could not be read.', 'folder')
+			}
+		}
+		if (info && info.encryption === 'none') return plainKey()
 		if (!info) {
 			const salt = random(16)
 			const key = await deriveKey(passphrase, salt)
@@ -127,8 +157,9 @@
 		} catch (e) {
 			throw new SyncError('The sync folder is damaged (blockwise.json).', 'folder')
 		}
+		if (info && info.format === 1 && info.encryption === 'none' && !info.kdf && !info.check) return info
 		const k = info && info.kdf
-		if (!info || info.format !== 1 || !k || k.name !== 'PBKDF2' || k.hash !== 'SHA-256' || typeof k.salt !== 'string' || typeof info.check !== 'string'
+		if (!info || info.format !== 1 || info.encryption !== undefined || !k || k.name !== 'PBKDF2' || k.hash !== 'SHA-256' || typeof k.salt !== 'string' || typeof info.check !== 'string'
 			|| !Number.isInteger(k.iterations) || k.iterations < 100000 || k.iterations > 10000000) {
 			throw new SyncError('The sync folder was made by another version of Blockwise.', 'folder')
 		}
@@ -147,7 +178,29 @@
 	 */
 	async function createRemote(o) {
 		if (!/^[A-Za-z0-9_-]{1,32}$/.test(o.node)) throw new SyncError('Invalid device id', 'node')
-		const key = await importKey(o.key)
+		const plain = isPlain(o.key)
+		// The folder must still be what this device joined: never write plain text into an encrypted
+		// folder. Checked at the first sync (not here: the app opens offline too).
+		let modeChecked = false
+		const checkMode = async () => {
+			if (modeChecked) return
+			const info = await readInfo(o.store)
+			if (info && (info.encryption === 'none') !== plain) throw new SyncError('The sync folder changed (encryption turned on or off elsewhere). Connect it again.', 'mode')
+			modeChecked = true
+		}
+		const key = plain ? null : await importKey(o.key)
+		const pack = async (name, bytes) => {
+			if (!plain) return seal(key, name, bytes)
+			const out = new Uint8Array(4 + bytes.length)
+			out.set(PLAIN_MAGIC, 0)
+			out.set(bytes, 4)
+			return out
+		}
+		const unpack = async (name, data) => {
+			if (!plain) return open(key, name, data)
+			if (!(data instanceof Uint8Array) || data.length < 4 || data.length > MAX_FILE || PLAIN_MAGIC.some((b, i) => data[i] !== b)) throw new SyncError('Not a Blockwise file', 'damaged')
+			return data.slice(4)
+		}
 		let state = (o.state && (await o.state.load())) || null
 		if (!state || typeof state !== 'object' || typeof state.seen !== 'object') state = { seen: {}, cursor: 0 }
 		const save = () => (o.state ? o.state.save(state) : Promise.resolve())
@@ -164,7 +217,7 @@
 		const readLog = async (f) => {
 			const data = await o.store.read(f.name)
 			if (!data) return null
-			const body = JSON.parse(dec.decode(await open(key, f.name, data)))
+			const body = JSON.parse(dec.decode(await unpack(f.name, data)))
 			if (!body || body.node !== f.node || body.n !== f.n || !Array.isArray(body.records) || body.records.length > MAX_RECORDS * 4) {
 				throw new SyncError('A sync file does not match its name', 'damaged')
 			}
@@ -174,12 +227,13 @@
 		/** Writes records as this device's next file. */
 		async function push(records) {
 			if (!Array.isArray(records) || !records.length) return { applied: 0, rejected: [] }
+			await checkMode()
 			const mine = (await listLogs()).filter((f) => f.node === o.node)
 			let n = mine.length ? mine[mine.length - 1].n + 1 : 1
 			for (let i = 0; i < records.length; i += MAX_RECORDS) {
 				const body = { node: o.node, n, records: records.slice(i, i + MAX_RECORDS) }
 				const name = fileName(o.node, n)
-				await o.store.write(name, await seal(key, name, enc.encode(JSON.stringify(body))), { create: true })
+				await o.store.write(name, await pack(name, enc.encode(JSON.stringify(body))), { create: true })
 				n++
 			}
 			if (mine.length + 1 > COMPACT_AFTER) await compact()
@@ -191,6 +245,7 @@
 		 * deletions kept), so a new device reads little. Others read it like any file.
 		 */
 		async function compact() {
+			await checkMode()
 			const mine = (await listLogs()).filter((f) => f.node === o.node)
 			if (mine.length < 2) return
 			const merged = new Map()
@@ -215,12 +270,13 @@
 			// Written first, then the old files removed: a reader never misses anything
 			const body = { node: o.node, n: last, records, base: true }
 			const name = fileName(o.node, last)
-			await o.store.write(name, await seal(key, name, enc.encode(JSON.stringify(body))), { create: true })
+			await o.store.write(name, await pack(name, enc.encode(JSON.stringify(body))), { create: true })
 			for (const f of mine) await o.store.remove(f.name).catch(() => {})
 		}
 
 		/** The other devices' files not read yet (since 0: all of them again). */
 		async function pull(since) {
+			await checkMode()
 			if (!since) state.seen = {}
 			const records = []
 			for (const f of await listLogs()) {
@@ -236,10 +292,10 @@
 			return { cursor: state.cursor, more: false, reset: false, records }
 		}
 
-		return { push, pull, compact, kind: 'files' }
+		return { push, pull, compact, kind: 'files', encrypted: !plain }
 	}
 
-	const api = { unlock, createRemote, SyncError, _seal: seal, _open: open }
+	const api = { unlock, inspect, createRemote, SyncError, _seal: seal, _open: open }
 	if (typeof module !== 'undefined' && module.exports) module.exports = api
 	else root.BlockwiseFileSync = api
 })(typeof window !== 'undefined' ? window : globalThis)
