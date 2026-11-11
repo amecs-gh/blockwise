@@ -1,4 +1,3 @@
-'use strict'
 /**
  * Dropbox and Google Drive as sync folders (see nextcloud/js/filesync.js).
  *
@@ -6,13 +5,47 @@
  * - Google Drive: the hidden app data folder (scope drive.appdata), so Blockwise
  *   can't see or change any of your other files, and they can't see its files.
  *
- * Only the refresh token is kept (encrypted by the caller, in the Keychain);
- * access tokens live in memory for an hour at most. Every request goes to the
- * provider's fixed https address; nothing from an answer is used as a URL.
+ * Only the refresh token is kept (encrypted by the caller: the Keychain on the
+ * Mac, the browser's own key in the web app); access tokens live in memory for
+ * an hour at most. Every request goes to the provider's fixed https address;
+ * nothing from an answer is used as a URL.
  *
- * No Electron imports: tested in plain Node with stand-in servers.
+ * Runs in Node (the Mac app; tested with stand-in servers) and in the browser
+ * (the web app: window.BlockwiseDrives). Logging in from the Mac (a browser
+ * window and a server on 127.0.0.1) needs Node; the web app logs in by redirect.
  */
-const { pkce, waitForCode, tokenRequest } = require('./oauth')
+;(function (root, factory) {
+	if (typeof module === 'object' && module.exports) module.exports = factory(() => require('./oauth'))
+	else root.BlockwiseDrives = factory(null)
+})(typeof self !== 'undefined' ? self : this, function (nodeOAuth) {
+'use strict'
+const oauth = () => {
+	if (!nodeOAuth) throw new Error('Not available here.')
+	return nodeOAuth()
+}
+const enc = new TextEncoder()
+
+/** POST application/x-www-form-urlencoded, JSON back; errors without secrets in them. */
+async function tokenRequest(fetch, url, params) {
+	let res
+	try {
+		res = await fetch(url, {
+			method: 'POST',
+			redirect: 'error',
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+			body: new URLSearchParams(params).toString(),
+		})
+	} catch (e) {
+		throw Object.assign(new Error('No connection. Try again when you are online.'), { offline: true })
+	}
+	let data = null
+	try { data = await res.json() } catch (e) { /* not JSON */ }
+	if (!res.ok || !data || typeof data.access_token !== 'string') {
+		const code = data && typeof data.error === 'string' ? data.error : `HTTP ${res.status}`
+		throw Object.assign(new Error(`The login was refused (${code.replace(/[^\w .-]/g, '').slice(0, 60)}).`), { status: res.status, revoked: code === 'invalid_grant' })
+	}
+	return data
+}
 
 const NAME_RE = /^[A-Za-z0-9._-]{1,80}$/
 const checkName = (name) => {
@@ -90,8 +123,8 @@ const dropboxArg = (o) => JSON.stringify(o).replace(/[\u007f-￿]/g, (c) => '\\u
 /** Opens Dropbox in the browser; you allow Blockwise; returns the refresh token. */
 function connectDropbox({ appKey, fetch, openBrowser, endpoints = DROPBOX }) {
 	if (!appKey) throw new DriveError('This build of Blockwise has no Dropbox app key (mac/config/providers.json).')
-	const { verifier, challenge } = pkce()
-	const wait = waitForCode({
+	const { verifier, challenge } = oauth().pkce()
+	const wait = oauth().waitForCode({
 		port: endpoints.port,
 		path: endpoints.path,
 		openBrowser,
@@ -201,8 +234,8 @@ const GOOGLE = {
 /** Opens Google in the browser; you allow Blockwise; returns the refresh token. */
 function connectGoogle({ clientId, clientSecret, fetch, openBrowser, endpoints = GOOGLE }) {
 	if (!clientId) throw new DriveError('This build of Blockwise has no Google client id (mac/config/providers.json).')
-	const { verifier, challenge } = pkce()
-	const wait = waitForCode({
+	const { verifier, challenge } = oauth().pkce()
+	const wait = oauth().waitForCode({
 		port: 0, // Google accepts any loopback port for desktop apps
 		path: endpoints.path,
 		openBrowser,
@@ -267,8 +300,12 @@ function googleStore({ clientId, clientSecret, refreshToken, fetch, endpoints = 
 			if (existing && opts.create) throw new DriveError('exists', { exists: true })
 			const boundary = 'blockwise' + Math.random().toString(36).slice(2)
 			const meta = JSON.stringify(existing ? { name } : { name, parents: ['appDataFolder'] })
-			const head = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`)
-			const body = Buffer.concat([head, Buffer.from(bytes), Buffer.from(`\r\n--${boundary}--`)])
+			const head = enc.encode(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n`)
+			const tail = enc.encode(`\r\n--${boundary}--`)
+			const body = new Uint8Array(head.length + bytes.length + tail.length)
+			body.set(head, 0)
+			body.set(bytes, head.length)
+			body.set(tail, head.length + bytes.length)
 			const url = existing ? `${endpoints.upload}/${existing[0]}?uploadType=multipart` : `${endpoints.upload}?uploadType=multipart`
 			const res = await authed(fetch, tok, url, { method: existing ? 'PATCH' : 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body })
 			if (!res.ok) throw new DriveError(`Google Drive could not save a file (HTTP ${res.status}).`)
@@ -331,4 +368,5 @@ function googleStore({ clientId, clientSecret, refreshToken, fetch, endpoints = 
 	}
 }
 
-module.exports = { connectDropbox, dropboxStore, connectGoogle, googleStore, DriveError, DROPBOX, GOOGLE }
+return { connectDropbox, dropboxStore, connectGoogle, googleStore, tokenRequest, dropboxArg, DriveError, DROPBOX, GOOGLE }
+})

@@ -1,0 +1,9 @@
+# For hosts that read this file (Netlify, Cloudflare Pages): the web app's
+# pages can't be framed, send no referrer and get no powerful features.
+/app/*
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  Referrer-Policy: no-referrer
+  X-Content-Type-Options: nosniff
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Cross-Origin-Opener-Policy: same-origin

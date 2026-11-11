@@ -78,26 +78,4 @@ function waitForCode(o) {
 	return done
 }
 
-/** POST application/x-www-form-urlencoded, JSON back; errors without secrets in them. */
-async function tokenRequest(fetch, url, params) {
-	let res
-	try {
-		res = await fetch(url, {
-			method: 'POST',
-			redirect: 'error',
-			headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-			body: new URLSearchParams(params).toString(),
-		})
-	} catch (e) {
-		throw Object.assign(new Error('No connection. Try again when you are online.'), { offline: true })
-	}
-	let data = null
-	try { data = await res.json() } catch (e) { /* not JSON */ }
-	if (!res.ok || !data || typeof data.access_token !== 'string') {
-		const code = data && typeof data.error === 'string' ? data.error : `HTTP ${res.status}`
-		throw Object.assign(new Error(`The login was refused (${code.replace(/[^\w .-]/g, '').slice(0, 60)}).`), { status: res.status, revoked: code === 'invalid_grant' })
-	}
-	return data
-}
-
-module.exports = { pkce, waitForCode, tokenRequest, b64url }
+module.exports = { pkce, waitForCode, b64url }

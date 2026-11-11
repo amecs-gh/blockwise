@@ -322,6 +322,8 @@
 	}, 1500)
 
 	window.trackerApp = {
+		// The phone's layout (bottom bar, account sheet); the web app (web-native.js) has the desktop one
+		phone: window.__trackerWeb !== true,
 		getState: () => call('state'),
 		onState: (cb) => listeners.state.push(cb),
 		api: async (method, path, body) => {

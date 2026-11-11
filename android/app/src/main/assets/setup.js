@@ -12,6 +12,7 @@
 	const NAMES = { dropbox: 'Dropbox', gdrive: 'Google Drive' }
 	let t = (s) => s
 	let connecting = false
+	let web = false // the web app (website/app): "this browser" instead of "this phone"
 	let drive = null // { provider, exists } while connecting a drive
 	let busy = false
 
@@ -20,7 +21,7 @@
 		if (view === 'choose') {
 			$('title').textContent = connecting ? t('Sync Blockwise') : t('Welcome to Blockwise')
 			$('intro').textContent = connecting
-				? t('Your commitments, tasks, notes, blocks and tracked time on this phone go along.')
+				? (web ? t('Your commitments, tasks, notes, blocks and tracked time in this browser go along.') : t('Your commitments, tasks, notes, blocks and tracked time on this phone go along.'))
 				: t('Plan your week in blocks and get through it one block at a time.')
 		} else if (view === 'form') {
 			$('title').textContent = t('Connect to your Nextcloud')
@@ -52,10 +53,13 @@
 		t = window.trackerI18n.make(s.locale)
 		document.documentElement.lang = s.locale
 		connecting = !!s.connecting || location.hash === '#connect'
+		web = s.platform === 'web'
 		const drives = s.drives || {}
 		$('local-box').hidden = connecting
-		$('local').textContent = t('Start on this phone')
-		$('local-note').textContent = t('No account needed. Your data stays on this phone, encrypted. You can set up a sync later.')
+		$('local').textContent = web ? t('Start in this browser') : t('Start on this phone')
+		$('local-note').textContent = web
+			? t('No account needed. Your data stays in this browser, encrypted. You can set up a sync later.')
+			: t('No account needed. Your data stays on this phone, encrypted. You can set up a sync later.')
 		$('sync-head').textContent = connecting ? '' : t('Or sync with your other devices')
 		$('sync-head').hidden = connecting
 		$('nextcloud').textContent = t('Sync with Nextcloud')
@@ -65,9 +69,13 @@
 		$('dropbox').hidden = !drives.dropbox
 		$('gdrive').hidden = !drives.gdrive
 		$('drives').hidden = !drives.dropbox && !drives.gdrive
-		$('drives-note').textContent = t('With your Mac and other phones, end-to-end encrypted with a passphrase only you know.')
+		$('drives-note').textContent = web
+			? t('With your Mac and phone, end-to-end encrypted with a passphrase only you know.')
+			: t('With your Mac and other phones, end-to-end encrypted with a passphrase only you know.')
 		$('choose-back').textContent = t('Back to Blockwise')
 		$('choose-back').hidden = !connecting
+		// The web app has no Nextcloud login (a browser page can't reach your server)
+		$('nextcloud').hidden = $('nextcloud-note').hidden = s.nextcloud === false
 		$('server-label').textContent = t('Nextcloud address')
 		$('server').placeholder = t('e.g. cloud.example.com or your Tailscale name')
 		$('submit').textContent = t('Log in')
@@ -82,7 +90,29 @@
 		$('pass-back').textContent = t('Cancel')
 		try { $('server').value = localStorage.getItem('server') || '' } catch (e) { /* none */ }
 		show('choose')
+		// The web app: back from Dropbox or Google, logged in; now the passphrase
+		if (s.pendingDrive) afterLogin(s.pendingDrive)
+		else if (s.driveError) { $('choose-error').textContent = s.driveError; $('choose-error').hidden = false }
 	})
+
+	async function afterLogin(provider) {
+		drive = { provider, exists: false }
+		$('waiting-text').textContent = t('Setting up sync…')
+		show('waiting')
+		try {
+			const { exists, encrypted } = await app.inspectDrive()
+			drive.exists = exists
+			// Your other devices sync without encryption: nothing to unlock
+			if (exists && !encrypted) await unlock('', false)
+			else show('pass')
+		} catch (err) {
+			drive = null
+			app.cancelDrive()
+			show('choose')
+			$('choose-error').textContent = err.message
+			$('choose-error').hidden = false
+		}
+	}
 
 	$('local').addEventListener('click', () => { $('local').disabled = true; app.useLocal() })
 	$('nextcloud').addEventListener('click', () => show('form'))
@@ -110,7 +140,7 @@
 		$(provider).addEventListener('click', async () => {
 			drive = { provider, exists: false }
 			$('choose-error').hidden = true
-			$('waiting-text').textContent = t('Allow Blockwise in your browser, then come back here.')
+			$('waiting-text').textContent = web ? t('Opening {drive}…', { drive: NAMES[provider] }) : t('Allow Blockwise in your browser, then come back here.')
 			show('waiting')
 			try {
 				await app.connectDrive(provider)

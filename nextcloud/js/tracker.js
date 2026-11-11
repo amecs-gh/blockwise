@@ -395,17 +395,22 @@
 	// Blockwise's mark, as on the app icon: a white block over an amber one, forming a "B"
 	const LOGO = [['#ffffff', 'M33 19H54a14 14 0 0 1 0 28H33a4 4 0 0 1-4-4V23a4 4 0 0 1 4-4z'], ['#f4a62a', 'M33 52h26.5a14.5 14.5 0 0 1 0 29H33a4 4 0 0 1-4-4V56a4 4 0 0 1 4-4z']]
 	function navigation() {
-		const link = (href, label, d, active, onclick) => h('li', null, h('a', { href, title: label, class: active ? 'active' : '', 'aria-current': active ? 'page' : null, onclick },
-			icon(d), h('span', null, label), onclick ? h('span', { class: 'imp-nav__ext', 'aria-hidden': 'true' }, '↗') : null))
+		// ext: opens something outside the page (the calendar app): an arrow after the label
+		const link = (href, label, d, active, onclick, ext = !!onclick) => h('li', null, h('a', { href, title: label, class: active ? 'active' : '', 'aria-current': active ? 'page' : null, onclick },
+			icon(d), h('span', null, label), ext ? h('span', { class: 'imp-nav__ext', 'aria-hidden': 'true' }, '↗') : null))
 		// Calendar: Blockwise's calendar page where blocks can be changed; else the calendar app
 		const cal = calendarShown() ? link('#calendar', tr('Calendar'), ICON_CAL, state.route === 'calendar')
 			: desktop && !state.features.calendarView ? link('#', tr('Calendar'), ICON_CAL, false, (e) => { e.preventDefault(); desktop.openCalendar() }) : null
 		const routes = ROUTES.map((r) => link(`#${r.id}`, r.label(), r.icon, state.route === r.id))
 		// Phones keep the calendar and the account sheet in the top bar, the rest in the bottom tabs
-		const phone = !!(desktop && desktop.account)
+		const phone = !!(desktop && desktop.phone && desktop.account)
+		// The web app: an account entry at the end of the tabs (sync, export, data in this browser)
+		const account = !phone && desktop && desktop.account
+			? link('#', tr('Account'), 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0', false, (e) => { e.preventDefault(); desktop.account() }, false)
+			: null
 		return h('nav', { class: 'imp-nav', 'aria-label': tr('Main') },
 			h('a', { class: 'imp-nav__logo', href: '#now', title: 'Blockwise' }, svg('svg', { viewBox: '20.5 19 62 62', width: 26, height: 26, 'aria-hidden': 'true' }, LOGO.map(([fill, d]) => svg('path', { fill, d })))),
-			h('ul', { class: 'imp-nav__main' }, phone ? routes : [routes[0], cal, ...routes.slice(1)]),
+			h('ul', { class: 'imp-nav__main' }, phone ? routes : [routes[0], cal, ...routes.slice(1), account]),
 			phone ? h('ul', { class: 'imp-nav__main imp-nav__apps' }, cal,
 				link('#', tr('Account'), 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0', false, (e) => { e.preventDefault(); desktop.account() })) : null,
 			h('div', { class: 'imp-nav__heading' }, tr('Commitments')),

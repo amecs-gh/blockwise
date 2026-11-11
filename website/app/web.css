@@ -1,0 +1,164 @@
+/*
+ * Blockwise in the browser: the Mac window's look (desktop.css) as a web page,
+ * with light/dark as chosen in Settings, and the account sheet.
+ */
+body.desktop.web #tracker-app {
+	--imp-content: 1180px;
+	--imp-side: 28px;
+}
+
+/* Light or dark as chosen in Settings (the bridge sets m3-dark), not only the system's */
+html.m3:not(.m3-dark) {
+	color-scheme: light;
+	--color-main-background: #ffffff;
+	--color-background-hover: #f1effa;
+	--color-main-text: #24223a;
+	--color-text-maxcontrast: #6c6987;
+	--color-border: #e6e3f3;
+	--color-border-dark: #d4cfec;
+	--color-primary-element: #6c5ce7;
+	--color-primary-element-hover: #5a4bd6;
+	--color-primary-element-light: #ece9fd;
+	--color-primary-element-light-text: #4b3cc4;
+	--color-error: #c62828;
+	--color-text-error: #b3261e;
+	--color-warning: #b77900;
+	--color-success-text: #2a7a3b;
+}
+html.m3-dark {
+	color-scheme: dark;
+	--color-main-background: #1e1b2b;
+	--color-background-hover: #2a2639;
+	--color-main-text: #eceaf6;
+	--color-text-maxcontrast: #a29ebb;
+	--color-border: #332f47;
+	--color-border-dark: #4a4563;
+	--color-primary-element: #8b7cf6;
+	--color-primary-element-hover: #9d90f8;
+	--color-primary-element-light: #2e2850;
+	--color-primary-element-light-text: #cfc8ff;
+	--color-error: #ff6b6b;
+	--color-text-error: #ff8a80;
+	--color-warning: #e0a526;
+	--color-success-text: #5cc675;
+}
+html.m3:not(.m3-dark),
+html.m3:not(.m3-dark) body.desktop {
+	background: #f6f5fb;
+}
+html.m3-dark,
+html.m3-dark body.desktop {
+	background: #14121d;
+}
+
+/* --- the account sheet --------------------------------------------------------- */
+
+.w-sheet {
+	width: min(440px, calc(100vw - 32px));
+	padding: 0;
+	border: none;
+	border-radius: 24px;
+	background: var(--color-main-background);
+	color: var(--color-main-text);
+	box-shadow: 0 24px 60px rgba(20, 16, 50, 0.3);
+	font: 14px/1.5 Poppins, system-ui, sans-serif;
+}
+.w-sheet::backdrop {
+	background: rgba(20, 16, 50, 0.35);
+}
+.w-sheet__head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 20px 22px 0;
+}
+.w-sheet__head h2 {
+	margin: 0;
+	font-size: 18px;
+	font-weight: 800;
+}
+.w-sheet__body {
+	padding: 6px 22px 22px;
+}
+.w-sheet__list,
+.w-sheet__row {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.w-sheet__row {
+	flex-direction: row;
+	justify-content: flex-end;
+}
+.w-muted {
+	color: var(--color-text-maxcontrast);
+}
+.w-close {
+	width: 34px;
+	height: 34px;
+	border: none;
+	border-radius: 12px;
+	background: var(--color-background-hover);
+	color: inherit;
+	font-size: 20px;
+	line-height: 1;
+	cursor: pointer;
+}
+.w-btn {
+	min-height: 40px;
+	padding: 0 16px;
+	border: none;
+	border-radius: 14px;
+	background: var(--color-background-hover);
+	color: inherit;
+	font: inherit;
+	font-weight: 700;
+	text-align: left;
+	cursor: pointer;
+}
+.w-sheet__row .w-btn {
+	text-align: center;
+}
+.w-btn:hover {
+	filter: brightness(0.97);
+}
+.w-btn:focus-visible,
+.w-close:focus-visible {
+	outline: 2px solid var(--color-primary-element);
+	outline-offset: 2px;
+}
+.w-btn--accent {
+	background: var(--color-primary-element);
+	color: #ffffff;
+}
+.w-btn--danger {
+	color: var(--color-text-error);
+}
+.w-sheet__row .w-btn--danger {
+	background: var(--color-error);
+	color: #ffffff;
+}
+
+/* Open in another tab */
+.w-other {
+	max-width: 420px;
+	margin: 18vh auto 0;
+	padding: 0 24px;
+	font: 15px/1.5 Poppins, system-ui, sans-serif;
+	color: var(--color-main-text);
+}
+.w-other h1 {
+	font-size: 24px;
+}
+
+/* --- the first-run page: a card in the middle of a large window ----------------- */
+
+@media (min-width: 640px) {
+	body.setup.web .u-card {
+		padding: 36px 40px;
+		border-radius: 28px;
+		background: var(--md-surfaceContainerLow);
+		box-shadow: 0 10px 30px rgba(60, 50, 140, 0.08);
+	}
+}

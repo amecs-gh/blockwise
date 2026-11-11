@@ -1,0 +1,765 @@
+/*
+ * Blockwise on Android, in Material 3 with Blockwise's palette.
+ *
+ * Colors are Material 3 color roles (--md-*), in the same lavender and violet
+ * as the other apps. Each commitment's own color (--c) stays its accent.
+ * The page draws edge to edge; the app tells it how much space the status bar,
+ * notch and gesture bar take (--inset-*).
+ */
+
+:root {
+	color-scheme: light;
+	--inset-top: 0px;
+	--inset-bottom: 0px;
+	--inset-left: 0px;
+	--inset-right: 0px;
+
+	--md-primary: #6c5ce7;
+	--md-onPrimary: #ffffff;
+	--md-primaryContainer: #e4e0fd;
+	--md-onPrimaryContainer: #20165e;
+	--md-secondaryContainer: #ece9fd;
+	--md-onSecondaryContainer: #2c2463;
+	--md-tertiaryContainer: #fde2d3;
+	--md-onTertiaryContainer: #3c1503;
+	--md-surface: #f6f5fb;
+	--md-surfaceContainerLowest: #ffffff;
+	--md-surfaceContainerLow: #ffffff;
+	--md-surfaceContainer: #f1effa;
+	--md-surfaceContainerHigh: #ebe8f7;
+	--md-surfaceContainerHighest: #e3dff3;
+	--md-onSurface: #24223a;
+	--md-onSurfaceVariant: #6c6987;
+	--md-outline: #8e8aa8;
+	--md-outlineVariant: #e0dcf0;
+	--md-inverseSurface: #2c2a42;
+	--md-inverseOnSurface: #f3f1fb;
+	--md-inversePrimary: #c4bbff;
+	--md-error: #ba1a1a;
+	--md-errorContainer: #ffdad6;
+	--md-onErrorContainer: #410002;
+	--md-warning: #8a5300;
+	--md-success: #2e6b2f;
+
+	--md-elev-1: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px 1px rgba(0, 0, 0, 0.15);
+	--md-elev-2: 0 1px 2px rgba(0, 0, 0, 0.3), 0 2px 6px 2px rgba(0, 0, 0, 0.15);
+	--md-elev-3: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 8px 3px rgba(0, 0, 0, 0.15);
+	--md-ease: cubic-bezier(0.2, 0, 0, 1);
+
+	--navbar: 80px;
+	--appbar: 64px;
+}
+html.m3-dark {
+	color-scheme: dark;
+	--md-primary: #8b7cf6;
+	--md-onPrimary: #ffffff;
+	--md-primaryContainer: #3a3170;
+	--md-onPrimaryContainer: #e4e0fd;
+	--md-secondaryContainer: #2e2850;
+	--md-onSecondaryContainer: #e4e0fd;
+	--md-tertiaryContainer: #5a2a12;
+	--md-onTertiaryContainer: #fde2d3;
+	--md-surface: #14121d;
+	--md-surfaceContainerLowest: #0f0d17;
+	--md-surfaceContainerLow: #1e1b2b;
+	--md-surfaceContainer: #232033;
+	--md-surfaceContainerHigh: #2a2639;
+	--md-surfaceContainerHighest: #332f47;
+	--md-onSurface: #eceaf6;
+	--md-onSurfaceVariant: #a29ebb;
+	--md-outline: #77728f;
+	--md-outlineVariant: #332f47;
+	--md-inverseSurface: #eceaf6;
+	--md-inverseOnSurface: #24223a;
+	--md-inversePrimary: #6c5ce7;
+	--md-error: #ffb4ab;
+	--md-errorContainer: #93000a;
+	--md-onErrorContainer: #ffdad6;
+	--md-warning: #ffb95c;
+	--md-success: #8fd88a;
+}
+
+/* Tracker's interface reads Nextcloud's variables: map them to the color roles */
+:root,
+html.m3-dark {
+	--color-main-background: var(--md-surface);
+	--color-main-background-blur: var(--md-surface);
+	--color-background-hover: var(--md-surfaceContainerHigh);
+	--color-main-text: var(--md-onSurface);
+	--color-text-maxcontrast: var(--md-onSurfaceVariant);
+	--color-border: var(--md-outlineVariant);
+	--color-border-dark: var(--md-outline);
+	--color-primary-element: var(--md-primary);
+	--color-primary-element-hover: var(--md-primary);
+	--color-primary-element-text: var(--md-onPrimary);
+	--color-primary-element-light: var(--md-secondaryContainer);
+	--color-primary-element-light-text: var(--md-onSecondaryContainer);
+	--color-error: var(--md-error);
+	--color-text-error: var(--md-error);
+	--color-warning: var(--md-warning);
+	--color-warning-text: var(--md-warning);
+	--color-success-text: var(--md-success);
+	--border-radius-element: 12px;
+	--border-radius-large: 16px;
+	--body-container-radius: 0;
+}
+
+/* --- base ---------------------------------------------------------------------------- */
+
+html,
+body.android {
+	height: 100%;
+	margin: 0;
+	overflow: hidden;
+	background: var(--md-surface);
+	color: var(--md-onSurface);
+	font: 400 15px/1.45 Poppins, Roboto, system-ui, sans-serif;
+	letter-spacing: 0.01em;
+	-webkit-tap-highlight-color: transparent;
+	-webkit-text-size-adjust: 100%;
+	-webkit-user-select: none;
+	user-select: none;
+}
+body.android input,
+body.android textarea,
+body.android .imp-editable {
+	-webkit-user-select: text;
+	user-select: text;
+}
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+button,
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+}
+a {
+	color: inherit;
+	text-decoration: none;
+}
+body.android #tracker-app {
+	--imp-line: var(--md-outlineVariant);
+	--imp-muted: var(--md-onSurfaceVariant);
+	--imp-bg: var(--md-surface);
+	--imp-bg-soft: var(--md-surfaceContainerHigh);
+	--imp-text: var(--md-onSurface);
+	--imp-radius: 16px;
+	height: 100%;
+}
+body.android,
+body.android * {
+	scrollbar-width: none;
+}
+
+/* Touch feedback: Material's state layer (darkens or lightens whatever is pressed) */
+body.android :is(a, button, .imp-editable, summary, [role="button"]) {
+	transition: box-shadow 0.15s var(--md-ease), background-color 0.2s var(--md-ease);
+}
+body.android :is(a, button, summary, [role="button"]):active:not(:disabled) {
+	box-shadow: inset 0 0 0 100vmax color-mix(in srgb, currentColor 12%, transparent);
+}
+body.android :focus-visible {
+	outline: 3px solid var(--md-primary);
+	outline-offset: 2px;
+}
+
+/* --- layout: top app bar, page, navigation bar --------------------------------------- */
+
+body.android .imp-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-rows: auto minmax(0, 1fr) auto;
+	grid-template-areas:
+		"chips apps"
+		"main main"
+		"tabs tabs";
+	height: 100%;
+	border-radius: 0;
+	background: var(--md-surface);
+}
+body.android .imp-nav {
+	display: contents;
+}
+body.android .imp-nav__heading,
+body.android .imp-nav__logo {
+	display: none;
+}
+body.android .imp-main {
+	grid-area: main;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	background: var(--md-surface);
+}
+body.android .imp-page {
+	max-width: 840px;
+	margin: 0 auto;
+	padding: 4px calc(16px + var(--inset-right)) 104px calc(16px + var(--inset-left));
+}
+
+/* Top app bar: commitments as filter chips, Calendar and Account as action icons */
+body.android .imp-nav__commitments {
+	grid-area: chips;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	height: calc(var(--appbar) + var(--inset-top));
+	margin: 0;
+	padding: var(--inset-top) 4px 0 calc(16px + var(--inset-left));
+	overflow-x: auto;
+	list-style: none;
+	background: var(--md-surface);
+}
+body.android .imp-nav__commitments li {
+	flex: 0 0 auto;
+}
+body.android .imp-nav__commitments a {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 34px;
+	padding: 0 16px 0 12px;
+	border: none;
+	border-radius: 999px;
+	color: var(--md-onSurface);
+	font-size: 14px;
+	font-weight: 700;
+	letter-spacing: 0.1px;
+	white-space: nowrap;
+	background: var(--md-surfaceContainerLow);
+	box-shadow: 0 4px 14px rgba(60, 50, 140, 0.07);
+}
+body.android .imp-nav__commitments a .imp-dot {
+	width: 10px;
+	height: 10px;
+}
+body.android .imp-nav__commitments a.active {
+	background: var(--c);
+	color: #ffffff;
+}
+body.android .imp-nav__commitments .imp-nav__add {
+	padding: 0 12px;
+	border: 2px dashed var(--md-outlineVariant);
+	background: transparent;
+	box-shadow: none;
+}
+body.android .imp-nav__apps {
+	grid-area: apps;
+	display: flex;
+	align-items: center;
+	gap: 0;
+	height: calc(var(--appbar) + var(--inset-top));
+	margin: 0;
+	padding: var(--inset-top) calc(4px + var(--inset-right)) 0 0;
+	list-style: none;
+	background: var(--md-surface);
+}
+body.android .imp-nav__apps a {
+	display: grid;
+	place-items: center;
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+	color: var(--md-onSurfaceVariant);
+	background: transparent;
+}
+body.android .imp-nav__apps svg {
+	width: 24px;
+	height: 24px;
+	color: currentColor;
+}
+body.android .imp-nav__apps span {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}
+
+/* Navigation bar */
+body.android .imp-nav__main:not(.imp-nav__apps) {
+	grid-area: tabs;
+	display: grid;
+	grid-auto-flow: column;
+	grid-auto-columns: minmax(0, 1fr);
+	gap: 8px;
+	height: calc(var(--navbar) + var(--inset-bottom));
+	margin: 0;
+	padding: 12px calc(8px + var(--inset-right)) var(--inset-bottom) calc(8px + var(--inset-left));
+	list-style: none;
+	border-radius: 24px 24px 0 0;
+	background: var(--md-surfaceContainerLow);
+	box-shadow: 0 -6px 24px rgba(60, 50, 140, 0.08);
+	overflow: visible;
+}
+body.android .imp-nav__main:not(.imp-nav__apps) a,
+body.android .imp-nav__main:not(.imp-nav__apps) a:hover,
+body.android .imp-nav__main:not(.imp-nav__apps) a.active {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	min-height: 0;
+	height: auto;
+	padding: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	color: var(--md-onSurfaceVariant);
+	font-size: 12px;
+	font-weight: 500;
+	letter-spacing: 0.5px;
+}
+body.android .imp-nav__main:not(.imp-nav__apps) a svg {
+	box-sizing: content-box;
+	width: 24px;
+	height: 24px;
+	padding: 4px 20px;
+	border-radius: 16px;
+	color: var(--md-onSurfaceVariant);
+	transition: background-color 0.2s var(--md-ease);
+}
+body.android .imp-nav__main:not(.imp-nav__apps) a:active svg {
+	background: color-mix(in srgb, var(--md-onSurface) 10%, transparent);
+}
+body.android .imp-nav__main:not(.imp-nav__apps) a span {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+body.android .imp-nav__main:not(.imp-nav__apps) a.active {
+	color: var(--md-onSurface);
+	font-weight: 700;
+}
+body.android .imp-nav__main:not(.imp-nav__apps) a.active svg {
+	background: var(--md-primary);
+	color: var(--md-onPrimary);
+}
+
+/* --- type ---------------------------------------------------------------------------- */
+
+body.android .imp-page h1 {
+	margin: 12px 0 16px;
+	font-size: 28px;
+	font-weight: 800;
+	line-height: 36px;
+	letter-spacing: 0;
+}
+body.android .imp-page h2 {
+	margin: 24px 0 12px;
+	font-size: 17px;
+	font-weight: 800;
+	line-height: 24px;
+	letter-spacing: 0.15px;
+}
+/* at the top of a card, a heading needs no space above */
+body.android :is(.imp-cpage__section, .imp-settings__section, .imp-hours, .imp-inblock, .imp-others, .imp-day) h2 {
+	margin-top: 0;
+}
+body.android .imp-page h3 {
+	font-size: 14px;
+	font-weight: 800;
+	letter-spacing: 0.1px;
+}
+body.android .imp-muted,
+body.android .imp-note {
+	color: var(--md-onSurfaceVariant);
+}
+
+/* --- buttons --------------------------------------------------------------------------- */
+
+/* Tonal button */
+body.android .imp-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: 40px;
+	height: auto;
+	padding: 0 20px;
+	border: none;
+	border-radius: 14px;
+	background: var(--md-surfaceContainer);
+	color: var(--md-onSurface);
+	font-size: 14px;
+	font-weight: 700;
+	letter-spacing: 0.1px;
+	box-shadow: none;
+}
+body.android .imp-button:disabled {
+	color: color-mix(in srgb, var(--md-onSurface) 38%, transparent);
+}
+/* Filled button */
+body.android .imp-button--primary {
+	border-color: transparent;
+	background: var(--md-primary);
+	color: var(--md-onPrimary);
+}
+body.android .imp-button--primary:disabled {
+	background: color-mix(in srgb, var(--md-onSurface) 12%, transparent);
+}
+/* Icon buttons */
+body.android .imp-icon-btn {
+	display: inline-grid;
+	place-items: center;
+	min-width: 40px;
+	min-height: 40px;
+	padding: 0;
+	border: none;
+	border-radius: 20px;
+	background: transparent;
+	color: var(--md-onSurfaceVariant);
+	font-size: 18px;
+}
+/* Play / stop: floating action buttons in the commitment's color */
+body.android .imp-play {
+	width: 56px;
+	height: 56px;
+	border: none;
+	border-radius: 16px;
+	box-shadow: var(--md-elev-3);
+}
+body.android .imp-play:active {
+	box-shadow: var(--md-elev-1), inset 0 0 0 100vmax rgba(255, 255, 255, 0.16);
+}
+
+/* Segmented buttons (Day / Week / Month …) */
+body.android .imp-segmented {
+	display: inline-flex;
+	gap: 0;
+	padding: 0;
+	border: 1px solid var(--md-outline);
+	border-radius: 20px;
+	background: transparent;
+	overflow: hidden;
+}
+body.android .imp-segmented button {
+	min-height: 40px;
+	margin: 0;
+	padding: 0 16px;
+	border: none;
+	border-left: 1px solid var(--md-outline);
+	border-radius: 0;
+	background: transparent;
+	color: var(--md-onSurface);
+	font-size: 14px;
+	font-weight: 500;
+	box-shadow: none;
+}
+body.android .imp-segmented button:first-child {
+	border-left: none;
+}
+body.android .imp-segmented button.active,
+body.android .imp-segmented button[aria-pressed="true"],
+body.android .imp-segmented button[aria-selected="true"] {
+	background: var(--md-secondaryContainer);
+	color: var(--md-onSecondaryContainer);
+}
+
+/* Tabs (commitments on the Tasks page): Material primary tabs */
+body.android .imp-tabs {
+	display: flex;
+	gap: 0;
+	margin: 0 -16px 8px;
+	padding: 0 8px;
+	overflow-x: auto;
+	border-bottom: 1px solid var(--md-surfaceContainerHighest);
+	flex-wrap: nowrap;
+}
+body.android .imp-tabs button {
+	position: relative;
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 48px;
+	margin: 0;
+	padding: 0 16px;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	color: var(--md-onSurfaceVariant);
+	font-size: 14px;
+	font-weight: 500;
+	letter-spacing: 0.1px;
+	box-shadow: none;
+}
+body.android .imp-tabs button.active,
+body.android .imp-tabs button[aria-selected="true"] {
+	color: var(--md-primary);
+	border: none;
+}
+body.android .imp-tabs button.active::after,
+body.android .imp-tabs button[aria-selected="true"]::after {
+	content: "";
+	position: absolute;
+	left: 16px;
+	right: 16px;
+	bottom: 0;
+	height: 3px;
+	border-radius: 3px 3px 0 0;
+	background: var(--c, var(--md-primary));
+}
+
+/* --- cards ------------------------------------------------------------------------------ */
+
+body.android :is(.imp-timer, .imp-day, .imp-inblock, .imp-others, .imp-warning, .imp-cpage__section, .imp-settings__section, .imp-composer, .imp-chart, .imp-empty, .imp-hours, .imp-done__week, .imp-tablewrap) {
+	border: none;
+	border-radius: 24px;
+	background: var(--md-surfaceContainerLow);
+	box-shadow: 0 8px 24px rgba(60, 50, 140, 0.07);
+}
+body.android :is(.imp-timer, .imp-day, .imp-inblock, .imp-others, .imp-warning, .imp-cpage__section, .imp-settings__section, .imp-composer, .imp-empty) {
+	padding: 16px;
+}
+body.android .imp-timer:not(.imp-timer--idle) {
+	background: var(--c);
+}
+body.android .imp-warning {
+	background: var(--md-tertiaryContainer);
+	color: var(--md-onTertiaryContainer);
+	border-left: none;
+}
+body.android .imp-warning * {
+	color: inherit;
+}
+body.android .imp-now,
+body.android .imp-now__main {
+	gap: 12px;
+}
+
+/* --- form controls ------------------------------------------------------------------------- */
+
+/* Outlined text fields */
+body.android :is(input[type="text"], input[type="number"], input[type="email"], input[type="url"], input[type="date"], input[type="time"], input:not([type]), select, textarea) {
+	min-height: 48px;
+	padding: 8px 14px;
+	border: 1px solid var(--md-outline);
+	border-radius: 4px;
+	background: transparent;
+	color: var(--md-onSurface);
+	font-size: 16px;
+	box-shadow: none;
+	outline: none;
+}
+body.android :is(input[type="text"], input[type="number"], input[type="email"], input[type="url"], input[type="date"], input[type="time"], input:not([type]), select, textarea):focus {
+	border-color: var(--md-primary);
+	box-shadow: inset 0 0 0 1px var(--md-primary);
+}
+/* The task composer and in-place editing keep their own borderless fields */
+body.android :is(.imp-composer__title, .imp-composer__input) {
+	min-height: 40px;
+	padding: 0 4px;
+	border: none !important;
+	box-shadow: none !important;
+}
+body.android .imp-editable__field {
+	min-height: 0;
+	padding: 2px 6px;
+	border-radius: 4px;
+}
+
+/* Checkboxes */
+body.android input[type="checkbox"] {
+	-webkit-appearance: none;
+	appearance: none;
+	flex: 0 0 auto;
+	width: 18px;
+	height: 18px;
+	min-height: 0;
+	margin: 11px;
+	padding: 0;
+	border: 2px solid var(--md-onSurfaceVariant);
+	border-radius: 2px;
+	background: transparent no-repeat center / 14px 14px;
+	cursor: pointer;
+	position: relative;
+}
+body.android input[type="checkbox"]::before {
+	/* 40px touch target with a round state layer */
+	content: "";
+	position: absolute;
+	inset: -13px;
+	border-radius: 50%;
+}
+body.android input[type="checkbox"]:active::before {
+	background: color-mix(in srgb, var(--c, var(--md-primary)) 14%, transparent);
+}
+body.android input[type="checkbox"]:checked {
+	border-color: var(--c, var(--md-primary));
+	background-color: var(--c, var(--md-primary));
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M4.5 12.5l5 5 10-11' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* --- chips, badges ------------------------------------------------------------------------- */
+
+body.android #tracker-app .imp-chip,
+.m3 .imp-menu .imp-chip {
+	height: 28px;
+	padding: 0 10px;
+	border: 1px solid var(--md-outlineVariant);
+	border-radius: 8px;
+	background: transparent;
+	color: var(--md-onSurfaceVariant);
+	font-size: 12.5px;
+	font-weight: 500;
+}
+body.android #tracker-app .imp-chip:not(.is-default):not(.is-preview) {
+	border-color: transparent;
+	background: color-mix(in srgb, var(--c, var(--md-primary)) 16%, var(--md-surface));
+	color: var(--md-onSurface);
+}
+body.android .imp-badge {
+	display: inline-flex;
+	align-items: center;
+	height: 24px;
+	padding: 0 8px;
+	border-radius: 8px;
+	background: var(--md-secondaryContainer);
+	color: var(--md-onSecondaryContainer);
+	font-size: 12px;
+	font-weight: 500;
+}
+body.android .imp-badge.is-stuck {
+	background: var(--md-tertiaryContainer);
+	color: var(--md-onTertiaryContainer);
+}
+
+/* --- Tasks: list rows and the floating "New task" button -------------------------------------- */
+
+body.android .imp-tq__item {
+	padding: 12px 4px 12px 0;
+	border-radius: 0;
+}
+body.android .imp-tq__item + .imp-tq__item {
+	border-top: 1px solid var(--md-outlineVariant);
+}
+body.android .imp-tq__item:hover,
+body.android .imp-tq__item:focus-within {
+	background: transparent;
+}
+body.android .imp-tq__title {
+	font-size: 16px;
+	font-weight: 500;
+}
+body.android .imp-tq__actions,
+body.android .imp-tq__handle,
+body.android #tracker-app .imp-tq__del {
+	opacity: 1;
+}
+body.android .imp-tq__actions {
+	position: static;
+	padding: 0;
+	background: none;
+	pointer-events: auto;
+}
+body.android .imp-tq__block {
+	margin-top: 20px;
+	color: var(--md-primary);
+	font-size: 12px;
+	font-weight: 500;
+	letter-spacing: 0.5px;
+}
+body.android .imp-tq__bar {
+	height: 4px;
+	border-radius: 2px;
+	background: var(--md-surfaceContainerHighest);
+}
+body.android .imp-tq__new {
+	display: none !important; /* replaced by the floating button */
+}
+/* Extended floating action button */
+body.android .imp-tq__top .imp-button {
+	position: fixed;
+	z-index: 20;
+	right: calc(16px + var(--inset-right));
+	bottom: calc(var(--navbar) + var(--inset-bottom) + 16px);
+	height: 56px;
+	padding: 0 20px 0 16px;
+	border: none;
+	border-radius: 16px;
+	background: var(--md-primaryContainer);
+	color: var(--md-onPrimaryContainer);
+	font-size: 14px;
+	font-weight: 500;
+	box-shadow: var(--md-elev-3);
+}
+body.android .imp-tasks:has(.imp-composer) .imp-tq__top .imp-button {
+	display: none;
+}
+body.android .imp-composer {
+	border: none;
+	box-shadow: var(--md-elev-1);
+	background: var(--md-surfaceContainerLow);
+}
+
+/* --- Menus (appended to <body>) ---------------------------------------------------------------- */
+
+.m3 .imp-menu {
+	min-width: 200px;
+	padding: 8px 0;
+	border: none;
+	border-radius: 4px;
+	background: var(--md-surfaceContainer);
+	color: var(--md-onSurface);
+	box-shadow: var(--md-elev-2);
+	font: 400 14px/20px Poppins, Roboto, system-ui, sans-serif;
+}
+.m3 .imp-menu .imp-menu__item {
+	min-height: 48px;
+	padding: 0 16px;
+	border-radius: 0;
+	font-size: 14px;
+}
+.m3 .imp-menu .imp-menu__item:active {
+	background: color-mix(in srgb, var(--md-onSurface) 10%, transparent);
+}
+.m3 .imp-menu .imp-menu__item.is-danger {
+	color: var(--md-error);
+}
+.m3 .imp-menu__chips {
+	padding: 4px 12px;
+}
+.m3 .imp-menu .imp-menu__input {
+	width: calc(100% - 24px);
+	margin: 8px 12px 4px;
+	border-radius: 4px;
+	border-color: var(--md-outline);
+	background: transparent;
+}
+
+/* --- Snackbar ----------------------------------------------------------------------------------- */
+
+.toast {
+	position: fixed;
+	z-index: 100;
+	left: calc(12px + var(--inset-left));
+	right: calc(12px + var(--inset-right));
+	bottom: calc(var(--navbar) + var(--inset-bottom) + 12px);
+	min-height: 48px;
+	padding: 14px 16px;
+	border-radius: 4px;
+	background: var(--md-inverseSurface);
+	color: var(--md-inverseOnSurface);
+	box-shadow: var(--md-elev-3);
+	font-size: 14px;
+	line-height: 20px;
+}
+.toast.is-error {
+	background: var(--md-errorContainer);
+	color: var(--md-onErrorContainer);
+}
+
+/* Plan a block: date and time pickers follow light/dark */
+body.android .imp-newblock h2 { margin: 0 0 12px; }
+body.android :is(input[type="date"], input[type="time"]) { color-scheme: light; }
+html.m3-dark body.android :is(input[type="date"], input[type="time"]) { color-scheme: dark; }
+

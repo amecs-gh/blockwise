@@ -1,0 +1,151 @@
+/* The font: Poppins (SIL Open Font License 1.1), bundled with the interface */
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url("web/fonts/Poppins-Regular.woff") format("woff");
+}
+@font-face {
+	font-family: "Poppins";
+	font-style: italic;
+	font-weight: 400;
+	font-display: swap;
+	src: url("web/fonts/Poppins-Italic.woff") format("woff");
+}
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 500;
+	font-display: swap;
+	src: url("web/fonts/Poppins-Medium.woff") format("woff");
+}
+@font-face {
+	font-family: "Poppins";
+	font-style: normal;
+	font-weight: 600 800;
+	font-display: swap;
+	src: url("web/fonts/Poppins-Bold.woff") format("woff");
+}
+/* Shared look for the app's own windows: native macOS type, light and dark. */
+:root {
+	--bg: #f6f5fb;
+	--bg-soft: #f1effa;
+	--bg-pop: rgba(246, 246, 248, 0.82);
+	--line: rgba(0, 0, 0, 0.1);
+	--text: #24223a;
+	--muted: #6c6987;
+	--accent: #6c5ce7;
+	--accent-text: #ffffff;
+	--error: #c62828;
+	--success: #2a7a3b;
+	--radius: 14px;
+	color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #14121d;
+		--bg-soft: #2a2639;
+		--bg-pop: rgba(36, 36, 38, 0.82);
+		--line: rgba(255, 255, 255, 0.12);
+		--text: #eceaf6;
+		--muted: #a29ebb;
+		--accent: #8b7cf6;
+		--error: #ff6b6b;
+		--success: #5cc675;
+	}
+}
+* {
+	box-sizing: border-box;
+}
+html,
+body {
+	margin: 0;
+	font: 13px/1.4 Poppins, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+	color: var(--text);
+	font-variant-numeric: tabular-nums;
+	-webkit-font-smoothing: antialiased;
+}
+button,
+input,
+select {
+	font: inherit;
+	color: inherit;
+}
+button {
+	cursor: default;
+}
+:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 1px;
+}
+[hidden] {
+	display: none !important;
+}
+
+/* --- setup ------------------------------------------------------------------------ */
+
+body.setup {
+	display: grid;
+	min-height: 100vh;
+	place-items: center;
+	padding: 40px 32px 24px;
+	background: var(--bg);
+	-webkit-app-region: drag;
+}
+.u-card {
+	width: 100%;
+	max-width: 380px;
+	text-align: center;
+	-webkit-app-region: no-drag;
+}
+.u-logo {
+	border-radius: 16px;
+}
+.setup h1 {
+	margin: 14px 0 6px;
+	font-size: 20px;
+	font-weight: 600;
+}
+.u-muted {
+	margin: 0 0 22px;
+	color: var(--muted);
+}
+.setup form {
+	display: grid;
+	gap: 8px;
+	text-align: left;
+}
+.setup label {
+	font-weight: 600;
+}
+.setup input {
+	height: 34px;
+	padding: 0 10px;
+	border: 1px solid var(--line);
+	border-radius: 7px;
+	background: var(--bg-soft);
+}
+.u-primary,
+.u-secondary {
+	height: 32px;
+	margin-top: 6px;
+	border: none;
+	border-radius: 7px;
+	font-weight: 600;
+}
+.u-primary {
+	background: var(--accent);
+	color: var(--accent-text);
+}
+.u-secondary {
+	padding: 0 16px;
+	background: var(--line);
+}
+.u-error {
+	margin: 0;
+	color: var(--error);
+}
+#waiting p {
+	margin: 0 0 8px;
+}

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com https://notify.dropboxapi.com; img-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+	<meta name="referrer" content="no-referrer">
+	<meta name="robots" content="noindex">
+	<title>Blockwise</title>
+	<link rel="icon" href="lib/icon.png">
+	<link rel="stylesheet" href="lib/app.css">
+	<link rel="stylesheet" href="lib/android.css">
+	<link rel="stylesheet" href="lib/android-setup.css">
+	<link rel="stylesheet" href="web.css">
+</head>
+<body class="setup web">
+	<main class="u-card">
+		<img src="lib/icon.png" alt="" class="u-logo" width="72" height="72">
+		<h1 id="title"></h1>
+		<p id="intro" class="u-muted"></p>
+		<div id="choose" hidden>
+			<div id="local-box">
+				<button type="button" id="local" class="u-primary"></button>
+				<p id="local-note" class="u-note"></p>
+			</div>
+			<p id="sync-head" class="u-head"></p>
+			<button type="button" id="nextcloud" class="u-secondary"></button>
+			<p id="nextcloud-note" class="u-note"></p>
+			<div id="drives" hidden>
+				<button type="button" id="dropbox" class="u-secondary" hidden></button>
+				<button type="button" id="gdrive" class="u-secondary" hidden></button>
+				<p id="drives-note" class="u-note"></p>
+			</div>
+			<p id="choose-error" class="u-error" role="alert" hidden></p>
+			<button type="button" id="choose-back" class="u-text" hidden></button>
+		</div>
+		<form id="pass" hidden>
+			<label for="pass1" id="pass1-label"></label>
+			<input id="pass1" type="password" autocomplete="new-password" minlength="8" required>
+			<div id="pass2-box">
+				<label for="pass2" id="pass2-label"></label>
+				<input id="pass2" type="password" autocomplete="new-password" minlength="8">
+			</div>
+			<p id="pass-error" class="u-error" role="alert" hidden></p>
+			<button type="submit" id="pass-submit" class="u-primary"></button>
+			<button type="button" id="no-encrypt" class="u-text"></button>
+			<button type="button" id="pass-back" class="u-text"></button>
+		</form>
+		<div id="plain" hidden>
+			<p id="plain-warning" class="u-warning"></p>
+			<button type="button" id="plain-go" class="u-secondary"></button>
+			<button type="button" id="plain-back" class="u-text"></button>
+		</div>
+		<form id="form" hidden>
+			<label for="server" id="server-label"></label>
+			<input id="server" type="text" autocomplete="url" spellcheck="false" autocapitalize="off" required>
+			<p id="error" class="u-error" role="alert" hidden></p>
+			<button type="submit" id="submit" class="u-primary"></button>
+			<button type="button" id="back" class="u-text"></button>
+		</form>
+		<div id="waiting" hidden>
+			<p id="waiting-text"></p>
+			<button type="button" id="cancel" class="u-secondary"></button>
+		</div>
+	</main>
+	<script src="lib/filesync.js"></script>
+	<script src="lib/drives.js"></script>
+	<script src="providers.js"></script>
+	<script src="web-native.js"></script>
+	<script src="lib/android-bridge.js"></script>
+	<script src="lib/i18n.js"></script>
+	<script src="lib/setup.js"></script>
+</body>
+</html>

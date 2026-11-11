@@ -1,0 +1,207 @@
+/*
+ * Blockwise's interface as a Mac window: the colors Nextcloud normally
+ * provides (in Blockwise's palette, for menus outside the app's root), the top
+ * bar next to the window buttons, and native-looking controls.
+ */
+:root {
+	color-scheme: light dark;
+	--color-main-background: #ffffff;
+	--color-background-hover: #f1effa;
+	--color-main-text: #24223a;
+	--color-text-maxcontrast: #6c6987;
+	--color-border: #e6e3f3;
+	--color-border-dark: #d4cfec;
+	--color-primary-element: #6c5ce7;
+	--color-primary-element-hover: #5a4bd6;
+	--color-primary-element-text: #ffffff;
+	--color-primary-element-light: #ece9fd;
+	--color-primary-element-light-text: #4b3cc4;
+	--color-error: #c62828;
+	--color-text-error: #b3261e;
+	--color-warning: #b77900;
+	--color-success-text: #2a7a3b;
+	--border-radius-element: 14px;
+	--border-radius-large: 24px;
+	--body-container-radius: 0;
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--color-main-background: #1e1b2b;
+		--color-background-hover: #2a2639;
+		--color-main-text: #eceaf6;
+		--color-text-maxcontrast: #a29ebb;
+		--color-border: #332f47;
+		--color-border-dark: #4a4563;
+		--color-primary-element: #8b7cf6;
+		--color-primary-element-hover: #9d90f8;
+		--color-primary-element-light: #2e2850;
+		--color-primary-element-light-text: #cfc8ff;
+		--color-error: #ff6b6b;
+		--color-text-error: #ff8a80;
+		--color-warning: #e0a526;
+		--color-success-text: #5cc675;
+	}
+}
+
+html,
+body.desktop {
+	height: 100%;
+	margin: 0;
+	overflow: hidden;
+	background: #f6f5fb;
+	color: var(--color-main-text);
+	font: 13px/1.45 Poppins, -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+@media (prefers-color-scheme: dark) {
+	html,
+	body.desktop {
+		background: #14121d;
+	}
+}
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+body.desktop #tracker-app {
+	height: 100%;
+}
+button,
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+}
+a {
+	color: inherit;
+}
+
+/* --- window chrome: the top bar starts after the window buttons and drags the window */
+
+body.desktop .imp-layout {
+	border-radius: 0;
+}
+/* The window buttons need 88px on the left: the same margin on both sides of the
+ * page, so the tabs and every page share one column at any window size */
+body.desktop #tracker-app {
+	--imp-content: 1300px;
+	--imp-side: 88px;
+}
+body.desktop .imp-nav {
+	padding: 12px var(--imp-nav-side) 4px;
+	-webkit-app-region: drag;
+	user-select: none;
+}
+body.desktop .imp-nav a,
+body.desktop .imp-nav button {
+	-webkit-app-region: no-drag;
+}
+body.desktop .imp-nav a svg {
+	width: 17px;
+	height: 17px;
+}
+/* The logo sits in the top right corner; the commitments get their own row below */
+body.desktop .imp-nav .imp-nav__main {
+	order: 1;
+}
+body.desktop .imp-nav .imp-nav__logo {
+	order: 2;
+	width: 38px;
+	height: 38px;
+	margin-left: auto;
+	border-radius: 12px;
+}
+body.desktop .imp-nav::after {
+	content: "";
+	order: 3;
+	flex-basis: 100%;
+	height: 0;
+}
+body.desktop .imp-nav .imp-nav__commitments {
+	order: 4;
+}
+body.desktop .imp-nav .imp-nav__logo svg {
+	width: 24px;
+	height: 24px;
+}
+body.desktop .imp-page {
+	padding-top: 18px;
+}
+
+/* --- controls ----------------------------------------------------------------- */
+
+body.desktop input[type="text"],
+body.desktop input[type="number"],
+body.desktop select,
+body.desktop textarea {
+	min-height: 32px;
+	padding: 4px 10px;
+	border: 1.5px solid var(--color-border-dark);
+	border-radius: 12px;
+	background: var(--color-main-background);
+	outline: none;
+}
+body.desktop textarea {
+	padding: 6px 10px;
+}
+body.desktop input[type="text"]:focus,
+body.desktop input[type="number"]:focus,
+body.desktop select:focus,
+body.desktop textarea:focus {
+	border-color: var(--color-primary-element);
+	box-shadow: 0 0 0 3px var(--color-primary-element-light);
+}
+body.desktop input[type="color"] {
+	height: 32px;
+}
+/* No visible scrollbars: content still scrolls with trackpad, wheel and keyboard */
+body.desktop,
+body.desktop * {
+	scrollbar-width: none;
+}
+body.desktop ::-webkit-scrollbar {
+	display: none;
+}
+
+/* --- toast ---------------------------------------------------------------------- */
+
+.toast {
+	position: fixed;
+	z-index: 100;
+	bottom: 18px;
+	left: 50%;
+	max-width: 480px;
+	padding: 10px 16px;
+	border-radius: 14px;
+	background: rgba(36, 34, 58, 0.94);
+	color: #fff;
+	font-weight: 700;
+	box-shadow: 0 10px 30px rgba(60, 50, 140, 0.25);
+	transform: translateX(-50%);
+}
+.toast.is-error {
+	background: #b3261e;
+}
+
+/* --- narrow window: icons only in the bar (labels stay for VoiceOver; links have tooltips) */
+
+@media (max-width: 900px) {
+	body.desktop .imp-nav__main a span {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+	body.desktop .imp-nav__main a {
+		padding: 0 11px;
+	}
+}
+@media (max-width: 520px) {
+	body.desktop .imp-timer__clock {
+		font-size: 30px;
+	}
+}

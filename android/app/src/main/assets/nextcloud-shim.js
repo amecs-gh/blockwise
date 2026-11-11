@@ -36,8 +36,9 @@
 		api: (method, path, body) => app.api(method, path, body),
 		openCalendar: (ts) => app.openCalendar(ts),
 		onChanged: (cb) => app.onChanged(cb),
-		// Only the phone app has an account sheet; the Mac app uses its menu bar menu
+		// The phone and the web app have an account sheet; the Mac app uses its menu bar menu
 		account: app.account ? () => app.account() : undefined,
+		phone: !!app.phone,
 	}
 	document.documentElement.lang = locale
 })()

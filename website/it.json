@@ -3,12 +3,11 @@
 	"nav.features": "Funzioni",
 	"nav.privacy": "I tuoi dati",
 	"nav.download": "Scarica",
-	"hero.eyebrow": "Un planner a blocchi di tempo con timer, per Mac, Android e Nextcloud",
+	"hero.eyebrow": "Un planner a blocchi di tempo con timer, per Mac, Android, Nextcloud e browser",
 	"hero.title": "Pianifica la settimana a blocchi.",
 	"hero.sub": "Affrontala un blocco alla volta.",
 	"hero.lead": "Dai a ogni impegno blocchi di tempo nel calendario. Blockwise riempie ogni blocco con i prossimi task, registra il tempo con un tocco e ti mostra dove è finita davvero la settimana.",
 	"hero.cta": "Scarica",
-	"hero.more": "Guarda come funziona",
 	"hero.free": "Gratis e open source (AGPL-3.0). In italiano e in inglese.",
 	"shot.now": "La pagina Adesso: i blocchi di oggi come una timeline, il timer in corso e i task di questo blocco",
 	"shot.phone": "Blockwise su un telefono Android",
@@ -59,5 +58,12 @@
 	"dl.how": "Come installarla",
 	"dl.all": "Tutte le versioni e il codice sorgente su GitHub",
 	"foot": "Open source con licenza AGPL-3.0. Nato da TimeManager di Thomas Ebert.",
-	"title": "Blockwise · pianifica la settimana a blocchi"
+	"title": "Blockwise · pianifica la settimana a blocchi",
+	"hero.web": "Apri nel browser",
+	"dl.web.title": "Browser",
+	"dl.web.req": "Qualsiasi browser aggiornato · niente da installare",
+	"dl.web.btn": "Apri nel browser",
+	"dl.web.how": "Come funziona",
+	"dl.web.1": "I tuoi dati restano nel browser, cifrati. Non esiste un server di Blockwise: nulla viene inviato altrove.",
+	"dl.web.2": "Per usarlo con il Mac e il telefono, collega Dropbox: cifrato end-to-end con una passphrase che conosci solo tu. Con Nextcloud, usa Blockwise dentro il tuo Nextcloud."
 }

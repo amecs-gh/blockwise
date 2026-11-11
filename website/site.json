@@ -1,5 +1,8 @@
 {
 	"url": "",
+	"providers": {
+		"dropboxAppKey": ""
+	},
 	"description": {
 		"en": "Plan your commitments as blocks in your calendar, work through tasks one block at a time, and see where your time goes. Free for Mac, Android and Nextcloud.",
 		"it": "Pianifica i tuoi impegni come blocchi nel calendario, affronta i task un blocco alla volta e scopri dove va il tuo tempo. Gratis per Mac, Android e Nextcloud."

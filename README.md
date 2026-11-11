@@ -26,16 +26,20 @@ English and Italian.
 | **Nextcloud** | [`nextcloud/`](nextcloud) | A Nextcloud app: the web interface, the sync server for the other apps, and calendars in Nextcloud Calendar. |
 | **Android** | [`android/`](android) | Blockwise on your phone, Material 3. Works on its own (no account, the built-in calendar); optionally syncs with Nextcloud (blocks from the phone's calendars, via DAVx⁵) or through Dropbox / Google Drive, end-to-end encrypted. |
 | **Mac** | [`mac/`](mac) | A Mac app with a menu bar timer and notifications. Syncs with Nextcloud, or end-to-end encrypted through **Dropbox** or **Google Drive**, or keeps your data on the Mac only; blocks come from Apple Calendar. |
+| **Browser** | [`website/app/`](website/app) | Blockwise as a web page, with no server of its own: the data stays in the browser (encrypted in IndexedDB), and optionally syncs end-to-end encrypted through **Dropbox**. Published with the website. |
 
-All three show the same interface: it is written once, in `nextcloud/js` and
-`nextcloud/css`, and copied into the Android and Mac apps when they are built.
+All of them show the same interface: it is written once, in `nextcloud/js` and
+`nextcloud/css`, and copied into the Android, Mac and browser apps when they
+are built. The browser app also reuses the Android app's setup and bridge
+(`android-bridge.js`, `setup.js`) and the Mac app's drive code (`drives.js`).
 
 ## Installing
 
 Ready-made builds come from GitHub Actions on every push to `main`: the
 releases **mac-latest** (`Blockwise-mac.dmg`), **latest** (`Blockwise.apk`) and
 **nextcloud-latest** (`blockwise-nextcloud.tar.gz`). The [`website/`](website)
-folder is a download page for them, in English and Italian.
+folder is a download page for them, in English and Italian, and serves the
+browser app at `/app/`.
 
 
 **Nextcloud** (version 32 to 35): copy the `nextcloud` folder into your
