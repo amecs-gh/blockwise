@@ -200,7 +200,7 @@ html.m3-dark #tracker-app {
 	min-width: 0;
 	max-width: 100%;
 	margin-left: auto;
-	padding: 4px 2px;
+	padding: 4px 0 4px 2px;
 	overflow-x: auto;
 	scrollbar-width: none;
 }
@@ -216,6 +216,8 @@ html.m3-dark #tracker-app {
 	right: 0;
 	padding-left: 6px;
 	background: linear-gradient(to right, transparent, var(--tl-page) 6px);
+	/* covers the chips that scroll under it, up to the edge */
+	box-shadow: 8px 0 0 var(--tl-page);
 }
 /* Rows that scroll sideways: a fade on the side where there is more */
 .imp-hs--right {
@@ -486,6 +488,10 @@ html.m3-dark #tracker-app {
 		flex: 1 1 auto;
 		min-height: 0;
 		align-items: stretch;
+		/* room below the cards for their shadow (a scroller clips what overflows it) */
+		padding-bottom: 22px;
+		margin-bottom: -6px;
+		grid-template-rows: minmax(0, 1fr);
 		overflow-x: auto;
 	}
 	/* each column the full height of the window; its tasks scroll inside */
