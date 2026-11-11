@@ -97,7 +97,23 @@ const tz = 'Europe/Zurich'
 		assert.equal((await W(at(2026, 12, 1, 0), at(2026, 12, 2, 0))).length, 1, 'untouched')
 		ok('another user can\'t change, delete or add to your calendars')
 
-		// Events made elsewhere (a rule this app doesn't offer) keep their rule
+		// Deleting a commitment can take its calendar along, to the trash bin; nothing else
+		const st2 = await api('admin', 'GET', 'state')
+		const calB = st2.commitments.find((c) => c.id === b.id).calendarId
+		const other = st2.calendars.find((c) => !c.linked)
+		assert.equal((await raw('bob', 'DELETE', `calendars/${calB}`)).status, 400, 'not bob\'s')
+		if (other) assert.equal((await raw('admin', 'DELETE', `calendars/${other.id}`)).status, 400, 'a calendar that is no commitment\'s')
+		assert.equal((await raw('bob', 'DELETE', `commitments/${b.id}?calendar=1`)).status, 404)
+		assert.ok((await api('admin', 'GET', 'state')).calendars.some((c) => c.id === calB), 'still there')
+		await api('admin', 'DELETE', `commitments/${b.id}?calendar=1`)
+		const st3 = await api('admin', 'GET', 'state')
+		assert.ok(!st3.calendars.some((c) => c.id === calB), 'calendar gone (to the trash bin)')
+		assert.ok(!other || st3.calendars.some((c) => c.id === other.id), 'other calendars stay')
+		assert.ok(!st3.commitments.some((c) => c.id === b.id))
+		await api('admin', 'DELETE', `commitments/${a.id}`)
+		assert.ok((await api('admin', 'GET', 'state')).calendars.some((c) => c.id === st2.commitments.find((x) => x.id === a.id).calendarId), 'kept without ?calendar=1')
+		ok('deleting a commitment can move its calendar to the trash bin; only your own commitment\'s')
+
 		console.log('\nall calendar server tests passed')
 	} finally {
 		await api('admin', 'DELETE', `commitments/${a.id}`).catch(() => {})

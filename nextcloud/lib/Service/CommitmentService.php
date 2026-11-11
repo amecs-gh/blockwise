@@ -126,11 +126,16 @@ class CommitmentService {
 	}
 
 	/**
-	 * Deletes the commitment, its tasks and notes. The calendar is kept; tracked
-	 * time stays in the statistics as unplanned time.
+	 * Deletes the commitment, its tasks and notes; tracked time stays in the
+	 * statistics as unplanned time. The calendar is kept, unless `withCalendar`:
+	 * then it goes to Nextcloud's trash bin with its events, first (only the
+	 * user's own calendar, and only if no other commitment uses it).
 	 */
-	public function delete(string $userId, int $id): void {
+	public function delete(string $userId, int $id, bool $withCalendar = false): void {
 		$c = $this->mapper->find($id, $userId);
+		if ($withCalendar && $c->getCalendarId() !== null) {
+			$this->trashCalendar($userId, $c->getCalendarId());
+		}
 		$this->db->beginTransaction();
 		try {
 			foreach ($this->taskMapper->findForUser($userId, $id) as $task) {
@@ -144,6 +149,19 @@ class CommitmentService {
 			$this->db->rollBack();
 			throw $e;
 		}
+	}
+
+	/**
+	 * Moves a commitment's calendar to the trash bin (the Mac app asks before it
+	 * deletes the commitment). Only a calendar of exactly one of the user's
+	 * commitments: never one the user just has, or one two commitments share.
+	 */
+	public function trashCalendar(string $userId, int $calendarId): void {
+		$users = array_filter($this->mapper->findAllForUser($userId), fn (Commitment $c) => $c->getCalendarId() === $calendarId);
+		if (count($users) !== 1) {
+			throw new ServiceException('This calendar is not a commitment\'s own calendar');
+		}
+		$this->calendars->trashCalendar($userId, $calendarId);
 	}
 
 	/** @param int[] $ids */

@@ -13,6 +13,7 @@ return [
 		['name' => 'api#createCommitment', 'url' => '/api/commitments', 'verb' => 'POST'],
 		['name' => 'api#updateCommitment', 'url' => '/api/commitments/{id}', 'verb' => 'PUT'],
 		['name' => 'api#deleteCommitment', 'url' => '/api/commitments/{id}', 'verb' => 'DELETE'],
+		['name' => 'api#trashCalendar', 'url' => '/api/calendars/{id}', 'verb' => 'DELETE'],
 		['name' => 'api#reorderCommitments', 'url' => '/api/commitments-order', 'verb' => 'POST'],
 
 		['name' => 'api#tasks', 'url' => '/api/tasks', 'verb' => 'GET'],

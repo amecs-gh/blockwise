@@ -4,7 +4,7 @@
 //
 // Commands: access, calendars, events {from, to, calendars}, createEvent
 // {calendar, title, start, end, repeat?, until?, skip?}, deleteEvent {calendar, uid, start?},
-// createCalendar {title, color}. Times are unix
+// createCalendar {title, color}, deleteCalendar {calendar}. Times are unix
 // seconds. It only touches calendars and events, never reminders or contacts.
 //
 // Build: swiftc -O -target arm64-apple-macos13 -framework EventKit -o build/blockwise-calendar BlockwiseCalendar.swift
@@ -170,6 +170,15 @@ case "deleteEvent":
 	}
 	do { try store.remove(master, span: .futureEvents, commit: true) } catch { fail("failed") }
 	ok(["deleted": 1])
+
+case "deleteCalendar":
+	// A deleted commitment's calendar, with its events, when you ask for it.
+	// Never the calendar new events go to, nor one that can't be changed.
+	guard hasAccess() else { fail("denied") }
+	guard let calId = text(input["calendar"], max: 200), let cal = store.calendar(withIdentifier: calId) else { fail("invalid") }
+	guard cal.allowsContentModifications, !cal.isImmutable, cal.calendarIdentifier != store.defaultCalendarForNewEvents?.calendarIdentifier else { fail("invalid") }
+	do { try store.removeCalendar(cal, commit: true) } catch { fail("failed") }
+	ok(["deleted": true])
 
 case "createCalendar":
 	guard hasAccess() else { fail("denied") }

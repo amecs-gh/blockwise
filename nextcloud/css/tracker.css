@@ -1199,6 +1199,48 @@ html.m3-dark #tracker-app {
 .imp-ceditor__spacer {
 	flex: 1 1 auto;
 }
+/* deleting: asks in the card, with the calendar as an opt-in */
+.imp-ceditor__confirm {
+	display: grid;
+	gap: 8px;
+	padding: 14px 16px;
+	border-radius: 16px;
+	background: var(--tl-card);
+	box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-error, #d91a1a) 35%, transparent);
+}
+.imp-ceditor__ask {
+	margin: 0;
+	font-weight: 700;
+}
+.imp-ceditor__hint {
+	margin: 0;
+	color: var(--imp-muted);
+	font-size: 0.9em;
+}
+.imp-ceditor__hint[hidden] {
+	display: none;
+}
+.imp-ceditor__check {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 10px 12px;
+	border-radius: 12px;
+	background: var(--tl-pill);
+	font-weight: 600;
+	cursor: pointer;
+}
+#tracker-app .imp-ceditor__check input {
+	flex: 0 0 auto;
+	width: 18px;
+	height: 18px;
+	min-height: 0;
+	margin: 2px 0 0;
+	accent-color: var(--color-error, #d91a1a);
+}
+.imp-ceditor__confirm .imp-ceditor__foot {
+	margin-top: 4px;
+}
 
 /* color swatches */
 .imp-swatches {

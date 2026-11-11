@@ -88,7 +88,7 @@ class ApiController extends Controller {
 				'longBreakUntil' => $this->settings->getLongBreakUntil($this->uid()),
 				'now' => $this->time->getTime(),
 				// The calendar page: plan, move and change blocks (events in the commitments' calendars)
-				'features' => ['calendarView' => true, 'createBlocks' => true, 'calendars' => true],
+				'features' => ['calendarView' => true, 'createBlocks' => true, 'calendars' => true, 'deleteCalendar' => 'trash'],
 			];
 		});
 	}
@@ -137,9 +137,18 @@ class ApiController extends Controller {
 	}
 
 	#[NoAdminRequired]
-	public function deleteCommitment(int $id): JSONResponse {
+	public function deleteCommitment(int $id, bool $calendar = false): JSONResponse {
+		return $this->handle(function () use ($id, $calendar) {
+			$this->commitments->delete($this->uid(), $id, $calendar);
+			return ['ok' => true];
+		});
+	}
+
+	/** A commitment's calendar to the trash bin, with its events */
+	#[NoAdminRequired]
+	public function trashCalendar(int $id): JSONResponse {
 		return $this->handle(function () use ($id) {
-			$this->commitments->delete($this->uid(), $id);
+			$this->commitments->trashCalendar($this->uid(), $id);
 			return ['ok' => true];
 		});
 	}

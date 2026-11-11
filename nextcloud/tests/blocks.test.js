@@ -157,5 +157,31 @@ async function engine(extra = {}) {
 		assert.equal((await a.api('GET', 'state')).features.builtinCalendar, false)
 		ok('with another calendar: no built-in routes')
 	}
+	// Deleting a commitment with ?calendar=1 takes its calendar along (Apple Calendar); without, it stays
+	{
+		let cals = [{ url: 'apple:A', name: 'Thesis', color: '#336699' }, { url: 'apple:B', name: 'Gym', color: '#993366' }, { url: 'apple:H', name: 'Home', color: '#000000' }]
+		const gone = []
+		const calendar = { kind: 'apple', calendars: async () => cals, events: async () => [], deleteCalendar: async (url) => { gone.push(url); cals = cals.filter((c) => c.url !== url) } }
+		const a = await createEngine({ storage: mem(), remote: null, calendar })
+		let st = await a.api('GET', 'state')
+		assert.equal(st.features.deleteCalendar, 'permanent')
+		const id = (u) => st.calendars.find((c) => c.url === u).id
+		const x = await a.api('POST', 'commitments', { calendarId: id('apple:A') })
+		const y = await a.api('POST', 'commitments', { calendarId: id('apple:B') })
+		await a.api('DELETE', `commitments/${y.id}`)
+		assert.deepEqual(gone, [], 'kept without ?calendar=1')
+		await a.api('DELETE', `commitments/${x.id}?calendar=1`)
+		assert.deepEqual(gone, ['apple:A'], 'only its own calendar')
+		st = await a.api('GET', 'state')
+		assert.ok(!st.commitments.length && st.calendars.every((c) => c.url !== 'apple:A'))
+		// A failure keeps the commitment
+		calendar.deleteCalendar = async () => { throw new Error('nope') }
+		const z = await a.api('POST', 'commitments', { calendarId: st.calendars.find((c) => c.url === 'apple:H').id })
+		await assert.rejects(a.api('DELETE', `commitments/${z.id}?calendar=1`), /nope/)
+		assert.equal((await a.api('GET', 'state')).commitments.length, 1)
+		const b = await engine()
+		assert.equal((await b.api('GET', 'state')).features.deleteCalendar, null, 'built in: blocks always go with it')
+		ok('deleting a commitment can delete its calendar too, only when asked')
+	}
 	console.log('\nall built-in calendar tests passed')
 })().catch((e) => { console.error('✘', e); process.exit(1) })

@@ -62,6 +62,12 @@ function helper(cmd, input) {
 		if (input.start) { if (!e.repeat) apple.events.splice(apple.events.indexOf(e), 1); else e.skip = [...(e.skip || []), input.start] } else apple.events.splice(apple.events.indexOf(e), 1)
 		return { ok: true, data: { deleted: 1 } }
 	}
+	if (cmd === 'deleteCalendar') {
+		if (input.calendar === 'HOME') return { ok: false, error: 'invalid' } // the default calendar
+		apple.cals = apple.cals.filter((c) => c.id !== input.calendar)
+		apple.events = apple.events.filter((e) => e.calendar !== input.calendar)
+		return { ok: true, data: { deleted: true } }
+	}
 	if (cmd === 'events') return { ok: true, data: apple.events.filter((e) => input.calendars.includes(e.calendar)).flatMap((e) => expand(e, input.from, input.to)) }
 	return { ok: false, error: 'invalid' }
 }
@@ -166,6 +172,18 @@ childProcess.execFile = (file, args, opts, cb) => {
 	assert.deepEqual(ev.filter((x) => x.title === 'Exam').map((x) => new Date(x.start * 1000).getHours()), [13], 'the exam moved, once')
 	assert.equal(apple.events.filter((e) => e.repeat === 'weekdays').length, 1)
 	ok('changed in the built-in calendar → replaced in Apple Calendar, not doubled')
+
+	// Deleting a commitment: its Apple calendar goes too only when asked; never the default one
+	st = await call('api', 'app.html', 'GET', 'state')
+	assert.equal(st.features.deleteCalendar, 'permanent')
+	const teach = st.commitments.find((c) => c.name === 'Teaching')
+	await call('api', 'app.html', 'DELETE', `commitments/${teach.id}?calendar=1`)
+	assert.ok(!apple.cals.some((c) => c.title === 'Teaching') && !apple.events.some((e) => e.calendar === teachingCal), 'calendar and events gone')
+	assert.ok(apple.cals.some((c) => c.id === 'HOME') && apple.events.some((e) => e.uid === 'OTHER'), 'other calendars untouched')
+	const home = await call('api', 'app.html', 'POST', 'commitments', { calendarId: (await call('api', 'app.html', 'GET', 'state')).calendars.find((c) => c.name === 'Home').id })
+	await assert.rejects(call('api', 'app.html', 'DELETE', `commitments/${home.id}?calendar=1`), /default calendar/)
+	assert.ok((await call('api', 'app.html', 'GET', 'state')).commitments.some((c) => c.id === home.id), 'the commitment stays when its calendar can\'t go')
+	ok('delete a commitment with its Apple calendar, only when asked; the default calendar is refused')
 
 	console.log('\nall calendar switch tests passed')
 	process.exit(0)

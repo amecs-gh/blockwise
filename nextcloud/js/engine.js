@@ -524,7 +524,7 @@
 					running: running(),
 					longBreakUntil: longBreakUntil(),
 					now: now(),
-					features: { createBlocks: typeof o.calendar.createEvent === 'function', calendars: o.calendar.kind !== 'none', builtinCalendar: builtin, calendarView: builtin || typeof o.calendar.updateEvent === 'function' },
+					features: { createBlocks: typeof o.calendar.createEvent === 'function', calendars: o.calendar.kind !== 'none', builtinCalendar: builtin, deleteCalendar: !builtin && typeof o.calendar.deleteCalendar === 'function' ? (o.calendar.kind === 'nextcloud' ? 'trash' : 'permanent') : null, calendarView: builtin || typeof o.calendar.updateEvent === 'function' },
 					sync: { pending: pendingCount(), lastSync: db.lastSync, server: !!o.remote, refused: db.refused || null },
 				}
 			}],
@@ -622,8 +622,14 @@
 				changed()
 				return commitmentJson(u, db.records.commitment[u])
 			}],
-			['DELETE', /^commitments\/(\d+)$/, async (m) => {
-				const [u] = byLid('commitment', m[1])
+			['DELETE', /^commitments\/(\d+)$/, async (m, q) => {
+				const [u, r] = byLid('commitment', m[1])
+				// ?calendar=1: its calendar and events go too, first (built in: its blocks always go)
+				if (q.calendar === '1' && !builtin && r.f.calendarUrl && typeof o.calendar.deleteCalendar === 'function') {
+					if (Object.entries(db.records.commitment).some(([x, c]) => x !== u && c.f.calendarUrl === r.f.calendarUrl)) throw new ApiError('Another commitment uses this calendar')
+					await o.calendar.deleteCalendar(r.f.calendarUrl)
+					await refreshCalendars()
+				}
 				for (const [tu, t] of Object.entries(db.records.task)) if (t.f.commitment === u) deleteTask(tu)
 				// Tracked time stays, as unplanned time
 				for (const [nu, n] of Object.entries(db.records.note)) if (n.f.commitment === u) remove('note', nu)

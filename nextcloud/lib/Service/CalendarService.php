@@ -130,6 +130,17 @@ class CalendarService {
 		]);
 	}
 
+	/**
+	 * Moves the user's own calendar, with its events, to Nextcloud's trash bin
+	 * (the Calendar app can restore it while the server keeps deleted items).
+	 */
+	public function trashCalendar(string $userId, int $calendarId): void {
+		if ($this->getCalendar($userId, $calendarId) === null) {
+			throw new ServiceException('Calendar not found');
+		}
+		$this->backend->deleteCalendar($calendarId, false);
+	}
+
 	public function updateCalendar(int $calendarId, string $name, string $color): void {
 		$patch = new PropPatch([self::P_NAME => $name, self::P_COLOR => $color]);
 		$this->backend->updateCalendar($calendarId, $patch);

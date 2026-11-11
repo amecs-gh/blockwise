@@ -3014,23 +3014,56 @@
 			await refresh()
 		})
 		card.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); close() } })
+		/** Deleting asks in the card: and whether its calendar and events go too */
+		const askDelete = (foot) => {
+			const builtin = state.features.builtinCalendar
+			const how = state.features.deleteCalendar
+			const cal = !builtin && how && c.calendarId !== null ? state.calendars.find((x) => x.id === c.calendarId) : null
+			const box = h('input', { type: 'checkbox' })
+			const hint = h('p', { class: 'imp-ceditor__hint', hidden: true }, how === 'trash'
+				? tr('You can restore it from the trash bin in the Calendar app.')
+				: tr('This can\'t be undone.'))
+			box.addEventListener('change', () => { hint.hidden = !box.checked; go.textContent = box.checked ? tr('Delete both') : tr('Delete') })
+			const go = h('button', {
+				type: 'button', class: 'imp-button imp-button--danger',
+				onclick: async () => {
+					go.disabled = true
+					try {
+						await api('DELETE', `commitments/${c.id}${box.checked ? '?calendar=1' : ''}`)
+					} catch (e) {
+						go.disabled = false
+						toast(e.message, true)
+						return
+					}
+					state.editingCommitment = null
+					toast(box.checked ? tr('Commitment and calendar deleted') : tr('Commitment deleted'))
+					await refresh()
+				},
+			}, tr('Delete'))
+			const panel = h('div', { class: 'imp-ceditor__confirm', role: 'group', 'aria-label': tr('Delete') },
+				h('p', { class: 'imp-ceditor__ask' }, builtin
+					? tr('Delete "{name}" with its tasks, notes and blocks?', { name: c.name })
+					: tr('Delete "{name}" with its tasks and notes?', { name: c.name })),
+				h('p', { class: 'imp-ceditor__hint' }, tr('Tracked time stays, as unplanned time.')),
+				cal ? h('label', { class: 'imp-ceditor__check' }, box, h('span', {}, how === 'trash'
+					? tr('Also move its calendar "{calendar}" and all its events to the trash bin', { calendar: cal.name })
+					: tr('Also delete its calendar "{calendar}" and all its events from Apple Calendar', { calendar: cal.name })))
+					: (!builtin && c.calendarId !== null ? h('p', { class: 'imp-ceditor__hint' }, tr('Its calendar and events are kept.')) : null),
+				cal ? hint : null,
+				h('div', { class: 'imp-ceditor__foot' },
+					h('span', { class: 'imp-ceditor__spacer' }),
+					h('button', { type: 'button', class: 'imp-button', onclick: () => panel.replaceWith(foot) }, tr('Cancel')),
+					go))
+			foot.replaceWith(panel)
+			;(cal ? box : go).focus()
+		}
 		card.append(...[
 			h('div', { class: 'imp-ceditor__head' }, preview, name),
 			h('div', { class: 'imp-ceditor__row' }, h('span', { class: 'imp-ceditor__label' }, tr('Color')), swatches(color, (v) => { color = v; card.style.setProperty('--c', v) })),
 			h('div', { class: 'imp-ceditor__row' }, h('span', { class: 'imp-ceditor__label' }, tr('Weekly goal')), goal),
 			calSelect ? h('div', { class: 'imp-ceditor__row' }, h('span', { class: 'imp-ceditor__label' }, tr('Calendar')), calSelect) : null,
 			h('div', { class: 'imp-ceditor__foot' },
-				c ? h('button', {
-					type: 'button', class: 'imp-button imp-button--danger',
-					onclick: async () => {
-						if (!window.confirm(state.features.builtinCalendar
-							? tr('Delete "{name}" with its tasks, notes and blocks? Tracked time stays as unplanned time.', { name: c.name })
-							: tr('Delete "{name}" and its tasks? The calendar and its events are kept; tracked time stays as unplanned time.', { name: c.name }))) return
-						await api('DELETE', `commitments/${c.id}`)
-						state.editingCommitment = null
-						await refresh()
-					},
-				}, tr('Delete')) : null,
+				c ? h('button', { type: 'button', class: 'imp-button imp-button--danger', onclick: (e) => askDelete(e.currentTarget.parentNode) }, tr('Delete')) : null,
 				h('span', { class: 'imp-ceditor__spacer' }),
 				h('button', { type: 'button', class: 'imp-button', onclick: close }, tr('Cancel')),
 				h('button', { type: 'submit', class: 'imp-button imp-button--primary' }, c ? tr('Save') : tr('Create')))].filter(Boolean))

@@ -92,6 +92,17 @@ function appleCalendar({ helperPath, run }) {
 			if (!calendar || typeof uid !== 'string' || !uid || uid.length > 1000) return
 			await call('deleteEvent', Number.isFinite(start) ? { calendar, uid, start } : { calendar, uid })
 		},
+		/** A commitment's calendar with all its events, when you delete the commitment (can't be undone) */
+		async deleteCalendar(url) {
+			const calendar = appleId(url)
+			if (!calendar) throw new Error('This calendar is not on this Mac.')
+			try {
+				await call('deleteCalendar', { calendar })
+			} catch (e) {
+				if (e.code === 'invalid') throw new Error('Apple Calendar keeps this calendar: it is your default calendar or can\'t be changed. Nothing was deleted.')
+				throw e
+			}
+		},
 		/** A new commitment's calendar (in iCloud if you use it, else on this Mac) */
 		async createCalendar({ name, color }) {
 			const r = await call('createCalendar', { title: String(name).slice(0, 255), color: /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#0082c9' })
@@ -160,6 +171,13 @@ function nextcloudCalendar({ api, now = Date.now }) {
 			const r = await api('PUT', `blocks/${series}/${occurrence}`, body)
 			recent = null
 			return r
+		},
+		/** A commitment's calendar, with its events, to Nextcloud's trash bin */
+		async deleteCalendar(url) {
+			const cal = await calOf(url)
+			await api('DELETE', `calendars/${cal.id}`)
+			cals = null
+			recent = null
 		},
 		async deleteEvent(series, occurrence, scope) {
 			const r = await api('DELETE', `blocks/${series}/${occurrence}?scope=${scope}`)
