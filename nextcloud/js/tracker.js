@@ -1244,35 +1244,22 @@
 			return page
 		}
 		if (!commitmentById(state.tasksFor)) state.tasksFor = state.commitments[0].id
-		const c = commitmentById(state.tasksFor)
-		page.style.setProperty('--c', c.color)
 		const now = nowTs()
-		const [tasks, blockData] = await Promise.all([
-			api('GET', `tasks?commitmentId=${c.id}&status=open`),
+		const [all, blockData] = await Promise.all([
+			Promise.all(state.commitments.map((c) => api('GET', `tasks?commitmentId=${c.id}&status=open`))),
 			api('GET', `blocks?from=${now - 86400}&to=${now + 14 * 86400}`).catch(() => ({ blocks: [] })),
 		])
-		const own = blockData.blocks.filter((b) => b.commitmentId === c.id && b.end > now).sort((a, b) => a.start - b.start)
+		// Every commitment side by side, each a column of its queue (scrolls inside on wide windows)
+		page.append(h('div', { class: 'imp-tcols' }, state.commitments.map((c, k) => taskColumn(c, all[k], blockData.blocks, now))))
+		return page
+	}
+
+	function taskColumn(c, tasks, blocks, now) {
+		const own = blocks.filter((b) => b.commitmentId === c.id && b.end > now).sort((a, b) => a.start - b.start)
 		const plan = planIntoBlocks(tasks, own)
-
-		page.append(h('div', { class: 'imp-tabs', role: 'tablist' }, state.commitments.map((x) => h('button', {
-			role: 'tab',
-			'aria-selected': x.id === c.id ? 'true' : 'false',
-			class: x.id === c.id ? 'active' : '',
-			style: { '--c': x.color },
-			onclick: () => { state.tasksFor = x.id; state.composer = null; render() },
-		}, h('span', { class: 'imp-dot', style: { background: x.color } }), x.name))))
-
-		// Summary and the shortcut to the composer
-		const work = tasks.reduce((s, t) => s + remainingMin(t), 0)
-		const week = own.reduce((s, b) => s + Math.max(0, Math.min(b.end, now + 7 * 86400) - Math.max(b.start, now)), 0)
-		page.append(h('div', { class: 'imp-tq__top' },
-			h('p', { class: 'imp-muted' },
-				tasks.length
-					? [trn('%n open task', '%n open tasks', tasks.length), ' · ', tr('{time} of work', { time: fmtMin(work) }), ' · ', tr('{time} in blocks in the next 7 days', { time: duration(week, { short: true }) })]
-					: tr('No open tasks for {name}.', { name: c.name })),
-			h('button', { type: 'button', class: 'imp-button', onclick: () => openComposer(), title: tr('New task (N)') }, '+ ', tr('New task'))))
-
-		const list = h('ol', { class: 'imp-tq', 'aria-label': tr('Tasks by priority') })
+		const work = tasks.reduce((sum, t) => sum + remainingMin(t), 0)
+		const week = own.reduce((sum, b) => sum + Math.max(0, Math.min(b.end, now + 7 * 86400) - Math.max(b.start, now)), 0)
+		const list = h('ol', { class: 'imp-tq', 'aria-label': tr('Tasks of {name} by priority', { name: c.name }) })
 		let lastSlot
 		tasks.forEach((t, i) => {
 			const slot = plan.where.get(t.id)
@@ -1282,9 +1269,16 @@
 			}
 			list.append(taskItem(t, i, tasks, c))
 		})
-		page.append(list)
-		page.append(composer(c, tasks, own))
-		return page
+		const mine = state.tasksFor === c.id
+		return h('section', { class: `imp-tcol ${mine ? 'is-current' : ''}`, style: { '--c': c.color, '--on-c': onColor(c.color) }, 'data-cid': c.id },
+			h('header', { class: 'imp-tcol__head' }, tile(c),
+				h('div', null,
+					h('h2', null, h('a', { href: `#c/${c.id}` }, c.name)),
+					h('span', { class: 'imp-muted' }, tasks.length
+						? `${tr('{time} of work', { time: fmtMin(work) })} · ${tr('{time} in blocks', { time: duration(week, { short: true }) })}`
+						: tr('No open tasks'))),
+				h('button', { type: 'button', class: 'imp-icon-btn imp-tcol__add', onclick: () => openComposer(c.id), title: tr('New task (N)'), 'aria-label': tr('New task for {name}', { name: c.name }) }, '+')),
+			h('div', { class: 'imp-tcol__body' }, list, mine ? composer(c, tasks, own) : null))
 	}
 
 	function blockDivider(slot) {
@@ -1375,9 +1369,23 @@
 		const body = h('div', { class: 'imp-tq__main' }, head)
 		if (!single) {
 			body.append(h('div', { class: 'imp-tq__bar', 'aria-hidden': 'true' }, h('span', { style: { width: `${total ? Math.round(((total - left) / total) * 100) : 0}%` } })))
-			const subs = h('ul', { class: 'imp-subtasks imp-tq__subs' })
+			// Checked subtasks fold away (still in the list, so reordering keeps them)
+			const fold = doneCount > 0 && !(state.showDone || new Set()).has(t.id)
+			const subs = h('ul', { class: `imp-subtasks imp-tq__subs ${fold ? 'hide-done' : ''}` })
 			for (const s of t.subtasks) subs.append(subtaskRow(t, s))
 			body.append(subs)
+			if (doneCount) {
+				body.append(h('button', {
+					type: 'button',
+					class: 'imp-link imp-tq__donetoggle',
+					onclick: () => {
+						state.showDone = state.showDone || new Set()
+						if (fold) state.showDone.add(t.id)
+						else state.showDone.delete(t.id)
+						render()
+					},
+				}, fold ? trn('Show %n done', 'Show %n done', doneCount) : tr('Hide done')))
+			}
 		}
 		if (state.noteFor === t.id || t.note) {
 			body.append(editableNote(t))
@@ -1485,7 +1493,8 @@
 
 	const emptyDraft = () => ({ open: true, title: '', estimate: null, rows: [{ title: '', estimate: null }] })
 
-	function openComposer() {
+	function openComposer(cid) {
+		if (cid && cid !== state.tasksFor) { state.tasksFor = cid; state.composer = null }
 		if (!state.composer) state.composer = emptyDraft()
 		state.composer.open = true
 		state.refocus = 'imp-composer-title'
@@ -1498,7 +1507,7 @@
 	function composer(c, tasks, own) {
 		const d = state.composer
 		if (!d || !d.open) {
-			return h('button', { type: 'button', class: 'imp-tq__new', onclick: () => openComposer() },
+			return h('button', { type: 'button', class: 'imp-tq__new', onclick: () => openComposer(c.id) },
 				h('span', { class: 'imp-tq__plus', 'aria-hidden': 'true' }, '+'), tr('New task'), h('kbd', null, 'N'))
 		}
 
@@ -2397,7 +2406,8 @@
 		const shown = b.slice(-6)
 		const totalTracked = (id) => b.reduce((s, x) => s + tracked(id, x), 0)
 		const totalPlanned = (id) => b.reduce((s, x) => s + planned(id, x), 0)
-		page.append(h('div', { class: 'imp-tablewrap' }, h('table', { class: 'imp-table' },
+		// The same numbers as a table, folded away (less scrolling)
+		page.append(h('details', { class: 'imp-sessions imp-report__table' }, h('summary', null, tr('As a table')), h('div', { class: 'imp-tablewrap' }, h('table', { class: 'imp-table' },
 			h('thead', null, h('tr', null,
 				h('th', { scope: 'col' }, tr('Commitment')),
 				shown.map((x) => h('th', { scope: 'col', class: 'num' }, p.tick(x.date))),
@@ -2420,9 +2430,8 @@
 				shown.map((x) => h('td', { class: 'num' }, duration(ids.reduce((s, id) => s + tracked(id, x), 0), { short: true }))),
 				h('td', { class: 'num strong' }, duration(ids.reduce((s, id) => s + totalTracked(id), 0), { short: true })),
 				h('td', { class: 'num imp-muted' }, duration(ids.reduce((s, id) => s + (id === null ? 0 : totalPlanned(id)), 0), { short: true })),
-				goalSum ? h('td', { class: 'num imp-muted' }, fmtMin(goalSum)) : null)))))
-
-		page.append(h('p', { class: 'imp-muted imp-footnote' }, tr('"Planned" is the time in calendar blocks during the days shown. Blocks coming up are on the Now page.')))
+				goalSum ? h('td', { class: 'num imp-muted' }, fmtMin(goalSum)) : null)))),
+			h('p', { class: 'imp-muted imp-footnote' }, tr('"Planned" is the time in calendar blocks during the days shown. Blocks coming up are on the Now page.'))))
 
 		// Recent sessions, editable by deletion
 		const recent = [...sessions].sort((a, z) => z.start - a.start).slice(0, 15)
@@ -2576,7 +2585,8 @@
 				tr('{month}: {planned} planned, {tracked} tracked', { month: fmt.monthLong.format(m0.date), planned: duration(plannedIn(blocks, c.id, m0.start, m0.end), { short: true }), tracked: duration(trackedIn(sessions, c.id, m0.start, m0.end), { short: true }) }),
 				' · ',
 				tr('{month}: {planned} planned, {tracked} tracked', { month: fmt.monthLong.format(m1.date), planned: duration(plannedIn(blocks, c.id, m1.start, m1.end), { short: true }), tracked: duration(trackedIn(sessions, c.id, m1.start, m1.end), { short: true }) })),
-			h('div', { class: 'imp-tablewrap' }, h('table', { class: 'imp-table imp-table--compact' },
+			// The weeks one by one, folded away (the summary above says it in short)
+			h('details', { class: 'imp-cpage__weeks' }, h('summary', null, tr('Week by week')), h('div', { class: 'imp-tablewrap' }, h('table', { class: 'imp-table imp-table--compact' },
 				h('thead', null, h('tr', null,
 					h('th', { scope: 'col' }, tr('Week')),
 					h('th', { scope: 'col', class: 'num' }, tr('In blocks')),
@@ -2591,7 +2601,7 @@
 						h('td', { class: 'num' }, p ? duration(p, { short: true }) : '–'),
 						h('td', { class: `num ${met ? 'is-met' : ''}` }, tsec === null ? '' : tsec ? duration(tsec, { short: true }) : '–', met ? ' ✓' : ''),
 						c.weeklyGoal ? h('td', { class: 'num imp-muted' }, fmtMin(c.weeklyGoal)) : null)
-				})))))
+				}))))))
 
 		// 4. Trend: 12 weeks
 		const trendWeeks = []
@@ -2699,8 +2709,7 @@
 				stat(tr('Block time used'), plannedPast ? `${Math.round((trackedInside / plannedPast) * 100)}%` : '–', tr('last 4 weeks')),
 				stat(tr('Work left'), remaining ? duration(remaining, { short: true }) : '–', trn('%n open task', '%n open tasks', tasks.length))),
 			h('div', { class: 'imp-cpage__row' }, blocksCard, tasksSec),
-			trendSec,
-			h('div', { class: 'imp-cpage__row imp-cpage__row--even' }, forecastSec, keptSec),
+			h('div', { class: 'imp-cpage__row imp-cpage__row--chart' }, trendSec, h('div', null, forecastSec, keptSec)),
 			hoursSec)
 		return page
 	}
@@ -2780,7 +2789,8 @@
 
 	async function pageSettings() {
 		await loadState()
-		const page = h('div', { class: 'imp-page imp-settings' }, h('h1', null, tr('Settings')))
+		// No title: the bar already says where you are, and everything fits on one screen
+		const page = h('div', { class: 'imp-page imp-settings', 'aria-label': tr('Settings') })
 
 		// Commitments
 		const sec = h('section', { class: 'imp-settings__section' }, h('h2', null, tr('Commitments')),

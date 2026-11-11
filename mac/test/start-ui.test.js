@@ -49,7 +49,7 @@ const ok = (n) => console.log('  ✔', n)
 		await api('POST', 'tasks', { commitmentId: c.id, title: 'Long task', subtasks: Array.from({ length: 14 }, (_, i) => `Step ${i + 1} 10m`) })
 		location.hash = '#tasks'
 	})
-	await page.waitForSelector('.imp-tq__top')
+	await page.waitForSelector('.imp-tcols')
 	await page.evaluate(() => { location.hash = '#now' })
 	await page.waitForSelector('.imp-inblock__list .imp-check')
 	const scroll = await page.evaluate(() => {

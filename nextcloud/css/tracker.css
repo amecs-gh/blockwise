@@ -208,7 +208,135 @@ html.m3-dark #tracker-app {
 }
 .imp-page {
 	max-width: 1180px;
-	padding: 20px 28px 64px;
+	margin: 0 auto;
+	padding: 20px 28px 28px;
+}
+/* Tasks: one column per commitment, side by side */
+.imp-tasks {
+	max-width: none;
+}
+.imp-tcols {
+	display: grid;
+	grid-auto-columns: minmax(260px, 1fr);
+	grid-auto-flow: column;
+	gap: var(--imp-gap);
+	align-items: start;
+	/* room for the cards' shadows inside the scroller */
+	margin: -6px -8px 0;
+	padding: 6px 8px 0;
+}
+.imp-tcols > .imp-tcol {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	padding: 18px 0 8px;
+}
+/* each task a soft rounded card in the column */
+.imp-tcol .imp-tq__item {
+	margin-bottom: 8px;
+	padding: 10px 10px 10px 0;
+	border-radius: 18px;
+	background: var(--tl-page);
+}
+.imp-tcol .imp-tq__item + .imp-tq__item {
+	border-top: none;
+}
+.imp-tq__subs.hide-done > .is-done {
+	display: none;
+}
+#tracker-app .imp-tq__donetoggle {
+	margin: 2px 0 0 26px;
+	color: var(--imp-muted);
+	font-size: 0.85em;
+	font-weight: 700;
+}
+.imp-tcol .imp-tq__head {
+	flex-wrap: wrap;
+}
+.imp-tcol .imp-tq__title {
+	flex: 1 1 8em;
+}
+.imp-tcol .imp-tq__block {
+	margin: 14px 0 8px;
+	padding-left: 6px;
+}
+.imp-tcol .imp-tq__block:first-child {
+	margin-top: 2px;
+}
+.imp-tcol.is-current {
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 45%, transparent), var(--tl-shadow);
+}
+.imp-tcol__head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 0 18px 12px;
+}
+.imp-tcol__head > div {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-width: 0;
+}
+.imp-tcol__head h2 {
+	margin: 0;
+	font-size: 1.2em;
+}
+.imp-tcol__head h2 a {
+	color: inherit;
+	text-decoration: none;
+}
+.imp-tcol__head .imp-muted {
+	font-size: 0.88em;
+	font-weight: 700;
+}
+#tracker-app .imp-tcol__head .imp-tcol__add {
+	width: 40px;
+	height: 40px;
+	border-radius: 13px;
+	background: var(--tl-pill);
+	color: var(--imp-text);
+	font-size: 1.4em;
+	font-weight: 800;
+}
+.imp-tcol__body {
+	min-height: 0;
+	padding: 0 18px 10px;
+}
+/* Wide windows: the page stays put and each column scrolls inside, without a scrollbar */
+@media (min-width: 1001px) and (min-height: 560px) {
+	.imp-tasks {
+		height: 100%;
+		padding-bottom: 20px;
+	}
+	.imp-tcols {
+		height: 100%;
+		align-items: stretch;
+		overflow-x: auto;
+	}
+	.imp-tcol {
+		max-height: 100%;
+		align-self: start;
+	}
+	.imp-tcol__body {
+		flex: 1 1 auto;
+		overflow-y: auto;
+		-webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+		mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+		padding-bottom: 24px;
+	}
+	:is(.imp-tcols, .imp-tcol__body) {
+		scrollbar-width: none;
+	}
+	:is(.imp-tcols, .imp-tcol__body)::-webkit-scrollbar {
+		display: none;
+	}
+}
+@media (max-width: 1000px) {
+	.imp-tcols {
+		grid-auto-flow: row;
+		grid-template-columns: minmax(0, 1fr);
+	}
 }
 .imp-page h1 {
 	margin: 4px 0 16px;
@@ -229,7 +357,7 @@ html.m3-dark #tracker-app {
 .imp-report > .imp-figure,
 .imp-report > .imp-tablewrap,
 .imp-report > .imp-sessions,
-.imp-tq,
+.imp-tcol,
 .imp-cv__grid {
 	padding: 20px 22px;
 	border: none !important;
@@ -653,7 +781,7 @@ html.m3-dark #tracker-app {
 	display: block;
 	width: 100%;
 	height: auto;
-	max-height: 320px;
+	max-height: 260px;
 }
 .imp-chart .grid {
 	stroke: var(--imp-line);
@@ -732,11 +860,15 @@ html.m3-dark #tracker-app {
 	font-weight: 600;
 }
 .imp-sessions {
-	margin-top: 24px;
+	margin-top: var(--imp-gap);
 }
 .imp-sessions summary {
 	color: var(--imp-muted);
+	font-weight: 700;
 	cursor: pointer;
+}
+.imp-sessions .imp-tablewrap {
+	margin-top: 10px;
 }
 .imp-sessions ul {
 	margin: 8px 0 0;
@@ -752,14 +884,62 @@ html.m3-dark #tracker-app {
 
 /* --- settings ---------------------------------------------------------------- */
 
+/* Settings: the commitments on the left, everything else on the right */
+.imp-settings {
+	display: grid;
+	grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+	grid-auto-flow: dense;
+	gap: var(--imp-gap);
+	align-items: start;
+}
+.imp-settings > .imp-settings__section {
+	grid-column: 1;
+}
+.imp-settings > .imp-settings__section:last-of-type {
+	grid-column: 2;
+	grid-row: 1 / span 2;
+}
+/* numbers as soft tiles: the label above, the value big */
+.imp-settings .imp-grid {
+	grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+	gap: 10px;
+	margin: 12px 0 18px;
+}
+.imp-settings .imp-field {
+	padding: 10px 14px;
+	border-radius: 18px;
+	background: var(--tl-page);
+	color: var(--imp-muted);
+	font-size: 0.88em;
+	font-weight: 700;
+}
+#tracker-app .imp-settings .imp-field input {
+	width: 70px;
+	min-height: 0;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: var(--imp-text);
+	font-size: 1.5em;
+	font-weight: 800;
+	box-shadow: none;
+}
+@media (max-width: 1000px) {
+	.imp-settings {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.imp-settings > .imp-settings__section:is(*, :last-of-type) {
+		grid-column: 1;
+		grid-row: auto;
+	}
+}
 .imp-settings__section {
-	max-width: 760px;
-	margin-bottom: 36px;
+	margin: 0;
 }
 .imp-settings__section h2 {
 	margin: 0 0 6px;
 	font-size: 1.2em;
-	font-weight: 600;
+	font-weight: 800;
 }
 .imp-settings__section > p {
 	max-width: 70ch;
@@ -1759,8 +1939,14 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 	gap: var(--imp-gap);
 	align-items: start;
 }
-.imp-cpage__row--even {
-	grid-template-columns: repeat(2, minmax(0, 1fr));
+.imp-cpage__row--chart {
+	grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+}
+.imp-cpage__weeks summary {
+	margin-top: 8px;
+	color: var(--imp-muted);
+	font-weight: 700;
+	cursor: pointer;
 }
 .imp-cpage__row > .imp-cpage__section {
 	margin-top: var(--imp-gap);
@@ -1961,7 +2147,7 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 	.imp-cpage__row,
-	.imp-cpage__row--even {
+	.imp-cpage__row--chart {
 		grid-template-columns: minmax(0, 1fr);
 	}
 	.imp-cpage__row > .imp-cpage__section + .imp-cpage__section {
@@ -1995,9 +2181,8 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 	margin: 0;
 }
 .imp-tq {
-	max-width: 860px;
 	margin: 0;
-	padding: 10px 0;
+	padding: 0;
 	list-style: none;
 }
 
@@ -3178,8 +3363,18 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 
 .imp-calsource__form {
 	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
 	gap: 10px;
-	max-width: 640px;
+}
+/* the note and the button share the last row */
+.imp-calsource__form > p {
+	grid-column: 1;
+	align-self: center;
+	margin: 0;
+}
+#tracker-app .imp-calsource__form > .imp-button {
+	grid-column: 2;
+	justify-self: end;
 }
 .imp-calsource__opt {
 	display: flex;
@@ -3199,9 +3394,6 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 .imp-calsource__opt > span {
 	display: grid;
 	gap: 2px;
-}
-.imp-calsource__form > .imp-button {
-	justify-self: start;
 }
 /* Nextcloud styles every button: the calendar's day headers stay plain */
 #tracker-app .imp-cv__dayhead {
