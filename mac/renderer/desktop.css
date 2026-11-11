@@ -83,8 +83,14 @@ a {
 body.desktop .imp-layout {
 	border-radius: 0;
 }
+/* The window buttons need 88px on the left: the same margin on both sides of the
+ * page, so the tabs and every page share one column at any window size */
+body.desktop #tracker-app {
+	--imp-content: 1300px;
+	--imp-side: 88px;
+}
 body.desktop .imp-nav {
-	padding: 12px 28px 4px 88px;
+	padding: 12px var(--imp-nav-side) 4px;
 	-webkit-app-region: drag;
 	user-select: none;
 }

@@ -36,6 +36,10 @@
 }
 
 #tracker-app {
+	/* One content column for every page, and the tabs above it */
+	--imp-content: 1180px;
+	--imp-side: 28px;
+	--imp-nav-side: max(var(--imp-side), calc((100% - var(--imp-content)) / 2 + var(--imp-side)));
 	--tl-accent: #6c5ce7;
 	--tl-accent-soft: #ece9fd;
 	--tl-page: #f6f5fb;
@@ -126,7 +130,8 @@ html.m3-dark #tracker-app {
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 10px 14px;
-	padding: 16px 28px 4px;
+	/* The tabs line up with the page below: the same column on every tab */
+	padding: 16px var(--imp-nav-side) 4px;
 }
 .imp-nav ul {
 	display: flex;
@@ -241,9 +246,9 @@ html.m3-dark #tracker-app {
 	overflow-y: auto;
 }
 .imp-page {
-	max-width: 1180px;
+	max-width: var(--imp-content);
 	margin: 0 auto;
-	padding: 20px 28px 28px;
+	padding: 20px var(--imp-side) 28px;
 }
 /* A page's title: icon tile, name, a line of context, actions on the right */
 .imp-phead {
@@ -298,10 +303,7 @@ html.m3-dark #tracker-app {
 	margin: 0;
 }
 
-/* Tasks: one column per commitment, side by side */
-.imp-tasks {
-	max-width: none;
-}
+/* Tasks: one column per commitment, side by side (more than fit: they scroll) */
 .imp-tcols {
 	display: grid;
 	grid-auto-columns: minmax(260px, 1fr);
@@ -2165,7 +2167,7 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 /* --- commitment page ---------------------------------------------------------------- */
 
 .imp-cpage {
-	max-width: 1180px;
+	max-width: var(--imp-content);
 }
 .imp-cpage__head {
 	display: flex;
@@ -3250,7 +3252,6 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 	flex-direction: column;
 	box-sizing: border-box;
 	height: 100%;
-	max-width: none;
 	min-height: 0;
 	padding-bottom: 16px;
 }
