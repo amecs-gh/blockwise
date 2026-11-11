@@ -30,5 +30,7 @@ contextBridge.exposeInMainWorld('trackerApp', {
 	openCalendar: (ts) => call('openCalendar', ts),
 	calendarMode: () => call('calendarMode'),
 	setCalendarMode: (mode) => call('setCalendarMode', mode),
+	appearance: () => call('appearance'),
+	setAppearance: (mode) => call('setAppearance', mode),
 	onChanged: (cb) => ipcRenderer.on('changed', () => cb()),
 })

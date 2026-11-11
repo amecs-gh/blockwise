@@ -149,6 +149,21 @@ function saveProviderKeys(provider, keys) {
 }
 const providersReady = () => ({ dropbox: !!providerKeys.dropboxAppKey, gdrive: !!(providerKeys.googleClientId && providerKeys.googleClientSecret) })
 
+const appearancePath = () => path.join(app.getPath('userData'), 'appearance')
+function setAppearance(mode) {
+	if (!['system', 'light', 'dark'].includes(mode)) throw new Error('Invalid request.')
+	nativeTheme.themeSource = mode
+	fs.mkdirSync(app.getPath('userData'), { recursive: true })
+	fs.writeFileSync(appearancePath(), mode, { mode: 0o600 })
+	return mode
+}
+function loadAppearance() {
+	try {
+		const mode = fs.readFileSync(appearancePath(), 'utf8').trim()
+		if (['system', 'light', 'dark'].includes(mode)) nativeTheme.themeSource = mode
+	} catch (e) { /* not chosen yet: like macOS */ }
+}
+
 function saveConfig(c) {
 	fs.mkdirSync(path.dirname(configPath()), { recursive: true })
 	fs.writeFileSync(configPath(), JSON.stringify(c, null, '\t'), { mode: 0o600 })
@@ -984,6 +999,9 @@ handle('openCalendar', (ts) => openCalendar(typeof ts === 'number' ? ts : undefi
 handle('calendarMode', () => ({ mode: calendarMode(), available: !!config && config.provider !== 'nextcloud' }))
 // Only from the main window; asks you before anything changes
 handle('setCalendarMode', (mode) => setCalendarMode(String(mode || '')), 'app.html')
+// Light, dark or like macOS: for every window (and the menus), kept on this Mac
+handle('appearance', () => nativeTheme.themeSource)
+handle('setAppearance', (mode) => setAppearance(String(mode || '')), 'app.html')
 // Choosing where your data lives: only from the first-run screen, and only while
 // nothing is connected (no other window can switch your sync or wipe your data)
 const setupOnly = (fn) => (...args) => {
@@ -1071,6 +1089,7 @@ app.whenReady().then(async () => {
 	session.defaultSession.clearStorageData({ storages: ['cookies'] }).catch(() => {})
 	t = i18n.make(app.getLocale())
 	loadProviderKeys()
+	loadAppearance()
 	setAppMenu()
 	config = loadConfig()
 	if (config) {

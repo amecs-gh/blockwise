@@ -207,6 +207,24 @@
 		try { localStorage.setItem(`tracker.${key}`, value) } catch (e) { /* private mode */ }
 	}
 
+	// --- Light or dark: follow the system, or chosen in Settings ---------------------------
+	// The Mac app keeps the choice for all its windows (menus too); elsewhere this browser keeps it.
+	const THEMES = ['system', 'light', 'dark']
+	function applyTheme(mode) {
+		const root = document.documentElement
+		if (mode === 'light' || mode === 'dark') root.dataset.impTheme = mode
+		else delete root.dataset.impTheme
+		// Android draws dark mode with a class on the page
+		if (root.classList.contains('m3')) root.classList.toggle('m3-dark', mode === 'dark' || (mode !== 'light' && !!window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches))
+	}
+	const getTheme = async () => (desktop && desktop.appearance ? (await desktop.appearance()) || 'system' : localStorageGet('theme', 'system'))
+	async function setTheme(mode) {
+		if (!THEMES.includes(mode)) return
+		if (desktop && desktop.setAppearance) await desktop.setAppearance(mode)
+		else { localStorageSet('theme', mode); applyTheme(mode) }
+	}
+	if (!(desktop && desktop.appearance)) applyTheme(localStorageGet('theme', 'system'))
+
 	const commitmentById = (id) => state.commitments.find((c) => c.id === id)
 	const colorOf = (id) => (id === null ? 'var(--color-text-maxcontrast)' : (commitmentById(id) || {}).color || '#888')
 	const nameOf = (id) => (id === null ? tr('Unplanned') : (commitmentById(id) || {}).name || tr('Deleted commitment'))
@@ -2808,7 +2826,21 @@
 	async function pageSettings() {
 		await loadState()
 		// No title: the bar already says where you are, and everything fits on one screen
-		const page = h('div', { class: 'imp-page imp-settings' }, pageHeader('settings', tr('Commitments, calendar, timer and reminders')))
+		// Light or dark: right in the title bar
+		const theme = await getTheme()
+		const look = (mode, label, d) => h('button', {
+			type: 'button',
+			role: 'radio',
+			class: theme === mode ? 'active' : '',
+			'aria-checked': theme === mode ? 'true' : 'false',
+			title: label,
+			onclick: async () => { await setTheme(mode); render() },
+		}, icon(d, 16), h('span', null, label))
+		const page = h('div', { class: 'imp-page imp-settings' }, pageHeader('settings', tr('Commitments, calendar, timer and reminders'),
+			h('div', { class: 'imp-tabs imp-looks', role: 'radiogroup', 'aria-label': tr('Appearance') },
+				look('system', tr('Automatic'), 'M4 5h16v11H4zM9 20h6M12 16v4'),
+				look('light', tr('Light'), 'M12 4V2M12 22v-2M4 12H2M22 12h-2M5.6 5.6 4.2 4.2M19.8 19.8l-1.4-1.4M5.6 18.4l-1.4 1.4M19.8 4.2l-1.4 1.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z'),
+				look('dark', tr('Dark'), 'M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z'))))
 
 		// Commitments
 		const sec = h('section', { class: 'imp-settings__section' }, h('h2', null, tr('Commitments')),
@@ -2818,8 +2850,12 @@
 		const list = h('ul', { class: 'imp-clist' })
 		state.commitments.forEach((c) => list.append(commitmentRow(c)))
 		sec.append(list, newCommitmentForm())
-		page.append(sec)
-		if (desktop && desktop.calendarMode) page.append(await calendarSourceSection())
+		// Two columns: commitments and calendar; appearance, timer and reminders
+		const left = h('div', { class: 'imp-settings__col' }, sec)
+		const right = h('div', { class: 'imp-settings__col' })
+		page.append(left, right)
+		if (desktop && desktop.calendarMode) left.append(await calendarSourceSection())
+
 
 		// Pomodoro & reminders
 		const s = state.settings
@@ -2828,7 +2864,7 @@
 			stepper(key, s[key], { min, max, step: key === 'defaultEstimate' ? 5 : 1, unit: key === 'sessionsBeforeLongBreak' ? '' : tr('min'), label }))
 		const pomoToggle = h('input', { type: 'checkbox', id: 'imp-pomo', name: 'pomodoro', checked: s.pomodoro })
 		const calToggle = h('input', { type: 'checkbox', id: 'imp-showcal', name: 'showCalendar', checked: s.showCalendar !== false })
-		page.append(h('section', { class: 'imp-settings__section' },
+		right.append(h('section', { class: 'imp-settings__section' },
 			h('h2', null, tr('Pomodoro mode')),
 			h('form', {
 				class: 'imp-settings__form',

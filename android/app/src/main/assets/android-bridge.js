@@ -64,13 +64,18 @@
 	window.__trackerAndroidTheme = function (theme) {
 		const root = document.documentElement
 		root.classList.add('m3')
-		root.classList.toggle('m3-dark', !!theme.dark)
+		// Light or dark as chosen in Settings, else the phone's
+		let pick = 'system'
+		try { pick = localStorage.getItem('tracker.theme') || 'system' } catch (e) { /* no storage */ }
+		root.classList.toggle('m3-dark', pick === 'dark' || (pick !== 'light' && !!theme.dark))
 		for (const [k, v] of Object.entries(theme.insets || {})) {
 			if (typeof v === 'number' && isFinite(v)) root.style.setProperty('--inset-' + k, Math.max(0, Math.round(v)) + 'px')
 		}
 	}
 	document.documentElement.classList.add('m3')
-	if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('m3-dark')
+	let pick = 'system'
+	try { pick = localStorage.getItem('tracker.theme') || 'system' } catch (e) { /* no storage */ }
+	if (pick === 'dark' || (pick !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.classList.add('m3-dark')
 
 	function fire(channel, payload) {
 		for (const cb of listeners[channel] || []) {

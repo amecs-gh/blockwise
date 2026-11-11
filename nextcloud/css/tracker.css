@@ -74,7 +74,8 @@
 #tracker-app :is(button, input, select, textarea) {
 	font-family: inherit;
 }
-body[data-themes*="dark"] #tracker-app,
+html:not([data-imp-theme="light"]) body[data-themes*="dark"] #tracker-app,
+html[data-imp-theme="dark"] #tracker-app,
 html.m3-dark #tracker-app {
 	--tl-accent: #8b7cf6;
 	--tl-accent-soft: #2e2850;
@@ -91,7 +92,7 @@ html.m3-dark #tracker-app {
 	--color-primary-element-light-text: #cfc8ff;
 }
 @media (prefers-color-scheme: dark) {
-	body:not([data-themes*="light"]):not([data-themes*="dark"]) #tracker-app {
+	html:not([data-imp-theme]) body:not([data-themes*="light"]):not([data-themes*="dark"]) #tracker-app {
 		--tl-accent: #8b7cf6;
 		--tl-accent-soft: #2e2850;
 		--tl-page: #14121d;
@@ -1018,13 +1019,25 @@ html.m3-dark #tracker-app {
 	padding-bottom: 16px;
 	align-items: start;
 }
-.imp-settings > .imp-settings__section {
-	grid-column: 1;
+.imp-settings__col {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	min-width: 0;
 }
-.imp-settings > .imp-settings__section:last-of-type {
-	grid-column: 2;
-	grid-row: 2 / span 2;
+@media (max-width: 1000px) {
+	.imp-settings {
+		grid-template-columns: minmax(0, 1fr);
+	}
 }
+/* Appearance: Automatic / Light / Dark in the title bar */
+#tracker-app .imp-looks button {
+	gap: 6px;
+}
+.imp-looks svg {
+	flex: 0 0 auto;
+}
+
 /* numbers as soft tiles: the label above, the stepper below */
 .imp-settings .imp-grid {
 	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
@@ -1053,15 +1066,6 @@ html.m3-dark #tracker-app {
 }
 .imp-settings__toggle .imp-muted {
 	font-size: 0.88em;
-}
-@media (max-width: 1000px) {
-	.imp-settings {
-		grid-template-columns: minmax(0, 1fr);
-	}
-	.imp-settings > .imp-settings__section:is(*, :last-of-type) {
-		grid-column: 1;
-		grid-row: auto;
-	}
 }
 .imp-settings__section {
 	margin: 0;

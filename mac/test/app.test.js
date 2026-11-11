@@ -118,6 +118,17 @@ async function openWindow(browser, file, winName, opts = {}) {
 	assert.ok(T.log.includes('clearStorageData tracker-login'), 'login session cleared after login')
 	assert.ok(fs.statSync(path.join(T.userData, 'config.json')).mode.toString(8).endsWith('600'), 'config readable by you only')
 	console.log('  requests in a memory-only session; login cookies cleared; config.json is 600')
+
+	step('appearance: light, dark or like macOS, for all windows')
+	const electron = require('electron')
+	assert.equal(await call('appearance'), 'system')
+	assert.equal(await call('setAppearance', 'dark'), 'dark')
+	assert.equal(electron.nativeTheme.themeSource, 'dark', 'every window follows')
+	assert.equal(fs.readFileSync(path.join(T.userData, 'appearance'), 'utf8'), 'dark', 'kept on this Mac')
+	assert.equal((await T.handlers.setAppearance(EV, 'purple')).error, 'Invalid request.')
+	assert.equal((await T.handlers.setAppearance(fromFile('popover.html'), 'light')).error, 'Not allowed.', 'only from the main window')
+	await call('setAppearance', 'system')
+	console.log('  saved, applied to nativeTheme, odd values and other windows refused')
 	{
 		const wc = mainWin.webContents
 		const before = T.log.filter((l) => l.startsWith('openExternal')).length
