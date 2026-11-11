@@ -1,12 +1,28 @@
-/* The menu bar panel. The window has macOS vibrancy behind a slightly tinted background. */
+/* The menu bar panel, in the app's look: soft cards on the page color, the timer
+ * in the commitment's color, the commitments as goal rings (as on Now). */
 body.popover {
-	background: var(--bg-pop);
+	--p-page: rgba(246, 245, 251, 0.9);
+	--p-card: #ffffff;
+	--p-pill: #f1effa;
+	--p-line: rgba(36, 34, 58, 0.08);
+	--p-shadow: 0 6px 18px rgba(60, 50, 140, 0.07);
+	background: var(--p-page);
+	font-family: Poppins, system-ui, sans-serif;
 	user-select: none;
+}
+@media (prefers-color-scheme: dark) {
+	body.popover {
+		--p-page: rgba(20, 18, 29, 0.9);
+		--p-card: #211f2b;
+		--p-pill: #2c2a38;
+		--p-line: rgba(255, 255, 255, 0.08);
+		--p-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+	}
 }
 #root {
 	display: flex;
 	flex-direction: column;
-	gap: 12px;
+	gap: 10px;
 	padding: 12px;
 }
 body.is-busy {
@@ -17,28 +33,41 @@ body.is-busy {
 }
 .p-dot {
 	display: inline-block;
+	flex: 0 0 auto;
 	width: 8px;
 	height: 8px;
 	border-radius: 50%;
 	background: var(--c);
 }
+.p-card {
+	padding: 14px;
+	border-radius: 18px;
+	background: var(--p-card);
+	box-shadow: var(--p-shadow);
+}
+.p-card h2 {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 800;
+}
 
-/* timer: the one colored element */
+/* the timer: the one colored card */
 .p-timer {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
 	justify-content: space-between;
 	gap: 8px 12px;
-	padding: 12px 14px;
-	border-radius: var(--radius);
+	padding: 14px 16px;
+	border-radius: 20px;
 	background: var(--c);
 	color: var(--on-c);
+	box-shadow: 0 10px 24px color-mix(in srgb, var(--c) 28%, transparent);
 }
 .p-timer.is-idle {
-	border: 1px dashed var(--line);
-	background: transparent;
+	background: var(--p-card);
 	color: var(--text);
+	box-shadow: var(--p-shadow);
 }
 .p-timer__text {
 	display: flex;
@@ -46,33 +75,40 @@ body.is-busy {
 	min-width: 0;
 }
 .p-timer__label {
-	font-weight: 600;
 	overflow: hidden;
+	font-size: 13px;
+	font-weight: 700;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 .p-timer__clock {
-	font-size: 28px;
-	font-weight: 300;
-	line-height: 1.15;
+	font-size: 32px;
+	font-weight: 800;
+	letter-spacing: -0.02em;
+	line-height: 1.1;
+	font-variant-numeric: tabular-nums;
 }
 .p-timer__sub {
 	opacity: 0.85;
 	font-size: 12px;
+	font-weight: 600;
 }
 .p-stop {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	height: 30px;
-	padding: 0 14px;
-	border: 1.5px solid currentColor;
-	border-radius: 15px;
-	background: transparent;
-	font-weight: 600;
+	height: 36px;
+	padding: 0 16px;
+	border: none;
+	border-radius: 14px;
+	background: #ffffff;
+	color: #24223a;
+	font: inherit;
+	font-size: 13px;
+	font-weight: 700;
 }
 .p-stop:hover {
-	background: color-mix(in srgb, currentColor 15%, transparent);
+	filter: brightness(0.96);
 }
 .p-pomo {
 	display: flex;
@@ -80,63 +116,96 @@ body.is-busy {
 	justify-content: space-between;
 	gap: 8px;
 	padding-top: 8px;
-	border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+	border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent);
 	font-size: 12px;
+	font-weight: 600;
 }
 .p-btn {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	height: 28px;
-	padding: 0 12px;
-	border: 1px solid var(--line);
-	border-radius: 7px;
-	background: var(--bg);
-	font-weight: 500;
+	height: 34px;
+	padding: 0 14px;
+	border: none;
+	border-radius: 12px;
+	background: var(--p-pill);
+	color: var(--text);
+	font: inherit;
+	font-size: 12px;
+	font-weight: 700;
 }
 .p-btn:hover {
-	background: var(--bg-soft);
+	filter: brightness(0.97);
+}
+.p-btn--accent {
+	background: var(--accent);
+	color: #ffffff;
 }
 
-/* current block */
+/* this block's tasks */
 .p-block__head {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	justify-content: space-between;
+	gap: 8px;
 }
-.p-block__head .p-muted {
-	margin-left: auto;
+.p-block__who {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	overflow: hidden;
 	font-size: 12px;
+	font-weight: 700;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 .p-block__time {
-	margin: 2px 0 6px 14px;
+	margin: 2px 0 8px;
 	font-size: 12px;
+	font-weight: 600;
 }
 .p-empty {
-	margin: 4px 0 0 14px;
+	margin: 4px 0 0;
 }
 .p-task {
-	padding: 6px 0 6px 14px;
-	border-top: 1px solid var(--line);
+	margin-top: 8px;
+	padding: 10px 12px;
+	border-radius: 14px;
+	background: var(--p-pill);
 }
 .p-task__head {
 	display: flex;
 	justify-content: space-between;
 	gap: 8px;
-	margin-bottom: 2px;
-	font-weight: 600;
+	font-size: 13px;
+	font-weight: 800;
+}
+.p-task__bar {
+	height: 4px;
+	margin: 6px 0 4px;
+	overflow: hidden;
+	border-radius: 99px;
+	background: color-mix(in srgb, var(--c) 18%, transparent);
+}
+.p-task__bar span {
+	display: block;
+	height: 100%;
+	border-radius: 99px;
+	background: var(--c);
 }
 .p-check {
 	display: flex;
-	align-items: flex-start;
-	gap: 8px;
-	padding: 3px 0;
+	align-items: center;
+	gap: 9px;
+	padding: 4px 0;
+	font-size: 13px;
 }
 .p-check input {
 	flex: 0 0 auto;
-	width: 15px;
-	height: 15px;
-	margin: 1px 0 0;
+	width: 16px;
+	height: 16px;
+	margin: 0;
 	accent-color: var(--c);
 }
 .p-check__label {
@@ -145,108 +214,153 @@ body.is-busy {
 	overflow-wrap: anywhere;
 }
 .p-check.is-title .p-check__label {
-	font-weight: 600;
+	font-weight: 800;
 }
 .p-check input:checked + .p-check__label {
 	color: var(--muted);
 	text-decoration: line-through;
 }
 .p-est {
+	padding: 1px 8px;
+	border-radius: 99px;
+	background: var(--p-card);
 	color: var(--muted);
-	font-size: 12px;
+	font-size: 11px;
+	font-weight: 700;
 	white-space: nowrap;
 }
 .p-add {
 	display: flex;
 	gap: 6px;
-	margin: 6px 0 0 14px;
+	margin-top: 10px;
+}
+.p-add__input,
+.p-add__select {
+	height: 34px;
+	border: 1.5px solid var(--p-line);
+	border-radius: 12px;
+	background: var(--p-card);
+	color: var(--text);
+	font: inherit;
+	font-size: 12px;
 }
 .p-add__input {
 	flex: 1;
 	min-width: 0;
-	height: 28px;
-	padding: 0 8px;
-	border: 1px solid var(--line);
-	border-radius: 6px;
-	background: var(--bg);
+	padding: 0 10px;
 	user-select: text;
 }
-.p-add__select {
-	max-width: 110px;
-	height: 28px;
-	border: 1px solid var(--line);
-	border-radius: 6px;
-	background: var(--bg);
+.p-add__input:focus,
+.p-add__select:focus {
+	border-color: var(--accent);
+	outline: none;
 }
-
-/* other commitments */
-.p-list h2 {
-	margin: 0 0 4px;
-	color: var(--muted);
-	font-size: 12px;
+.p-add__select {
+	max-width: 120px;
+	padding: 0 8px;
 	font-weight: 600;
 }
-.p-list ul {
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-.p-row {
+
+/* the commitments: goal rings, as on Now */
+.p-rings__row {
 	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 6px 0;
-}
-.p-row + .p-row {
-	border-top: 1px solid var(--line);
-}
-.p-row__bar {
-	align-self: stretch;
-	flex: 0 0 3px;
-	border-radius: 2px;
-	background: var(--c);
-}
-.p-row__text {
-	display: flex;
-	flex: 1;
-	flex-direction: column;
-	min-width: 0;
-	font-size: 12px;
-}
-.p-row__text strong {
-	font-size: 13px;
-}
-.p-goal {
-	display: flex;
-	align-items: center;
 	gap: 6px;
-	margin-top: 2px;
+	margin: 10px -14px -4px;
+	padding: 0 14px 4px;
+	list-style: none;
+	overflow-x: auto;
+	scrollbar-width: none;
 }
-.p-goal__bar {
+.p-rings__row::-webkit-scrollbar {
+	display: none;
+}
+.p-ring {
+	display: flex;
 	flex: 0 0 60px;
-	height: 4px;
-	overflow: hidden;
-	border-radius: 2px;
-	background: color-mix(in srgb, var(--c) 22%, transparent);
+	flex-direction: column;
+	align-items: center;
+	gap: 3px;
+	min-width: 0;
 }
-.p-goal__bar span {
-	display: block;
-	height: 100%;
-	background: var(--c);
-}
-.p-play {
+.p-ring__dial {
+	position: relative;
 	display: grid;
-	flex: 0 0 auto;
 	place-items: center;
-	width: 28px;
-	height: 28px;
+	width: 52px;
+	height: 52px;
+	padding: 0;
 	border: none;
 	border-radius: 50%;
+	background: none;
+	cursor: pointer;
+}
+.p-ring__svg {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	fill: none;
+}
+.p-ring__track {
+	stroke: var(--p-pill);
+	stroke-width: 3.5;
+}
+.p-ring__fill {
+	stroke: var(--c);
+	stroke-width: 3.5;
+	stroke-linecap: round;
+}
+.p-ring__none {
+	stroke: var(--line);
+	stroke-width: 1.8;
+	stroke-dasharray: 3.5 4.5;
+}
+.p-ring__tile {
+	display: grid;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	border-radius: 12px;
+	background: var(--c);
+	color: var(--on-c);
+	font-size: 14px;
+	font-weight: 800;
+	transition: transform 0.15s ease;
+}
+.p-ring__dial:hover .p-ring__tile {
+	transform: scale(1.06);
+}
+.p-ring__badge {
+	position: absolute;
+	right: -1px;
+	bottom: -1px;
+	display: grid;
+	place-items: center;
+	width: 19px;
+	height: 19px;
+	border-radius: 50%;
+	background: var(--p-card);
+	color: var(--c);
+	box-shadow: 0 0 0 2px var(--p-card), 0 2px 5px rgba(20, 16, 50, 0.18);
+}
+.p-ring.is-running .p-ring__badge {
 	background: var(--c);
 	color: var(--on-c);
 }
-.p-play.is-running {
-	box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 30%, transparent);
+.p-ring__name {
+	max-width: 60px;
+	overflow: hidden;
+	font-size: 11px;
+	font-weight: 700;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.p-ring__goal {
+	min-height: 14px;
+	color: var(--muted);
+	font-size: 10px;
+	font-weight: 600;
+	white-space: nowrap;
 }
 
 .p-error {
@@ -256,7 +370,7 @@ body.is-busy {
 .p-flash {
 	margin: 0;
 	color: var(--success);
-	font-weight: 600;
+	font-weight: 700;
 }
 .p-loading {
 	padding: 24px 0;
@@ -266,38 +380,45 @@ body.is-busy {
 .p-footer {
 	display: flex;
 	align-items: center;
-	gap: 4px;
-	padding-top: 8px;
-	border-top: 1px solid var(--line);
+	gap: 6px;
 }
 .p-link,
 .p-icon {
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	height: 28px;
-	padding: 0 8px;
+	height: 34px;
+	padding: 0 12px;
 	border: none;
-	border-radius: 6px;
-	background: transparent;
+	border-radius: 12px;
+	background: var(--p-card);
+	box-shadow: var(--p-shadow);
 	color: var(--text);
+	font: inherit;
+	font-size: 12px;
+	font-weight: 700;
 }
 .p-icon {
+	width: 34px;
 	margin-left: auto;
+	padding: 0;
+	justify-content: center;
 	color: var(--muted);
 }
 .p-link:hover,
 .p-icon:hover {
-	background: var(--line);
+	background: var(--p-pill);
 }
 
 .p-more {
-	margin: 2px 0 0 14px;
+	margin: 8px 0 0;
 	padding: 2px 0;
 	border: none;
 	background: transparent;
 	color: var(--accent);
-	font-weight: 500;
+	font: inherit;
+	font-size: 12px;
+	font-weight: 700;
 }
 .p-more:hover {
 	text-decoration: underline;

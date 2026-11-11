@@ -40,6 +40,7 @@
 		'Add to': 'Aggiungi a',
 		'Commitments': 'Impegni',
 		'No block planned': 'Nessun blocco pianificato',
+		'No weekly goal': 'Nessun obiettivo settimanale',
 		'{done} of {goal} this week': '{done} di {goal} questa settimana',
 		'Today': 'Oggi',
 		'Tomorrow': 'Domani',

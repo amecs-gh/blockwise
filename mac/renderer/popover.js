@@ -68,7 +68,7 @@
 				h('div', { class: 'p-timer__text' },
 					h('span', { class: 'p-timer__label' }, lb ? t('Long break') : t('Not tracking')),
 					lb ? h('span', { class: 'p-timer__clock', 'data-left': d.longBreakUntil }, clock(d.longBreakUntil - now)) : null),
-				h('button', { class: 'p-btn', onclick: () => act(() => app.api('POST', 'sessions/start', { commitmentId: null })) }, icon(ICONS.play, 12, true), t('Track unplanned time')))
+				h('button', { class: 'p-btn p-btn--accent', onclick: () => act(() => app.api('POST', 'sessions/start', { commitmentId: null })) }, icon(ICONS.play, 12, true), t('Track unplanned time')))
 		}
 		const entry = d.commitments.find((e) => e.commitment.id === r.commitmentId)
 		const c = entry ? entry.commitment : null
@@ -111,11 +111,10 @@
 		const inBlock = entry.currentBlock && entry.currentBlock.start <= now && now < entry.currentBlock.end
 		const block = inBlock ? entry.currentBlock : entry.nextBlock
 		const planned = entry.queue.filter((x) => entry.plannedTaskIds.includes(x.id))
-		const sec = h('section', { class: 'p-block', style: { '--c': c.color } },
+		const sec = h('section', { class: 'p-card p-block', style: { '--c': c.color } },
 			h('div', { class: 'p-block__head' },
-				h('span', { class: 'p-dot' }),
-				h('strong', null, c.name),
-				h('span', { class: 'p-muted' }, inBlock ? t('In this block') : block ? t('Next block') : t('Up next'))),
+				h('h2', null, inBlock ? t('In this block') : block ? t('Next block') : t('Up next')),
+				h('span', { class: 'p-block__who' }, h('span', { class: 'p-dot' }), c.name)),
 			block ? h('div', { class: 'p-muted p-block__time' }, blockTime(block), block.title ? ` · ${block.title}` : '') : null)
 		if (!planned.length) {
 			sec.append(h('p', { class: 'p-muted p-empty' }, t('No open tasks.')))
@@ -146,9 +145,12 @@
 			est(s))
 		if (single) return h('div', { class: 'p-task' }, box(task.subtasks[0], 'is-title'))
 		const done = task.subtasks.filter((s) => s.done).length
+		// Like the app: what's left to do; the done ones only as a count
+		const open = task.subtasks.filter((s) => !s.done)
 		return h('div', { class: 'p-task' },
 			h('div', { class: 'p-task__head' }, h('span', null, task.title), h('span', { class: 'p-muted' }, `${done}/${task.subtasks.length}`)),
-			task.subtasks.map((s) => box(s)))
+			h('div', { class: 'p-task__bar' }, h('span', { style: { width: `${(done / task.subtasks.length) * 100}%` } })),
+			open.map((s) => box(s)))
 	}
 
 	function quickAdd(planned) {
@@ -177,26 +179,51 @@
 		return h('div', { class: 'p-add' }, input, select)
 	}
 
-	function commitmentRow(entry, d) {
-		const c = entry.commitment
+	/**
+	 * The commitments as round tiles with this week's goal as a ring (dashed: no
+	 * goal), like Now in the app: click to start or stop. The one tracking first,
+	 * then those with a block today, then the rest; many scroll sideways.
+	 */
+	function rings(d) {
 		const now = nowTs()
-		const running = d.running && d.running.commitmentId === c.id
-		const block = entry.currentBlock && entry.currentBlock.end > now ? entry.currentBlock : entry.nextBlock
-		const tracked = (d.weekTracked && d.weekTracked[c.id]) || 0
-		return h('li', { class: 'p-row', style: { '--c': c.color, '--on-c': onColor(c.color) } },
-			h('span', { class: 'p-row__bar' }),
-			h('div', { class: 'p-row__text' },
-				h('strong', null, c.name),
-				h('span', { class: 'p-muted' }, block ? blockTime(block) : t('No block planned')),
-				c.weeklyGoal ? h('span', { class: 'p-goal' },
-					h('span', { class: 'p-goal__bar' }, h('span', { style: { width: `${Math.min(100, (tracked / 60 / c.weeklyGoal) * 100)}%` } })),
-					h('span', { class: 'p-muted' }, t('{done} of {goal} this week', { done: duration(tracked), goal: duration(c.weeklyGoal * 60) }))) : null),
-			h('button', {
-				class: `p-play ${running ? 'is-running' : ''}`,
-				'aria-label': running ? t('Stop {name}', { name: c.name }) : t('Start {name}', { name: c.name }),
-				title: running ? t('Stop') : t('Start {name}', { name: c.name }),
-				onclick: () => act(() => (running ? app.api('POST', 'sessions/stop', {}) : app.api('POST', 'sessions/start', { commitmentId: c.id }))),
-			}, icon(running ? ICONS.stop : ICONS.play, 13, true)))
+		const endToday = Math.floor(new Date(new Date().setHours(24, 0, 0, 0)).getTime() / 1000)
+		const rank = (e) => {
+			if (d.running && d.running.commitmentId === e.commitment.id) return [0, 0]
+			const b = e.currentBlock && e.currentBlock.end > now ? e.currentBlock : e.nextBlock
+			return b && b.start < endToday ? [1, b.start] : [2, 0]
+		}
+		const items = d.commitments.map((e, i) => ({ e, i, r: rank(e) })).sort((a, b) => a.r[0] - b.r[0] || a.r[1] - b.r[1] || a.i - b.i)
+		const R = 22
+		const C = 2 * Math.PI * R
+		const NS = 'http://www.w3.org/2000/svg'
+		const el = (tag, attrs) => { const x = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) x.setAttribute(k, v); return x }
+		const ring = ({ e }) => {
+			const c = e.commitment
+			const running = !!(d.running && d.running.commitmentId === c.id)
+			const tracked = ((d.weekTracked && d.weekTracked[c.id]) || 0) / 60
+			const goal = c.weeklyGoal
+			const block = e.currentBlock && e.currentBlock.end > now ? e.currentBlock : e.nextBlock
+			const about = [goal ? t('{done} of {goal} this week', { done: duration(tracked * 60), goal: duration(goal * 60) }) : t('No weekly goal'), block ? blockTime(block) : t('No block planned')].join(' · ')
+			const svg = el('svg', { class: 'p-ring__svg', viewBox: '0 0 50 50', 'aria-hidden': 'true' })
+			if (goal) {
+				svg.append(el('circle', { cx: 25, cy: 25, r: R, class: 'p-ring__track' }))
+				svg.append(el('circle', { cx: 25, cy: 25, r: R, class: 'p-ring__fill', 'stroke-dasharray': `${(C * Math.min(1, tracked / goal)).toFixed(1)} ${C.toFixed(1)}`, transform: 'rotate(-90 25 25)' }))
+			} else svg.append(el('circle', { cx: 25, cy: 25, r: R, class: 'p-ring__none' }))
+			return h('li', { class: `p-ring ${running ? 'is-running' : ''}`, style: { '--c': c.color, '--on-c': onColor(c.color) } },
+				h('button', {
+					class: 'p-ring__dial',
+					'aria-label': `${running ? t('Stop {name}', { name: c.name }) : t('Start {name}', { name: c.name })} · ${about}`,
+					title: about,
+					onclick: () => act(() => (running ? app.api('POST', 'sessions/stop', {}) : app.api('POST', 'sessions/start', { commitmentId: c.id }))),
+				}, svg,
+				h('span', { class: 'p-ring__tile' }, c.name.trim().charAt(0).toUpperCase() || '?'),
+				h('span', { class: 'p-ring__badge' }, icon(running ? ICONS.stop : ICONS.play, 9, true))),
+				h('span', { class: 'p-ring__name' }, c.name),
+				h('span', { class: 'p-ring__goal' }, goal ? `${duration(tracked * 60)} / ${duration(goal * 60)}` : ''))
+		}
+		return h('section', { class: 'p-card p-rings' },
+			h('h2', null, t('Commitments')),
+			h('ul', { class: 'p-rings__row' }, items.map(ring)))
 	}
 
 	function footer() {
@@ -231,12 +258,7 @@
 			if (state.error) kids.push(h('p', { class: 'p-error' }, state.error))
 			const f = focusEntry(d)
 			if (f) kids.push(blockSection(f, d))
-			const others = d.commitments.filter((e) => e !== f)
-			if (others.length) {
-				kids.push(h('section', { class: 'p-list' },
-					h('h2', null, t('Commitments')),
-					h('ul', null, others.map((e) => commitmentRow(e, d)))))
-			}
+			if (d.commitments.length) kids.push(rings(d))
 		}
 		kids.push(h('p', { id: 'err', class: 'p-error', hidden: true, role: 'alert' }))
 		kids.push(h('p', { id: 'flash', class: 'p-flash', hidden: true, role: 'status' }))

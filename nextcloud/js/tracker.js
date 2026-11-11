@@ -551,29 +551,60 @@
 			return page
 		}
 		main.append(blockCard(d))
-		side.append(h('section', { class: 'imp-others' },
-			h('h2', null, tr('Commitments')),
-			h('ul', null, d.commitments.map((e) => compactRow(e, d)))))
 		return page
 	}
 
-	/** One line per commitment on Now: its tile, next block, weekly goal, play */
-	function compactRow(entry, d) {
-		const c = entry.commitment
-		const block = entry.currentBlock || entry.nextBlock
-		const running = d.running && d.running.commitmentId === c.id
-		return h('li', { class: 'imp-compact', style: { '--c': c.color, '--on-c': onColor(c.color) } },
-			tile(c),
-			h('div', { class: 'imp-compact__text' },
-				h('a', { href: `#c/${c.id}` }, h('strong', null, c.name)),
-				h('span', { class: 'imp-muted' }, c.calendarId === null ? tr('No calendar linked') : block ? blockTime(block) : tr('No block planned')),
-				goalProgress(c, d, true)),
-			h('button', {
-				class: `imp-play imp-play--small ${running ? 'is-running' : ''}`,
-				onclick: () => (running ? stopTracking() : startTracking(c.id)),
-				'aria-label': running ? tr('Stop tracking {name}', { name: c.name }) : tr('Start tracking {name}', { name: c.name }),
-				title: running ? tr('Stop') : tr('Start'),
-			}, icon(running ? ICON_STOP : ICON_PLAY, 14, true)))
+	/**
+	 * Now: every commitment as a round tile in the day card, its weekly goal as a
+	 * ring around it (dashed: no goal). Tap the tile to start (or stop) tracking,
+	 * the name to open it. The one tracking first, then those with a block
+	 * today (soonest first), then the rest; many scroll sideways.
+	 */
+	function goalRings(d) {
+		if (!d || !d.commitments.length) return null
+		const endToday = Math.floor(addPeriod(new Date(new Date().setHours(0, 0, 0, 0)), 'day', 1) / 1000)
+		const rank = (e) => {
+			if (d.running && d.running.commitmentId === e.commitment.id) return [0, 0]
+			const b = e.currentBlock || e.nextBlock
+			return b && b.start < endToday ? [1, b.start] : [2, 0]
+		}
+		const items = d.commitments.map((e, i) => ({ e, i, r: rank(e) }))
+			.sort((a, b) => a.r[0] - b.r[0] || a.r[1] - b.r[1] || a.i - b.i)
+		const R = 27
+		const C = 2 * Math.PI * R
+		const prev = h('button', { type: 'button', class: 'imp-icon-btn imp-rings__prev', 'aria-label': tr('Previous commitments'), hidden: true }, chevron(-1))
+		const next = h('button', { type: 'button', class: 'imp-icon-btn imp-rings__next', 'aria-label': tr('More commitments'), hidden: true }, chevron(1))
+		const ring = ({ e }) => {
+			const c = e.commitment
+			const running = !!(d.running && d.running.commitmentId === c.id)
+			const done = d.week ? (d.week.tracked[c.id] || 0) / 60 : 0
+			const goal = c.weeklyGoal
+			const frac = goal ? Math.min(1, done / goal) : 0
+			const goalText = goal ? `${fmtMin(Math.floor(done))} / ${fmtMin(goal)}` : ''
+			const block = e.currentBlock || e.nextBlock
+			const about = [goal ? tr('{done} of {goal} this week', { done: fmtMin(Math.floor(done)), goal: fmtMin(goal) }) : tr('No weekly goal'),
+				c.calendarId === null ? tr('No calendar linked') : block ? blockTime(block) : tr('No block planned')].join(' · ')
+			return h('li', { class: `imp-ring ${running ? 'is-running' : ''} ${goal && done >= goal ? 'is-reached' : ''}`, style: { '--c': c.color, '--on-c': onColor(c.color) } },
+				h('button', {
+					type: 'button',
+					class: 'imp-ring__dial',
+					onclick: () => (running ? stopTracking() : startTracking(c.id)),
+					'aria-label': `${running ? tr('Stop tracking {name}', { name: c.name }) : tr('Start tracking {name}', { name: c.name })} · ${about}`,
+					title: about,
+				},
+				svg('svg', { class: 'imp-ring__svg', viewBox: '0 0 60 60', 'aria-hidden': 'true' },
+					goal ? [
+						svg('circle', { cx: 30, cy: 30, r: R, class: 'imp-ring__track' }),
+						svg('circle', { cx: 30, cy: 30, r: R, class: 'imp-ring__fill', 'stroke-dasharray': `${(C * frac).toFixed(1)} ${C.toFixed(1)}`, transform: 'rotate(-90 30 30)' }),
+					] : svg('circle', { cx: 30, cy: 30, r: R, class: 'imp-ring__none' })),
+				h('span', { class: 'imp-ring__tile' }, c.name.trim().charAt(0).toUpperCase() || '?'),
+				h('span', { class: 'imp-ring__badge' }, icon(running ? ICON_STOP : ICON_PLAY, 10, true))),
+				h('a', { class: 'imp-ring__name', href: `#c/${c.id}` }, c.name),
+				h('span', { class: 'imp-ring__goal' }, goalText))
+		}
+		return h('div', { class: 'imp-rings' },
+			hscroll(h('ul', { class: 'imp-rings__row', 'aria-label': tr('Commitments') }, items.map(ring)), prev, next),
+			prev, next)
 	}
 
 	/**
@@ -895,6 +926,7 @@
 					state.nowDay ? h('button', { class: 'imp-button', onclick: () => nav(0) }, tr('Today')) : null,
 					h('button', { class: 'imp-icon-btn', 'aria-label': tr('Previous day'), title: tr('Previous day'), onclick: () => nav(-1) }, chevron(-1)),
 					h('button', { class: 'imp-icon-btn', 'aria-label': tr('Next day'), title: tr('Next day'), onclick: () => nav(1) }, chevron(1)))),
+			goalRings(d),
 			!blocks ? h('p', { class: 'imp-muted imp-day__empty', 'data-loading': '' }, tr('Loading…'))
 				: blocks.length
 					? h('ol', { class: 'imp-day__list' }, blocks.map(item))

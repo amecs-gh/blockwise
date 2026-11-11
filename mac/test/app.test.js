@@ -196,7 +196,7 @@ async function openWindow(browser, file, winName, opts = {}) {
 	console.log('  panel height follows content:', h0)
 
 	step('start tracking from the panel; the menu bar shows the time')
-	await panel.page.locator('.p-row .p-play').first().click()
+	await panel.page.locator('.p-ring__dial').first().click()
 	await sleep(2500)
 	const state = await call('state')
 	assert.ok(state.dash.running, 'tracking started')
