@@ -409,13 +409,13 @@
 			phone ? h('ul', { class: 'imp-nav__main imp-nav__apps' }, cal,
 				link('#', tr('Account'), 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0', false, (e) => { e.preventDefault(); desktop.account() })) : null,
 			h('div', { class: 'imp-nav__heading' }, tr('Commitments')),
-			h('ul', { class: 'imp-nav__commitments' },
+			hscroll(h('ul', { class: 'imp-nav__commitments' },
 				state.commitments.map((c) => h('li', null,
 					h('a', { href: `#c/${c.id}`, title: c.name, style: { '--c': c.color }, class: state.route === 'commitment' && state.commitmentId === c.id ? 'active' : '', 'aria-current': state.route === 'commitment' && state.commitmentId === c.id ? 'page' : null },
 						h('span', { class: 'imp-dot', style: { background: c.color } }),
 						h('span', { class: 'imp-nav__name' }, c.name),
 						c.calendarId === null && state.features.calendars !== false ? h('span', { class: 'imp-nav__warn', title: tr('No calendar linked') }, '!') : null))),
-				h('li', null, h('a', { href: '#settings', class: 'imp-nav__add', title: tr('New commitment'), onclick: () => { state.creatingCommitment = true; state.editingCommitment = null } }, '+ ', h('span', null, tr('New commitment'))))),
+				h('li', { class: 'imp-nav__addli' }, h('a', { href: '#settings', class: 'imp-nav__add', title: tr('New commitment'), onclick: () => { state.creatingCommitment = true; state.editingCommitment = null } }, '+ ', h('span', null, tr('New commitment')))))),
 		)
 	}
 
@@ -429,6 +429,42 @@
 			h('span', { class: 'imp-phead__icon', 'aria-hidden': 'true' }, icon(r.icon, 22)),
 			h('div', { class: 'imp-phead__text' }, h('h1', null, r.label()), subtitle ? h('p', null, subtitle) : null),
 			actions.length ? h('div', { class: 'imp-phead__actions' }, actions) : null)
+	}
+
+	/**
+	 * A row that scrolls sideways when it doesn't fit (many commitments): the
+	 * mouse wheel scrolls it too, the edges fade where there is more, and
+	 * prev/next buttons (if given) appear only when there is more that way.
+	 */
+	function hscroll(el, prev, next) {
+		const update = () => {
+			const more = el.scrollWidth - el.clientWidth > 2
+			const left = more && el.scrollLeft > 2
+			const right = more && el.scrollLeft < el.scrollWidth - el.clientWidth - 2
+			el.classList.toggle('imp-hs--left', left)
+			el.classList.toggle('imp-hs--right', right)
+			if (prev) { prev.hidden = !more; prev.disabled = !left }
+			if (next) { next.hidden = !more; next.disabled = !right }
+		}
+		el.classList.add('imp-hs')
+		el.addEventListener('scroll', update, { passive: true })
+		// A vertical wheel moves the row sideways, unless something inside scrolls that way
+		el.addEventListener('wheel', (e) => {
+			if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || el.scrollWidth <= el.clientWidth) return
+			for (let n = e.target; n && n !== el; n = n.parentElement) if (n.scrollHeight > n.clientHeight + 2 && /auto|scroll/.test(getComputedStyle(n).overflowY)) return
+			e.preventDefault()
+			el.scrollLeft += e.deltaY
+		}, { passive: false })
+		const step = (dir) => {
+			const first = el.firstElementChild
+			const w = first ? first.getBoundingClientRect().width + 16 : el.clientWidth / 2
+			el.scrollBy({ left: dir * Math.max(w, Math.floor(el.clientWidth / w) * w), behavior: 'smooth' })
+		}
+		if (prev) prev.addEventListener('click', () => step(-1))
+		if (next) next.addEventListener('click', () => step(1))
+		if (typeof ResizeObserver === 'function') new ResizeObserver(update).observe(el)
+		requestAnimationFrame(update)
+		return el
 	}
 
 	let rendering = false
@@ -1288,9 +1324,12 @@
 		])
 		const open = all.reduce((n, list) => n + list.length, 0)
 		const work = all.reduce((n, list) => n + list.reduce((m, t) => m + remainingMin(t), 0), 0)
-		page.append(pageHeader('tasks', open ? `${trn('%n open task', '%n open tasks', open)} · ${tr('{time} of work', { time: fmtMin(work) })} · ${tr('each block takes tasks from the top')}` : tr('No open tasks')))
+		// Many commitments: the columns scroll sideways (wheel, trackpad, or these buttons)
+		const prev = h('button', { type: 'button', class: 'imp-button', 'aria-label': tr('Previous commitments'), title: tr('Previous commitments'), hidden: true }, '‹')
+		const next = h('button', { type: 'button', class: 'imp-button', 'aria-label': tr('More commitments'), title: tr('More commitments'), hidden: true }, '›')
+		page.append(pageHeader('tasks', open ? `${trn('%n open task', '%n open tasks', open)} · ${tr('{time} of work', { time: fmtMin(work) })} · ${tr('each block takes tasks from the top')}` : tr('No open tasks'), h('div', { class: 'imp-tcols__nav' }, prev, next)))
 		// Every commitment side by side, each a column of its queue (scrolls inside on wide windows)
-		page.append(h('div', { class: 'imp-tcols' }, state.commitments.map((c, k) => taskColumn(c, all[k], blockData.blocks, now))))
+		page.append(hscroll(h('div', { class: 'imp-tcols' }, state.commitments.map((c, k) => taskColumn(c, all[k], blockData.blocks, now))), prev, next))
 		return page
 	}
 

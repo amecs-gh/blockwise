@@ -195,7 +195,49 @@ html.m3-dark #tracker-app {
 	clip-path: inset(50%);
 }
 .imp-nav .imp-nav__commitments {
+	flex: 0 1 auto;
+	flex-wrap: nowrap;
+	min-width: 0;
+	max-width: 100%;
 	margin-left: auto;
+	padding: 4px 2px;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.imp-nav .imp-nav__commitments::-webkit-scrollbar {
+	display: none;
+}
+.imp-nav__commitments > li {
+	flex: 0 0 auto;
+}
+/* "+ New commitment" stays in view at the end of a long row */
+.imp-nav__commitments > .imp-nav__addli {
+	position: sticky;
+	right: 0;
+	padding-left: 6px;
+	background: linear-gradient(to right, transparent, var(--tl-page) 6px);
+}
+/* Rows that scroll sideways: a fade on the side where there is more */
+.imp-hs--right {
+	-webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+	mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent);
+}
+.imp-hs--left {
+	-webkit-mask-image: linear-gradient(to right, transparent, #000 40px);
+	mask-image: linear-gradient(to right, transparent, #000 40px);
+}
+.imp-hs--left.imp-hs--right {
+	-webkit-mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+	mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent);
+}
+/* the chip row: its "+ New commitment" is never faded */
+.imp-nav__commitments.imp-hs--right {
+	-webkit-mask-image: none;
+	mask-image: none;
+}
+.imp-nav__commitments.imp-hs--left {
+	-webkit-mask-image: linear-gradient(to right, transparent, #000 40px);
+	mask-image: linear-gradient(to right, transparent, #000 40px);
 }
 .imp-nav__commitments a {
 	min-height: 34px;
@@ -306,7 +348,10 @@ html.m3-dark #tracker-app {
 /* Tasks: one column per commitment, side by side (more than fit: they scroll) */
 .imp-tcols {
 	display: grid;
-	grid-auto-columns: minmax(260px, 1fr);
+	/* side by side; more than fit scroll sideways, each column keeps a readable width */
+	grid-auto-columns: minmax(320px, 1fr);
+	scroll-snap-type: x proximity;
+	scroll-padding: 0 8px;
 	grid-auto-flow: column;
 	gap: var(--imp-gap);
 	align-items: start;
@@ -315,6 +360,7 @@ html.m3-dark #tracker-app {
 	padding: 6px 8px 0;
 }
 .imp-tcols > .imp-tcol {
+	scroll-snap-align: start;
 	display: flex;
 	flex-direction: column;
 	min-width: 0;
@@ -3815,4 +3861,50 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 }
 #tracker-app .imp-timer__since:hover {
 	background: color-mix(in srgb, var(--on-c, currentColor) 24%, transparent);
+}
+
+/* Tasks: previous / next commitments, when the columns don't all fit */
+.imp-tcols__nav {
+	display: flex;
+	gap: 6px;
+}
+#tracker-app .imp-tcols__nav .imp-button {
+	width: 40px;
+	min-width: 40px;
+	height: 40px;
+	padding: 0;
+	border-radius: 14px;
+	font-size: 1.4em;
+	line-height: 1;
+}
+#tracker-app .imp-tcols__nav .imp-button[hidden] {
+	display: none;
+}
+#tracker-app .imp-tcols__nav .imp-button:disabled {
+	opacity: 0.35;
+}
+/* Now: many commitments scroll inside their card; the day keeps its room */
+@media (min-width: 1001px) and (min-height: 560px) {
+	.imp-now__side > .imp-day {
+		flex: 1 1 260px;
+		min-height: 240px;
+	}
+	.imp-now__side > .imp-others {
+		display: flex;
+		flex: 0 1 auto;
+		flex-direction: column;
+		min-height: 150px;
+		max-height: 55%;
+	}
+	.imp-now__side > .imp-others ul {
+		min-height: 0;
+		overflow-y: auto;
+		scrollbar-width: none;
+		-webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+		mask-image: linear-gradient(to bottom, #000 calc(100% - 24px), transparent);
+		padding-bottom: 16px;
+	}
+	.imp-now__side > .imp-others ul::-webkit-scrollbar {
+		display: none;
+	}
 }
