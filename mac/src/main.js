@@ -44,6 +44,7 @@ let client = null // Nextcloud
 let engine = null // Blockwise on this Mac
 let remote = null // where it syncs (null: this Mac only)
 let driveStoreNow = null // the drive, to revoke the token when you disconnect
+let watcher = null // the drive's folder, watched for other devices' changes
 let vault = null
 let syncTimer = null
 let syncError = null
@@ -456,6 +457,8 @@ async function setCalendarMode(mode) {
  */
 async function disconnect({ revoke, keepData = false, carry = false }) {
 	if (carry) keepData = true
+	if (watcher) watcher.stop()
+	watcher = null
 	clearInterval(refreshTimer)
 	clearTimeout(syncTimer)
 	if (revoke && client) await client.revoke()
@@ -558,7 +561,24 @@ async function syncNow() {
 		syncError = e.offline || e.status === 0 ? null : t(e.message)
 	}
 	refresh()
-	if (engine) syncTimer = setTimeout(syncNow, dash && dash.running ? 30000 : 120000)
+	// With a drive watched, other devices' changes arrive by themselves: this is only a fallback
+	if (engine) syncTimer = setTimeout(syncNow, watcher ? 10 * 60000 : dash && dash.running ? 30000 : 120000)
+}
+
+/**
+ * Dropbox / Google Drive: syncs as soon as another device writes to the folder
+ * (Dropbox tells at once; Google Drive is asked every 20 s while the window is
+ * open, every 2 min from the menu bar alone).
+ */
+function watchDrive() {
+	if (watcher) watcher.stop()
+	watcher = null
+	if (!driveStoreNow) return
+	const w = FileSync.watch(driveStoreNow, () => syncNow(), {
+		interval: () => (mainWin && !mainWin.isDestroyed() && mainWin.isVisible() ? 20000 : 120000),
+		onError: () => { syncError = t('{drive} no longer accepts Blockwise. Disconnect and connect it again.', { drive: PROVIDER_NAMES[config.provider] }); setAppMenu() },
+	})
+	watcher = w.active ? w : null
 }
 
 function publicState() {
@@ -784,6 +804,8 @@ function createMain(hash) {
 	})
 	mainWin.loadFile(path.join(__dirname, '..', 'renderer', 'app.html'), { hash: (hash || '#now').slice(1) })
 	mainWin.once('ready-to-show', () => mainWin.show())
+	// Back at the window: check the drive now
+	mainWin.on('focus', () => { if (watcher) watcher.poke() })
 	mainWin.on('closed', () => {
 		mainWin = null
 		// Back to a pure menu bar app
@@ -1039,6 +1061,7 @@ ipcMain.on('popover:height', (e, h) => {
 function startApp() {
 	setAppMenu()
 	if (!tray) createTray()
+	watchDrive()
 	refresh()
 	clearInterval(refreshTimer)
 	// The current block and the timer move on with the clock

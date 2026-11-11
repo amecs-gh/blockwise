@@ -16,6 +16,8 @@
 ;(function () {
 	'use strict'
 	const native = window.TrackerAndroid
+	// In the background sync (sync.html): no watching, no prompts, no timers
+	const background = window.__trackerBackground === true
 	const pending = new Map()
 	const listeners = { state: [], changed: [] }
 	let next = 1
@@ -153,6 +155,28 @@
 			}
 		},
 		remove: (name) => call('drive', 'remove', name, '', false),
+		// Watching for other devices' changes (FileSync.watch)
+		changeCursor: () => call('driveWatch', 'cursor'),
+		async waitForChanges(cursor, { interval, sleep }) {
+			// Google Drive: a look every interval; Dropbox: the app waits for Dropbox's answer
+			if (mode !== 'dropbox') await sleep(interval)
+			try {
+				return await call('driveWatch', 'changes', cursor, 90)
+			} catch (e) {
+				if (e.status === 409) throw Object.assign(new Error(e.message), { reset: true })
+				throw e
+			}
+		},
+	}
+	let watcher = null
+	/** While the app is in front: sync as soon as another device writes to the drive */
+	function watchDrive() {
+		if (background || watcher || (mode !== 'dropbox' && mode !== 'gdrive') || document.visibilityState !== 'visible') return
+		watcher = window.BlockwiseFileSync.watch(driveStore, () => syncNow(false), { interval: () => 20000 })
+	}
+	function unwatchDrive() {
+		if (watcher) watcher.stop()
+		watcher = null
 	}
 
 	let enginePromise = null
@@ -195,6 +219,7 @@
 			onChange: (db, info) => { snapshotSoon(); if (mode !== 'local' && !(info && info.sync)) syncSoon(3000) },
 		})
 		engineNode = e.node()
+		setTimeout(watchDrive, 0)
 		// Just connected a sync after using the phone only: everything goes up
 		if (mode !== 'local' && await call('takeResend').catch(() => false)) await e.resendAll()
 		return e
@@ -280,15 +305,20 @@
 		}
 		return firstSync
 	}
-	setInterval(() => { if (document.visibilityState === 'visible') syncNow(false) }, 180000)
+	if (!background) setInterval(() => { if (document.visibilityState === 'visible') syncNow(false) }, 180000)
 	document.addEventListener('visibilitychange', () => {
-		if (document.visibilityState === 'hidden' && enginePromise) enginePromise.then((e) => e.flush()).catch(() => {})
+		if (document.visibilityState === 'hidden') {
+			unwatchDrive()
+			if (enginePromise) enginePromise.then((e) => e.flush()).catch(() => {})
+		} else if (enginePromise) {
+			enginePromise.then(watchDrive).catch(() => {})
+		}
 	})
 	// Blocks come from the phone's calendars: ask once
 	setTimeout(() => {
 		let asked = false
 		try { asked = localStorage.getItem('askedCalendar') === '1'; localStorage.setItem('askedCalendar', '1') } catch (e) { /* ask */ }
-		if (!asked && window.TrackerEngine) engine().then(() => (mode === 'nextcloud' ? call('calendarAccess') : false)).then((ok) => { if (ok) syncNow(true) }).catch(() => {})
+		if (!asked && !background && window.TrackerEngine) engine().then(() => (mode === 'nextcloud' ? call('calendarAccess') : false)).then((ok) => { if (ok) syncNow(true) }).catch(() => {})
 	}, 1500)
 
 	window.trackerApp = {
@@ -310,6 +340,24 @@
 		},
 		/** Is Blockwise set up in the drive already, and encrypted? */
 		inspectDrive: () => window.BlockwiseFileSync.inspect(driveStore),
+		/** The background sync: pull and push once, save, update the notification, done */
+		backgroundSync: async () => {
+			// The app's window reloads its page after a background sync (it may hold an older copy)
+			let changed = false
+			try {
+				const e = await engine()
+				changed = true
+				await syncNow(false)
+				await e.flush()
+				clearTimeout(snapshotTimer)
+				const snap = e.snapshot()
+				const now = Math.floor(Date.now() / 1000)
+				const { blocks } = await e.api('GET', `blocks?from=${now - 86400}&to=${now + 14 * 86400}`)
+				snap.blocks = (blocks || []).slice(0, 2000).map((b) => ({ uid: b.uid, title: b.title || '', start: b.start, end: b.end, commitmentId: b.commitmentId }))
+				await call('snapshot', snap)
+			} catch (err) { /* offline: next time */ }
+			await call('bgDone', changed).catch(() => {})
+		},
 		backToApp: () => call('backToApp'),
 		cancelLogin: () => call('cancelLogin'),
 		openCalendar: (ts) => call('openCalendar', typeof ts === 'number' ? ts : null),

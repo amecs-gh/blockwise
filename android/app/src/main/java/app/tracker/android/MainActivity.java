@@ -40,13 +40,16 @@ import app.tracker.core.Vars;
  * in a WebView, loaded from the app itself. It talks to Nextcloud only through
  * the bridge, never directly, and can't navigate anywhere else.
  */
-public final class MainActivity extends Activity implements Tracking.Listener {
+public final class MainActivity extends Activity implements Tracking.Listener, Bridge.Host {
     static final String ASSETS = "file:///android_asset/";
     private static final String APP_PAGE = ASSETS + "app.html";
     private static final String SETUP_PAGE = ASSETS + "setup.html";
 
     private WebView web;
     private boolean appPage;
+    /** The window is in front (the background sync waits for another time) */
+    static volatile boolean inFront;
+    private int seenGeneration = BackgroundSync.generation;
     /** On the setup page from "on this phone only", to connect Nextcloud */
     private boolean connecting;
     private OnBackInvokedCallback backCallback;
@@ -80,9 +83,12 @@ public final class MainActivity extends Activity implements Tracking.Listener {
     @Override
     protected void onResume() {
         super.onResume();
+        inFront = true;
         Tracking.listener = this;
+        BackgroundSync.schedule(this);
         if (Store.ready(this)) {
-            if (!appPage && !connecting) {
+            if ((!appPage && !connecting) || (appPage && seenGeneration != BackgroundSync.generation)) {
+                // Or: a background sync changed the data while the page kept the old copy
                 loadPage();
             } else {
                 // Changes made in the browser or on the Mac while you were away
@@ -96,6 +102,7 @@ public final class MainActivity extends Activity implements Tracking.Listener {
 
     @Override
     protected void onPause() {
+        inFront = false;
         if (Tracking.listener == this) {
             Tracking.listener = null;
         }
@@ -141,7 +148,7 @@ public final class MainActivity extends Activity implements Tracking.Listener {
     public void onDash(Dash dash, boolean loggedOut, boolean changedElsewhere) {
         if (loggedOut) {
             loggedOut();
-        } else if (changedElsewhere && appPage) {
+        } else if (changedElsewhere && appPage && inFront) {
             // Timer stopped from the notification, or changed on another device: the page syncs
             emit("changed", null);
         }
@@ -189,6 +196,7 @@ public final class MainActivity extends Activity implements Tracking.Listener {
     // --- the WebView -------------------------------------------------------------------------
 
     void loadPage() {
+        seenGeneration = BackgroundSync.generation;
         if (Store.loggedIn(this)) {
             connecting = false;
         }
@@ -198,12 +206,14 @@ public final class MainActivity extends Activity implements Tracking.Listener {
     }
 
     /** Is the WebView showing one of the app's own pages? (Main thread only.) */
-    boolean showsOwnPage() {
+    @Override
+    public boolean showsOwnPage() {
         String url = web == null ? null : web.getUrl();
         return url != null && url.startsWith(ASSETS);
     }
 
-    void evaluate(String js) {
+    @Override
+    public void evaluate(String js) {
         if (web != null) {
             web.evaluateJavascript(js, null);
         }
@@ -350,7 +360,8 @@ public final class MainActivity extends Activity implements Tracking.Listener {
 
     // --- what the bridge asks for ------------------------------------------------------------
 
-    JSONObject publicState() {
+    @Override
+    public JSONObject publicState() {
         JSONObject o = new JSONObject();
         try {
             String server = Store.server(this);
@@ -451,7 +462,8 @@ public final class MainActivity extends Activity implements Tracking.Listener {
     }
 
     /** The app password stopped working, or you logged out. */
-    void loggedOut() {
+    @Override
+    public void loggedOut() {
         Tracking.clearAll(this);
         if (appPage) {
             loadPage();
@@ -632,6 +644,8 @@ public final class MainActivity extends Activity implements Tracking.Listener {
             }
             pendingDrive = null;
             pendingAccount = null;
+            BackgroundSync.reset(this);
+            BackgroundSync.schedule(this);
             runOnUiThread(() -> {
                 done.done(null);
                 connecting = false;
@@ -704,6 +718,8 @@ public final class MainActivity extends Activity implements Tracking.Listener {
                 savedDrive = null;
             }
             Store.forgetDrive(this);
+            BackgroundSync.reset(this);
+            BackgroundSync.schedule(this); // cancels it
             if (keep) {
                 Store.useLocal(this);
             } else {

@@ -17,10 +17,24 @@ const THEME = (dark) => ({ dark, insets: { top: 32, bottom: 24, left: 0, right: 
 const device = { db: null, snapshot: null, offline: false, remoteCalls: [] }
 const GUARD = /^(sync\?since=\d{1,18}&limit=\d{1,5}|state|blocks\?from=\d{1,12}&to=\d{1,12})$/ // = core ApiGuard
 
+/** On phone A (its own page): add a commitment and wait until it is on the drive */
+async function a2b(dev, name) {
+	const n = folder.size
+	const p = await phone(sharedBrowser, 'app.html', { mode: 'dropbox', dev, hash: '#now' })
+	await p.page.waitForSelector('.imp-page', { timeout: 15000 })
+	await p.page.evaluate((name) => window.trackerApp.api('POST', 'commitments', { name, color: '#0fa37f' }), name)
+	for (let i = 0; i < 100 && folder.size === n; i++) await p.page.waitForTimeout(100)
+	await p.ctx.close()
+}
+let sharedBrowser = null
+
 // A stand-in Dropbox folder (what the app's Drives.Folder does), shared by the phones
 const folder = new Map()
+let folderVersion = 0
+const folderWaits = new Set()
+const folderChanged = () => { folderVersion++; for (const w of [...folderWaits]) w() }
 
-async function phone(browser, file, { dark = false, locale = 'en-US', hash = '', mode = 'nextcloud', dev = device, resend = false, connecting = false } = {}) {
+async function phone(browser, file, { dark = false, locale = 'en-US', hash = '', mode = 'nextcloud', dev = device, resend = false, connecting = false, theme = true } = {}) {
 	const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2.75, isMobile: true, hasTouch: true, colorScheme: dark ? 'dark' : 'light', locale })
 	const page = await ctx.newPage()
 	const errors = []
@@ -43,8 +57,18 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 				if (name && !/^[A-Za-z0-9_-][A-Za-z0-9._-]{0,79}$/.test(name)) throw new Error('Invalid file name')
 				if (op === 'list') env = { data: [...folder.keys()] }
 				else if (op === 'read') env = { data: folder.has(name) ? folder.get(name) : null }
-				else if (op === 'write') { if (create && folder.has(name)) env = { error: 'exists', status: 409 }; else { folder.set(name, b64); env = { data: null } } }
-				else if (op === 'remove') { folder.delete(name); env = { data: null } }
+				else if (op === 'write') { if (create && folder.has(name)) env = { error: 'exists', status: 409 }; else { folder.set(name, b64); folderChanged(); env = { data: null } } }
+				else if (op === 'remove') { folder.delete(name); folderChanged(); env = { data: null } }
+			} else if (channel === 'driveWatch') {
+				// Like Dropbox's long poll: answers at the next change (or after a while)
+				dev.watchCalls = (dev.watchCalls || 0) + 1
+				const [op, cursor] = args
+				if (op === 'cursor') env = { data: 'v' + folderVersion }
+				else if (Number(String(cursor).slice(1)) < folderVersion) env = { data: { changed: true, cursor: 'v' + folderVersion, retryAfter: 0 } }
+				else {
+					const changed = await new Promise((resolve) => { const w = () => { folderWaits.delete(w); clearTimeout(t); resolve(true) }; const t = setTimeout(() => { folderWaits.delete(w); resolve(false) }, 3000); folderWaits.add(w) })
+					env = { data: { changed, cursor: 'v' + folderVersion, retryAfter: 0 } }
+				}
 			}
 			else if (channel === 'dbLoad') env = { data: dev.db }
 			else if (channel === 'dbSave') { dev.db = args[0]; env = { data: null } }
@@ -68,12 +92,13 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 	})
 	await page.addInitScript(() => { window.TrackerAndroid = { call: (id, ch, a) => { window.__native(id, ch, a) } } })
 	await page.goto('file://' + path.join(ASSETS, file) + hash)
-	await page.evaluate((t) => window.__trackerAndroidTheme(t), THEME(dark))
+	if (theme) await page.evaluate((t) => window.__trackerAndroidTheme(t), THEME(dark))
 	return { page, errors, calls, ctx }
 }
 
 ;(async () => {
 	const browser = await chromium.launch()
+	sharedBrowser = browser
 	const s = await phone(browser, 'setup.html', { mode: null })
 	await s.page.waitForSelector('#choose:not([hidden])')
 	assert.match(await s.page.textContent('#local'), /Start on this phone/)
@@ -154,12 +179,36 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		const b = await phone(browser, 'app.html', { mode: 'dropbox', dev: devB, hash: '#now' })
 		await b.page.waitForSelector('.imp-page', { timeout: 15000 })
 		await b.page.waitForFunction((name) => [...document.querySelectorAll('.imp-nav__commitments a')].some((x) => x.textContent.includes(name)), name, { timeout: 15000 })
+		// Both phones open: what one adds shows on the other within moments (no waiting for the 3-minute round)
+		const a2 = await phone(browser, 'app.html', { mode: 'dropbox', dev: devA, hash: '#now' })
+		await a2.page.waitForSelector('.imp-page', { timeout: 15000 })
+		await b.page.waitForTimeout(1500)
+		const t0 = Date.now()
+		await a2.page.evaluate(() => window.trackerApp.api('POST', 'commitments', { name: 'Live one', color: '#0fa37f' }))
+		await b.page.waitForFunction(() => [...document.querySelectorAll('.imp-nav__commitments a')].some((x) => x.textContent.includes('Live one')), null, { timeout: 15000 })
+		assert.ok(Date.now() - t0 < 10000, `arrived in ${Date.now() - t0} ms`)
+		assert.ok(devB.watchCalls > 0, 'the open app watches the drive')
+		await a2.ctx.close()
 		const blocks = await b.page.evaluate(async () => { const now = Math.floor(Date.now() / 1000); return (await window.trackerApp.api('GET', `blocks?from=${now}&to=${now + 86400 * 8}`)).blocks })
 		assert.equal(blocks.length, 2, 'the weekly block came along (built-in calendar)')
 		await b.page.screenshot({ path: `${shots}/drive-second-phone.png` })
 		assert.deepEqual(b.errors, [])
 		await b.ctx.close()
-		console.log('  ✔ Dropbox: passphrase, encrypted folder, a second phone gets everything')
+		// The background sync page (BackgroundSync.java): one round, saved, the notification's snapshot, done
+		{
+			const before = JSON.parse(devB.db)
+			await a2b(devA, 'Background one')
+			const bg = await phone(browser, 'sync.html', { mode: 'dropbox', dev: devB, theme: false })
+			for (let i = 0; i < 100 && !bg.calls.includes('bgDone'); i++) await bg.page.waitForTimeout(100)
+			assert.ok(bg.calls.includes('bgDone'), 'done')
+			assert.ok(JSON.stringify(JSON.parse(devB.db).records).includes('Background one') || Object.values(JSON.parse(devB.db).records.commitment).some((r) => r.f.name === 'Background one'), 'pulled and saved')
+			assert.ok(devB.snapshot && devB.snapshot.commitments.some((c) => c.name === 'Background one'), 'the notification knows')
+			assert.ok(!bg.calls.includes('driveWatch') || bg.calls.filter((c) => c === 'driveWatch').length === 0, 'no watching in the background')
+			assert.ok(!bg.calls.includes('calendarAccess'))
+			assert.ok(before)
+			await bg.ctx.close()
+		}
+		console.log('  ✔ Dropbox: passphrase, encrypted folder, a second phone gets everything; background sync')
 	}
 
 	// Without encryption, when chosen: a warning, no passphrase; the next phone isn't asked for one

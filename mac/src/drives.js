@@ -77,6 +77,8 @@ const DROPBOX = {
 	token: 'https://api.dropboxapi.com/oauth2/token',
 	api: 'https://api.dropboxapi.com/2',
 	content: 'https://content.dropboxapi.com/2',
+	// Waiting for changes: no token is sent there, only the folder's cursor
+	notify: 'https://notify.dropboxapi.com/2',
 	// Registered in the Dropbox app's settings as a redirect URI
 	port: 53682,
 	path: '/dropbox',
@@ -151,6 +153,34 @@ function dropboxStore({ appKey, refreshToken, fetch, endpoints = DROPBOX }) {
 		async revoke() {
 			try { await authed(fetch, tok, `${endpoints.api}/auth/token/revoke`, { method: 'POST' }) } catch (e) { /* offline: forget it anyway */ }
 		},
+		/** Where the folder is now, to wait for changes from there */
+		async changeCursor() {
+			const { res, data } = await rpc('files/list_folder/get_latest_cursor', { path: '' })
+			if (!res.ok || !data || typeof data.cursor !== 'string') throw new DriveError(`Dropbox could not watch the folder (HTTP ${res.status}).`, { status: res.status })
+			return data.cursor
+		},
+		/**
+		 * Waits until something in the folder changes (Dropbox answers at once
+		 * then), or `timeout` seconds pass. Only the cursor is sent: no token.
+		 */
+		async waitForChanges(cursor, { timeout = 480, signal } = {}) {
+			let res
+			try {
+				res = await fetch(`${endpoints.notify}/files/list_folder/longpoll`, {
+					method: 'POST', redirect: 'error', signal,
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ cursor, timeout: Math.max(30, Math.min(480, Math.round(timeout))) }),
+				})
+			} catch (e) {
+				throw new DriveError('No connection to the drive.', { offline: true, aborted: !!(signal && signal.aborted) })
+			}
+			const data = await res.json().catch(() => null)
+			// An old cursor: start again from the folder as it is now
+			if (res.status === 400 || res.status === 409) throw new DriveError('The folder\'s watch cursor expired.', { reset: true, status: res.status })
+			if (!res.ok || !data) throw new DriveError('The drive is busy. Blockwise tries again later.', { offline: true, status: res.status })
+			const changed = data.changes === true
+			return { changed, cursor: changed ? await this.changeCursor() : cursor, retryAfter: Number.isFinite(data.backoff) ? Math.min(data.backoff, 3600) : 0 }
+		},
 	}
 }
 
@@ -162,6 +192,7 @@ const GOOGLE = {
 	revoke: 'https://oauth2.googleapis.com/revoke',
 	files: 'https://www.googleapis.com/drive/v3/files',
 	about: 'https://www.googleapis.com/drive/v3/about',
+	changes: 'https://www.googleapis.com/drive/v3/changes',
 	upload: 'https://www.googleapis.com/upload/drive/v3/files',
 	scope: 'https://www.googleapis.com/auth/drive.appdata',
 	path: '/google',
@@ -261,6 +292,35 @@ function googleStore({ clientId, clientSecret, refreshToken, fetch, endpoints = 
 			const data = await res.json().catch(() => null)
 			const id = data && data.user && data.user.permissionId
 			return typeof id === 'string' ? id.replace(/[^\w-]/g, '').slice(0, 64) : null
+		},
+		/** Where Drive's change list is now */
+		async changeCursor() {
+			const res = await authed(fetch, tok, `${endpoints.changes}/startPageToken`)
+			const data = await res.json().catch(() => null)
+			if (!res.ok || !data || typeof data.startPageToken !== 'string') throw new DriveError(`Google Drive could not watch the folder (HTTP ${res.status}).`, { status: res.status })
+			return data.startPageToken
+		},
+		/**
+		 * Google only pushes changes to public web servers: so, after `interval`
+		 * ms, one small request for the changes in Blockwise's app data folder.
+		 */
+		async waitForChanges(cursor, { interval = 20000, sleep, signal } = {}) {
+			await (sleep ? sleep(interval) : new Promise((r) => setTimeout(r, interval)))
+			if (signal && signal.aborted) throw new DriveError('Stopped.', { aborted: true })
+			let token = cursor
+			let changed = false
+			for (let page = 0; page < 50; page++) {
+				const q = new URLSearchParams({ pageToken: token, spaces: 'appDataFolder', pageSize: '100', fields: 'nextPageToken,newStartPageToken,changes(fileId)' })
+				const res = await authed(fetch, tok, `${endpoints.changes}?${q}`)
+				const data = await res.json().catch(() => null)
+				if (res.status === 400 || res.status === 404) throw new DriveError('The folder\'s watch cursor expired.', { reset: true, status: res.status })
+				if (!res.ok || !data) throw new DriveError(`Google Drive could not watch the folder (HTTP ${res.status}).`, { status: res.status })
+				if (Array.isArray(data.changes) && data.changes.length) changed = true
+				if (typeof data.newStartPageToken === 'string') return { changed, cursor: data.newStartPageToken, retryAfter: 0 }
+				if (typeof data.nextPageToken !== 'string') break
+				token = data.nextPageToken
+			}
+			return { changed, cursor: token, retryAfter: 0 }
 		},
 		async revoke() {
 			try {

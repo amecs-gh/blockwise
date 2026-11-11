@@ -62,6 +62,11 @@ anyone who gets into that account) can read; your other devices join without a
 passphrase. A folder keeps its choice: a device refuses a folder whose
 encryption was switched off (or on) after it joined.
 
+Blockwise watches the drive for your other devices' changes and syncs as soon
+as one writes: Dropbox tells it at once (it waits on Dropbox's change
+notification, which carries no token), Google Drive is asked every 20 seconds
+while the window is open and every 2 minutes from the menu bar.
+
 Blockwise can only see its own folder: in Dropbox the app folder, in Google
 Drive the hidden app data folder (scope `drive.appdata`), not your other files.
 

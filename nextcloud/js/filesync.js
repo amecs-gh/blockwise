@@ -295,7 +295,57 @@
 		return { push, pull, compact, kind: 'files', encrypted: !plain }
 	}
 
-	const api = { unlock, inspect, createRemote, SyncError, _seal: seal, _open: open }
+	/**
+	 * Watches the drive's folder and calls `onChange()` when another device
+	 * wrote something, so it syncs at once instead of at the next round.
+	 * The store gives changeCursor() and waitForChanges(cursor, {interval,
+	 * sleep, signal}) -> {changed, cursor, retryAfter}: Dropbox waits on its
+	 * side and answers at the change; Google Drive is asked every `interval`.
+	 * Offline or busy: tries again later, more slowly each time (up to 5 min).
+	 * @param {object} [o] interval(): ms between Google's checks (the app chooses:
+	 *   sooner while you look at it); onError(e): the drive refused (log in again)
+	 * @return {{stop(): void, poke(): void}} poke: check now (e.g. the window came back)
+	 */
+	function watch(store, onChange, o = {}) {
+		if (!store || typeof store.changeCursor !== 'function' || typeof store.waitForChanges !== 'function') return { stop() {}, poke() {}, active: false }
+		let stopped = false
+		let ctrl = null
+		let wake = null
+		const sleep = (ms) => new Promise((resolve) => {
+			const timer = setTimeout(() => { wake = null; resolve() }, ms)
+			wake = () => { clearTimeout(timer); wake = null; resolve() }
+		})
+		;(async () => {
+			let cursor = null
+			let fails = 0
+			while (!stopped) {
+				try {
+					if (!cursor) cursor = await store.changeCursor()
+					ctrl = typeof AbortController === 'function' ? new AbortController() : null
+					const interval = Math.max(5000, Number(o.interval ? o.interval() : 20000) || 20000)
+					const r = await store.waitForChanges(cursor, { interval, sleep, signal: ctrl && ctrl.signal, timeout: 480 })
+					if (stopped) break
+					fails = 0
+					if (r && typeof r.cursor === 'string') cursor = r.cursor
+					if (r && r.changed) await onChange()
+					if (r && r.retryAfter > 0) await sleep(r.retryAfter * 1000)
+				} catch (e) {
+					if (stopped) break
+					if (e && (e.status === 401 || e.revoked)) { if (o.onError) o.onError(e); break }
+					if (e && e.reset) cursor = null
+					fails++
+					await sleep(Math.min(300000, 15000 * 2 ** Math.min(fails - 1, 5)))
+				}
+			}
+		})()
+		return {
+			active: true,
+			stop() { stopped = true; if (ctrl) ctrl.abort(); if (wake) wake() },
+			poke() { if (wake) wake() },
+		}
+	}
+
+	const api = { unlock, inspect, createRemote, watch, SyncError, _seal: seal, _open: open }
 	if (typeof module !== 'undefined' && module.exports) module.exports = api
 	else root.BlockwiseFileSync = api
 })(typeof window !== 'undefined' ? window : globalThis)

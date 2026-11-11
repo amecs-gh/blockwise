@@ -77,7 +77,13 @@ encrypted with it on the phone before it goes to the drive; Blockwise only sees
 its own folder there (Dropbox: Apps/Blockwise; Google Drive: hidden app data).
 The drive login and the key are kept encrypted by the Android Keystore. You
 can also choose **Sync without encryption** (no passphrase; the drive's
-provider can read the files), with a warning first. The
+provider can read the files), with a warning first.
+
+With a drive, other devices' changes arrive by themselves: while the app is open
+it watches the drive (Dropbox tells at once; Google Drive is asked every 20
+seconds), and while it's closed Android lets it check about every 15 minutes.
+Only when something changed does it sync, in an invisible page of its own, so
+the timer notification and reminders follow what you do on your Mac. The
 drives are offered when the build has the app ids (the repository variables
 `DROPBOX_APP_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, same as the Mac app).
 

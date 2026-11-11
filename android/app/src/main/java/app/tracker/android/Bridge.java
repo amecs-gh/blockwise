@@ -35,18 +35,41 @@ public final class Bridge {
     private static final ExecutorService SAVE = Executors.newSingleThreadExecutor();
     private static final int MAX_DB = 50 * 1024 * 1024;
 
+    /** Where the bridge's page runs: the app's window, or the background sync (BackgroundSync) */
+    interface Host {
+        void runOnUiThread(Runnable r);
+
+        boolean showsOwnPage();
+
+        void evaluate(String js);
+
+        JSONObject publicState();
+
+        /** The app password stopped working (Nextcloud) */
+        void loggedOut();
+    }
+
+    /** null in the background: no windows, logins or permission requests there */
     private final MainActivity activity;
+    private final Host host;
+    private final android.content.Context ctx;
 
     Bridge(MainActivity activity) {
+        this(activity, activity, activity);
+    }
+
+    Bridge(MainActivity activity, Host host, android.content.Context ctx) {
         this.activity = activity;
+        this.host = host;
+        this.ctx = ctx.getApplicationContext();
     }
 
     /** Called by the page on WebView's bridge thread. */
     @JavascriptInterface
     public void call(final String id, final String channel, final String argsJson) {
-        activity.runOnUiThread(() -> {
+        host.runOnUiThread(() -> {
             // Only the app's own pages (file:///android_asset/) may use the bridge
-            if (!activity.showsOwnPage()) {
+            if (!host.showsOwnPage()) {
                 reply(id, error("Not allowed.", 0));
                 return;
             }
@@ -65,17 +88,36 @@ public final class Bridge {
         return I18n.forLocale(Locale.getDefault());
     }
 
+    /** What only the app's window can do (dialogs, logins, permissions, other apps) */
+    private static final java.util.Set<String> WINDOW_ONLY = new java.util.HashSet<>(java.util.Arrays.asList(
+            "calendarAccess", "createEvent", "login", "cancelLogin", "openCalendar", "account", "useLocal", "connect",
+            "backToApp", "connectDrive", "cancelDrive", "saveDrive"));
+
     private void dispatch(String id, String channel, JSONArray args) {
+        if (activity == null && WINDOW_ONLY.contains(channel)) {
+            reply(id, error(i18n().t("Not allowed."), 0));
+            return;
+        }
         switch (channel) {
             case "state":
-                reply(id, data(activity.publicState()));
+                reply(id, data(host.publicState()));
                 break;
             case "remote":
                 remote(id, args);
                 break;
+            case "bgDone":
+                if (host instanceof BackgroundSync) {
+                    ((BackgroundSync) host).done(args.optBoolean(0, false));
+                }
+                reply(id, data(null));
+                break;
             case "dbLoad":
                 background(id, () -> {
-                    String db = Vault.read(activity, Vault.DB);
+                    // A background sync is writing the data: the window reads it afterwards
+                    for (int i = 0; activity != null && BackgroundSync.running && i < 1000; i++) {
+                        Thread.sleep(100);
+                    }
+                    String db = Vault.read(ctx, Vault.DB);
                     if (db == null && Vault.unreadable(Vault.DB)) {
                         // Don't start empty (and overwrite unsynced changes): the page tries again
                         throw new IllegalStateException("Keystore not available");
@@ -90,20 +132,20 @@ public final class Bridge {
                 snapshot(id, args.optJSONObject(0));
                 break;
             case "outbox":
-                background(id, () -> Local.pending(activity, "imported"));
+                background(id, () -> Local.pending(ctx, "imported"));
                 break;
             case "outboxDone": {
                 final JSONArray recs = args.optJSONArray(0);
                 background(id, () -> {
                     if (recs != null) {
-                        Local.mark(activity, recs, "imported");
+                        Local.mark(ctx, recs, "imported");
                     }
                     return null;
                 });
                 break;
             }
             case "calendars":
-                background(id, () -> Calendars.listJson(activity));
+                background(id, () -> Calendars.listJson(ctx));
                 break;
             case "events":
                 events(id, args);
@@ -115,7 +157,7 @@ public final class Bridge {
                 activity.askForCalendar(granted -> reply(id, data(granted)));
                 break;
             case "refresh":
-                Tracking.refresh(activity, null);
+                Tracking.refresh(ctx, null);
                 reply(id, data(null));
                 break;
             case "login":
@@ -159,11 +201,14 @@ public final class Bridge {
             case "drive":
                 drive(id, args);
                 break;
+            case "driveWatch":
+                driveWatch(id, args);
+                break;
             case "driveKey":
-                background(id, () -> Store.drive(activity) == null ? null : Store.syncKey(activity));
+                background(id, () -> Store.drive(ctx) == null ? null : Store.syncKey(ctx));
                 break;
             case "driveStateLoad":
-                background(id, () -> Store.drive(activity) == null ? null : Vault.read(activity, Vault.DRIVESTATE));
+                background(id, () -> Store.drive(ctx) == null ? null : Vault.read(ctx, Vault.DRIVESTATE));
                 break;
             case "driveStateSave": {
                 final String st = args.optString(0, "");
@@ -172,15 +217,15 @@ public final class Bridge {
                     break;
                 }
                 SAVE.execute(() -> {
-                    if (Store.drive(activity) != null) {
-                        Vault.write(activity, Vault.DRIVESTATE, st);
+                    if (Store.drive(ctx) != null) {
+                        Vault.write(ctx, Vault.DRIVESTATE, st);
                     }
-                    activity.runOnUiThread(() -> reply(id, data(null)));
+                    host.runOnUiThread(() -> reply(id, data(null)));
                 });
                 break;
             }
             case "takeResend":
-                background(id, () -> Store.takeResend(activity));
+                background(id, () -> Store.takeResend(ctx));
                 break;
             case "cancelLogin":
                 activity.cancelLogin();
@@ -215,7 +260,7 @@ public final class Bridge {
                 r = error(i18n().t("Something went wrong."), 0);
             }
             final String result = r;
-            activity.runOnUiThread(() -> reply(id, result));
+            host.runOnUiThread(() -> reply(id, result));
         });
     }
 
@@ -229,7 +274,7 @@ public final class Bridge {
             reply(id, error(t.t("Invalid request."), 0));
             return;
         }
-        final Nextcloud client = Store.client(activity);
+        final Nextcloud client = Store.client(ctx);
         if (client == null) {
             reply(id, error(t.t("Not logged in."), 401));
             return;
@@ -243,12 +288,12 @@ public final class Bridge {
                 result = error(e.getMessage(), e.status);
                 if (e.status == 401) {
                     // App password revoked in Nextcloud: back to the login screen (data not yet synced stays)
-                    Store.clear(activity);
-                    activity.runOnUiThread(activity::loggedOut);
+                    Store.clear(ctx);
+                    host.runOnUiThread(host::loggedOut);
                 }
             }
             final String r = result;
-            activity.runOnUiThread(() -> reply(id, r));
+            host.runOnUiThread(() -> reply(id, r));
         });
     }
 
@@ -262,7 +307,7 @@ public final class Bridge {
         final String name = args.optString(1, "");
         final String b64 = args.optString(2, "");
         final boolean create = args.optBoolean(3, false);
-        final Drives.Folder f = MainActivity.driveFolder(activity);
+        final Drives.Folder f = MainActivity.driveFolder(ctx);
         if (f == null) {
             reply(id, error(i18n().t("Connect a drive first."), 0));
             return;
@@ -296,7 +341,32 @@ public final class Bridge {
                 r = error(i18n().t("Invalid request."), 0);
             }
             final String result = r;
-            activity.runOnUiThread(() -> reply(id, result));
+            host.runOnUiThread(() -> reply(id, result));
+        });
+    }
+
+    /** Long waits for the drive's changes: their own threads, so the page's requests never queue behind them. */
+    private static final ExecutorService WATCH = Executors.newFixedThreadPool(2);
+
+    /** ["cursor"] -> the folder's change cursor; ["changes", cursor, seconds] -> {changed, cursor, retryAfter} */
+    private void driveWatch(String id, JSONArray args) {
+        final String op = args.optString(0, "");
+        final String cursor = args.optString(1, "");
+        final int seconds = args.optInt(2, 90);
+        final Drives.Folder f = MainActivity.driveFolder(ctx);
+        if (f == null || (!"cursor".equals(op) && !"changes".equals(op))) {
+            reply(id, error(i18n().t("Invalid request."), 0));
+            return;
+        }
+        WATCH.execute(() -> {
+            String r;
+            try {
+                r = "cursor".equals(op) ? data(f.changeCursor()) : data(f.changes(cursor, seconds));
+            } catch (Drives.DriveException e) {
+                r = error(i18n().t(e.getMessage()), e.offline ? 0 : e.status);
+            }
+            final String result = r;
+            host.runOnUiThread(() -> reply(id, result));
         });
     }
 
@@ -306,8 +376,17 @@ public final class Bridge {
             return;
         }
         SAVE.execute(() -> {
-            Vault.write(activity, Vault.DB, json);
-            activity.runOnUiThread(() -> reply(id, data(null)));
+            // Never at the same time as a background sync (the app's page reloads after one)
+            for (int i = 0; activity != null && BackgroundSync.running && i < 1000; i++) {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            Vault.write(ctx, Vault.DB, json);
+            host.runOnUiThread(() -> reply(id, data(null)));
         });
     }
 
@@ -318,9 +397,9 @@ public final class Bridge {
             return;
         }
         SAVE.execute(() -> {
-            Local.saveSnapshot(activity, snap);
-            Tracking.refresh(activity, null, false);
-            activity.runOnUiThread(() -> reply(id, data(null)));
+            Local.saveSnapshot(ctx, snap);
+            Tracking.refresh(ctx, null, false);
+            host.runOnUiThread(() -> reply(id, data(null)));
         });
     }
 
@@ -343,7 +422,7 @@ public final class Bridge {
             reply(id, error(i18n().t("Invalid request."), 0));
             return;
         }
-        background(id, () -> Calendars.eventsJson(activity, from, to, urls));
+        background(id, () -> Calendars.eventsJson(ctx, from, to, urls));
     }
 
     private void createEvent(String id, JSONObject ev) {
@@ -364,7 +443,7 @@ public final class Bridge {
                 reply(id, error(i18n().t("Blockwise may not write to your calendar."), 0));
                 return;
             }
-            background(id, () -> new JSONObject().put("uid", Calendars.create(activity, url, title, start, end)));
+            background(id, () -> new JSONObject().put("uid", Calendars.create(ctx, url, title, start, end)));
         });
     }
 
@@ -419,6 +498,6 @@ public final class Bridge {
 
     /** Must run on the main thread. */
     private void reply(String id, String envelopeJson) {
-        activity.evaluate("window.__trackerAndroid&&window.__trackerAndroid.resolve(" + JSONObject.quote(id) + "," + JSONObject.quote(envelopeJson) + ")");
+        host.evaluate("window.__trackerAndroid&&window.__trackerAndroid.resolve(" + JSONObject.quote(id) + "," + JSONObject.quote(envelopeJson) + ")");
     }
 }

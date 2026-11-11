@@ -15,6 +15,7 @@ public final class BootReceiver extends BroadcastReceiver {
         if (!Store.ready(context)) {
             return;
         }
+        BackgroundSync.schedule(context);
         final PendingResult pending = goAsync();
         Tracking.refresh(context, pending::finish);
     }

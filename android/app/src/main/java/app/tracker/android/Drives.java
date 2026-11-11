@@ -60,12 +60,15 @@ final class Drives {
     private static final String DROPBOX_TOKEN = "https://api.dropboxapi.com/oauth2/token";
     private static final String DROPBOX_API = "https://api.dropboxapi.com/2/";
     private static final String DROPBOX_CONTENT = "https://content.dropboxapi.com/2/";
+    // Waiting for changes: no token is sent there, only the folder's cursor
+    private static final String DROPBOX_NOTIFY = "https://notify.dropboxapi.com/2/files/list_folder/longpoll";
 
     private static final String GOOGLE_AUTHORIZE = "https://accounts.google.com/o/oauth2/v2/auth";
     private static final String GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
     private static final String GOOGLE_REVOKE = "https://oauth2.googleapis.com/revoke";
     private static final String GOOGLE_FILES = "https://www.googleapis.com/drive/v3/files";
     private static final String GOOGLE_UPLOAD = "https://www.googleapis.com/upload/drive/v3/files";
+    private static final String GOOGLE_CHANGES = "https://www.googleapis.com/drive/v3/changes";
     private static final String GOOGLE_ABOUT = "https://www.googleapis.com/drive/v3/about?fields=user(permissionId)";
     private static final String GOOGLE_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
 
@@ -650,6 +653,90 @@ final class Drives {
             }
         }
 
+        // --- watching the folder for other devices' changes ---
+
+        /** Where the folder is now, to look for changes from there */
+        String changeCursor() throws DriveException {
+            if (dropbox()) {
+                int[] st = {0};
+                JSONObject d;
+                try {
+                    d = rpc("files/list_folder/get_latest_cursor", new JSONObject().put("path", ""), st);
+                } catch (JSONException e) {
+                    throw new DriveException("Unexpected answer from the drive.");
+                }
+                if (st[0] != 200 || d == null || d.optString("cursor", "").isEmpty()) {
+                    throw new DriveException("Dropbox could not watch the folder (HTTP " + st[0] + ").", st[0], false, false);
+                }
+                return d.optString("cursor");
+            }
+            Resp r = authed("GET", GOOGLE_CHANGES + "/startPageToken", null, null);
+            JSONObject d = r.json();
+            if (r.status != 200 || d == null || d.optString("startPageToken", "").isEmpty()) {
+                throw new DriveException("Google Drive could not watch the folder (HTTP " + r.status + ").", r.status, false, false);
+            }
+            return d.optString("startPageToken");
+        }
+
+        /**
+         * Has anything changed since `cursor`? Dropbox: waits up to `seconds` and
+         * answers at the change (only the cursor is sent, no token). Google
+         * Drive: one look at the app data folder's change list, at once.
+         * @return {changed, cursor, retryAfter seconds}; status 409 = the cursor expired
+         */
+        JSONObject changes(String cursor, int seconds) throws DriveException {
+            if (cursor == null || cursor.isEmpty() || cursor.length() > 4096) {
+                throw new DriveException("The folder's watch cursor expired.", 409, false, false);
+            }
+            try {
+                if (dropbox()) {
+                    Map<String, String> h = new HashMap<>();
+                    h.put("Content-Type", "application/json");
+                    int timeout = Math.max(30, Math.min(480, seconds));
+                    Resp r = http("POST", DROPBOX_NOTIFY, h, new JSONObject().put("cursor", cursor).put("timeout", timeout).toString().getBytes(StandardCharsets.UTF_8), timeout + 90);
+                    JSONObject d = r.json();
+                    if (r.status == 400 || r.status == 409) {
+                        throw new DriveException("The folder's watch cursor expired.", 409, false, false);
+                    }
+                    if (r.status != 200 || d == null) {
+                        throw new DriveException("The drive is busy. Blockwise tries again later.", r.status, false, true);
+                    }
+                    boolean changed = d.optBoolean("changes", false);
+                    return new JSONObject().put("changed", changed).put("cursor", changed ? changeCursor() : cursor)
+                            .put("retryAfter", Math.min(3600, d.optInt("backoff", 0)));
+                }
+                String token = cursor;
+                boolean changed = false;
+                for (int page = 0; page < 50; page++) {
+                    Map<String, String> q = new LinkedHashMap<>();
+                    q.put("pageToken", token);
+                    q.put("spaces", "appDataFolder");
+                    q.put("pageSize", "100");
+                    q.put("fields", "nextPageToken,newStartPageToken,changes(fileId)");
+                    Resp r = authed("GET", GOOGLE_CHANGES + "?" + form(q), null, null);
+                    JSONObject d = r.json();
+                    if (r.status == 400 || r.status == 404) {
+                        throw new DriveException("The folder's watch cursor expired.", 409, false, false);
+                    }
+                    if (r.status != 200 || d == null) {
+                        throw new DriveException("Google Drive could not watch the folder (HTTP " + r.status + ").", r.status, false, false);
+                    }
+                    JSONArray ch = d.optJSONArray("changes");
+                    changed |= ch != null && ch.length() > 0;
+                    if (!d.optString("newStartPageToken", "").isEmpty()) {
+                        return new JSONObject().put("changed", changed).put("cursor", d.optString("newStartPageToken")).put("retryAfter", 0);
+                    }
+                    if (d.optString("nextPageToken", "").isEmpty()) {
+                        break;
+                    }
+                    token = d.optString("nextPageToken");
+                }
+                return new JSONObject().put("changed", changed).put("cursor", token).put("retryAfter", 0);
+            } catch (JSONException e) {
+                throw new DriveException("Unexpected answer from the drive.");
+            }
+        }
+
         /** Disconnecting: the token stops working (offline: forgotten anyway) */
         void revoke() {
             try {
@@ -684,12 +771,16 @@ final class Drives {
     }
 
     private static Resp http(String method, String url, Map<String, String> headers, byte[] body) throws DriveException {
+        return http(method, url, headers, body, 60);
+    }
+
+    private static Resp http(String method, String url, Map<String, String> headers, byte[] body, int readSeconds) throws DriveException {
         HttpURLConnection con = null;
         try {
             con = (HttpURLConnection) new URL(url).openConnection();
             con.setInstanceFollowRedirects(false);
             con.setConnectTimeout(20000);
-            con.setReadTimeout(60000);
+            con.setReadTimeout(readSeconds * 1000);
             con.setUseCaches(false);
             con.setRequestMethod(method);
             if (headers != null) {

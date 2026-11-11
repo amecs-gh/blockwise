@@ -19,7 +19,11 @@ function provider() {
 	const access = new Map() // access token -> expired?
 	const box = new Map() // Dropbox app folder: name -> bytes
 	const gfiles = [] // Google appDataFolder: {id, name, bytes, createdTime}
-	const seen = { auths: [], urls: [], revokeBodies: [] }
+	const seen = { auths: [], urls: [], revokeBodies: [], longpollAuth: [] }
+	// Every change to either folder: a new version (the watch cursors are versions)
+	let version = 0
+	const waiting = new Set()
+	const bump = () => { version++; for (const w of [...waiting]) w() }
 	const issue = (client) => {
 		const a = 'acc-' + crypto.randomBytes(8).toString('hex')
 		access.set(a, false)
@@ -67,8 +71,28 @@ function provider() {
 			refresh.delete(form().token)
 			return json(200, {})
 		}
+		// Dropbox's long poll: no token, only the cursor; answers at the next change
+		if (url.pathname === '/2/files/list_folder/longpoll') {
+			seen.longpollAuth.push(req.headers.authorization || null)
+			const { cursor, timeout } = JSON.parse(body)
+			if (!/^v\d+$/.test(cursor)) return json(400, { error: 'reset' })
+			if (Number(cursor.slice(1)) < version) return json(200, { changes: true })
+			let answered = false
+			const done = (changes) => { if (answered) return; answered = true; waiting.delete(onChange); clearTimeout(t); json(200, { changes }) }
+			const onChange = () => done(true)
+			const t = setTimeout(() => done(false), Math.min(timeout, 2) * 1000)
+			waiting.add(onChange)
+			return
+		}
 		const tok = bearer(req)
 		if (!tok) return json(401, { error: 'invalid_token' })
+		if (url.pathname === '/2/files/list_folder/get_latest_cursor') return json(200, { cursor: 'v' + version })
+		if (url.pathname === '/drive/v3/changes/startPageToken') return json(200, { startPageToken: String(version) })
+		if (url.pathname === '/drive/v3/changes') {
+			assert.equal(url.searchParams.get('spaces'), 'appDataFolder')
+			const from = Number(url.searchParams.get('pageToken'))
+			return json(200, { changes: from < version ? [{ fileId: 'x' }] : [], newStartPageToken: String(version) })
+		}
 		// --- Dropbox
 		if (url.pathname === '/2/auth/token/revoke') { for (const k of refresh.keys()) refresh.delete(k); access.set(tok, true); return json(200, null) }
 		if (url.pathname === '/2/files/list_folder' || url.pathname === '/2/files/list_folder/continue') {
@@ -88,11 +112,13 @@ function provider() {
 			const p = arg.path.slice(1)
 			if (arg.mode === 'add' && box.has(p)) return json(409, { error_summary: 'path/conflict/file/' })
 			box.set(p, body)
+			bump()
 			return json(200, { name: p })
 		}
 		if (url.pathname === '/2/files/delete_v2') {
 			const p = JSON.parse(body).path.slice(1)
 			if (!box.delete(p)) return json(409, { error_summary: 'path_lookup/not_found/' })
+			bump()
 			return json(200, {})
 		}
 		// --- Google Drive
@@ -106,7 +132,7 @@ function provider() {
 			const [, upload, id] = fm
 			const f = id && gfiles.find((x) => x.id === id)
 			if (!upload && req.method === 'GET') { if (!f) return json(404, {}); res.writeHead(200).end(f.bytes); return }
-			if (!upload && req.method === 'DELETE') { if (!f) return json(404, {}); gfiles.splice(gfiles.indexOf(f), 1); res.writeHead(204).end(); return }
+			if (!upload && req.method === 'DELETE') { if (!f) return json(404, {}); gfiles.splice(gfiles.indexOf(f), 1); bump(); res.writeHead(204).end(); return }
 			if (upload) {
 				// multipart/related: JSON metadata, then the bytes
 				const boundary = /boundary=(.+)$/.exec(req.headers['content-type'])[1]
@@ -117,10 +143,12 @@ function provider() {
 					assert.deepEqual(meta.parents, ['appDataFolder'], 'new files go into the app data folder only')
 					const nf = { id: 'g' + crypto.randomBytes(6).toString('hex'), name: meta.name, bytes, createdTime: new Date().toISOString() }
 					gfiles.push(nf)
+					bump()
 					return json(200, { id: nf.id })
 				}
 				if (!f) return json(404, {})
 				f.bytes = bytes
+				bump()
 				return json(200, { id: f.id })
 			}
 		}
@@ -160,8 +188,8 @@ if (require.main === module) (async () => {
 	const p = provider()
 	await new Promise((r) => p.server.listen(0, '127.0.0.1', r))
 	const base = `http://127.0.0.1:${p.server.address().port}`
-	const DBX = { authorize: `${base}/authorize`, token: `${base}/token`, api: `${base}/2`, content: `${base}/2`, port: 0, path: '/dropbox' }
-	const GOO = { authorize: `${base}/auth`, token: `${base}/token`, revoke: `${base}/revoke`, files: `${base}/drive/v3/files`, about: `${base}/drive/v3/about`, upload: `${base}/upload/drive/v3/files`, scope: 'https://www.googleapis.com/auth/drive.appdata', path: '/google' }
+	const DBX = { authorize: `${base}/authorize`, token: `${base}/token`, api: `${base}/2`, content: `${base}/2`, notify: `${base}/2`, port: 0, path: '/dropbox' }
+	const GOO = { authorize: `${base}/auth`, token: `${base}/token`, revoke: `${base}/revoke`, files: `${base}/drive/v3/files`, about: `${base}/drive/v3/about`, changes: `${base}/drive/v3/changes`, upload: `${base}/upload/drive/v3/files`, scope: 'https://www.googleapis.com/auth/drive.appdata', path: '/google' }
 
 	console.log('Dropbox')
 	assert.throws(() => drives.connectDropbox({ appKey: '', fetch, openBrowser: () => {} }), /no Dropbox app key/)
@@ -222,6 +250,30 @@ if (require.main === module) (async () => {
 	assert.ok((await names(b)).includes('After expiry'))
 	ok('an expired access token is renewed from the refresh token')
 
+	{
+		// Watching: the other Mac syncs as soon as this one writes (Dropbox answers the long poll at the change)
+		let got = 0
+		const w = FS.watch(s2, async () => { got++; await b.sync() })
+		await new Promise((r) => setTimeout(r, 300))
+		const t0 = Date.now()
+		await a.api('POST', 'commitments', { name: 'Watched', color: '#123456' })
+		await a.sync()
+		for (let i = 0; i < 60 && !(await names(b)).includes('Watched'); i++) await new Promise((r) => setTimeout(r, 50))
+		assert.ok((await names(b)).includes('Watched'), 'arrived without asking')
+		assert.ok(Date.now() - t0 < 2000, 'within moments')
+		assert.ok(p.seen.longpollAuth.length && p.seen.longpollAuth.every((x) => x === null), 'the long poll carries no token')
+		// Two Macs writing at the same moment: both get everything
+		const wa = FS.watch(s1, () => a.sync())
+		await new Promise((r) => setTimeout(r, 300))
+		await Promise.all([a.api('POST', 'commitments', { name: 'Same time A', color: '#123456' }), b.api('POST', 'commitments', { name: 'Same time B', color: '#123456' })])
+		await Promise.all([a.sync(), b.sync()])
+		for (let i = 0; i < 80 && ((await names(a)).length !== (await names(b)).length || !(await names(a)).includes('Same time B')); i++) await new Promise((r) => setTimeout(r, 50))
+		assert.deepEqual(await names(a), await names(b))
+		assert.ok((await names(a)).includes('Same time A') && (await names(a)).includes('Same time B'))
+		w.stop(); wa.stop()
+		ok('watching Dropbox: the other Mac syncs at once; two writing at once converge')
+	}
+
 	await s2.revoke()
 	const s2again = drives.dropboxStore({ appKey: 'dbx-key', refreshToken: d2.refreshToken, fetch, endpoints: DBX })
 	const err = await s2again.list().catch((e) => e)
@@ -248,6 +300,23 @@ if (require.main === module) (async () => {
 	assert.deepEqual(await names(gb), ['Gym', 'Piano'])
 	assert.ok(p.gfiles.every((f) => !f.bytes.toString('latin1').includes('Gym')))
 	ok('two Macs converge through Google Drive, encrypted')
+	{
+		// Google Drive: a check every interval, sync only when the app folder changed
+		let syncs = 0
+		const w = FS.watch(gs2, async () => { syncs++; await gb.sync() }, { interval: () => 5000 })
+		await new Promise((r) => setTimeout(r, 300))
+		await ga.api('POST', 'commitments', { name: 'Violin', color: '#336699' })
+		await ga.sync()
+		w.poke() // the window came back: check now
+		for (let i = 0; i < 60 && !(await names(gb)).includes('Violin'); i++) await new Promise((r) => setTimeout(r, 50))
+		assert.ok((await names(gb)).includes('Violin'))
+		const before = syncs
+		w.poke()
+		await new Promise((r) => setTimeout(r, 400))
+		assert.equal(syncs, before, 'nothing changed: no sync')
+		w.stop()
+		ok('watching Google Drive: a small check, a sync only when something changed')
+	}
 	{
 		// The same name made twice at once (Drive allows it): the oldest wins, the other is removed
 		await gs1.write('race.bwx', new Uint8Array([1]), { create: true })
