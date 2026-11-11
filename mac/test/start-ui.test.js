@@ -114,7 +114,7 @@ const ok = (n) => console.log('  ✔', n)
 		const [prev, next] = document.querySelectorAll('.imp-tcols__nav button')
 		return { min: Math.min(...widths), scrolls: row.scrollWidth > row.clientWidth, prevHidden: prev.hidden, nextHidden: next.hidden, prevDisabled: prev.disabled, pageWidth: document.documentElement.scrollWidth, view: innerWidth }
 	})
-	assert.ok(cols.min >= 319, `columns stay readable (${cols.min}px)`)
+	assert.ok(cols.min >= 359, `columns stay readable (${cols.min}px)`)
 	assert.ok(cols.scrolls && !cols.nextHidden && cols.prevDisabled, 'the columns scroll sideways, with next/previous')
 	assert.ok(cols.pageWidth <= cols.view, 'the page itself never scrolls sideways')
 	await page.click('.imp-tcols__nav button:last-child')

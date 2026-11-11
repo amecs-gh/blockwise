@@ -431,6 +431,10 @@
 			actions.length ? h('div', { class: 'imp-phead__actions' }, actions) : null)
 	}
 
+	/** A chevron for previous / next buttons (drawn, so it sits centered in its button) */
+	const chevron = (dir) => svg('svg', { viewBox: '0 0 24 24', width: 20, height: 20, 'aria-hidden': 'true', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.4, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+		svg('path', { d: dir < 0 ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7' }))
+
 	/**
 	 * A row that scrolls sideways when it doesn't fit (many commitments): the
 	 * mouse wheel scrolls it too, the edges fade where there is more, and
@@ -887,10 +891,10 @@
 					h('h2', null, new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(day)),
 					h('p', { class: 'imp-muted' }, new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long' }).format(day),
 						planned ? ` · ${tr('{hours} planned', { hours: fmtMin(Math.round(planned / 60)) })}` : '')),
-				h('div', { class: 'imp-day__nav' },
+				h('div', { class: 'imp-arrows imp-day__nav' },
 					state.nowDay ? h('button', { class: 'imp-button', onclick: () => nav(0) }, tr('Today')) : null,
-					h('button', { class: 'imp-icon-btn', 'aria-label': tr('Previous day'), onclick: () => nav(-1) }, '‹'),
-					h('button', { class: 'imp-icon-btn', 'aria-label': tr('Next day'), onclick: () => nav(1) }, '›'))),
+					h('button', { class: 'imp-icon-btn', 'aria-label': tr('Previous day'), title: tr('Previous day'), onclick: () => nav(-1) }, chevron(-1)),
+					h('button', { class: 'imp-icon-btn', 'aria-label': tr('Next day'), title: tr('Next day'), onclick: () => nav(1) }, chevron(1)))),
 			!blocks ? h('p', { class: 'imp-muted imp-day__empty', 'data-loading': '' }, tr('Loading…'))
 				: blocks.length
 					? h('ol', { class: 'imp-day__list' }, blocks.map(item))
@@ -1325,9 +1329,9 @@
 		const open = all.reduce((n, list) => n + list.length, 0)
 		const work = all.reduce((n, list) => n + list.reduce((m, t) => m + remainingMin(t), 0), 0)
 		// Many commitments: the columns scroll sideways (wheel, trackpad, or these buttons)
-		const prev = h('button', { type: 'button', class: 'imp-button', 'aria-label': tr('Previous commitments'), title: tr('Previous commitments'), hidden: true }, '‹')
-		const next = h('button', { type: 'button', class: 'imp-button', 'aria-label': tr('More commitments'), title: tr('More commitments'), hidden: true }, '›')
-		page.append(pageHeader('tasks', open ? `${trn('%n open task', '%n open tasks', open)} · ${tr('{time} of work', { time: fmtMin(work) })} · ${tr('each block takes tasks from the top')}` : tr('No open tasks'), h('div', { class: 'imp-tcols__nav' }, prev, next)))
+		const prev = h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('Previous commitments'), title: tr('Previous commitments'), hidden: true }, chevron(-1))
+		const next = h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('More commitments'), title: tr('More commitments'), hidden: true }, chevron(1))
+		page.append(pageHeader('tasks', open ? `${trn('%n open task', '%n open tasks', open)} · ${tr('{time} of work', { time: fmtMin(work) })} · ${tr('each block takes tasks from the top')}` : tr('No open tasks'), h('div', { class: 'imp-arrows imp-tcols__nav' }, prev, next)))
 		// Every commitment side by side, each a column of its queue (scrolls inside on wide windows)
 		page.append(hscroll(h('div', { class: 'imp-tcols' }, state.commitments.map((c, k) => taskColumn(c, all[k], blockData.blocks, now))), prev, next))
 		return page
