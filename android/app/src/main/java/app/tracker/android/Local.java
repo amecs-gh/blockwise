@@ -87,7 +87,8 @@ final class Local {
     static synchronized void add(Context c, JSONArray records) throws JSONException {
         JSONArray all = entries(c);
         for (int i = 0; i < records.length(); i++) {
-            all.put(new JSONObject().put("rec", records.getJSONObject(i)).put("pushed", false).put("imported", false));
+            // On this phone only: nothing to send, only to hand to the page
+            all.put(new JSONObject().put("rec", records.getJSONObject(i)).put("pushed", Store.local(c)).put("imported", false));
         }
         save(c, all);
     }

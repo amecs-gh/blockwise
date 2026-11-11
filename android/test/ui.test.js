@@ -17,7 +17,7 @@ const THEME = (dark) => ({ dark, insets: { top: 32, bottom: 24, left: 0, right: 
 const device = { db: null, snapshot: null, offline: false, remoteCalls: [] }
 const GUARD = /^(sync\?since=\d{1,18}&limit=\d{1,5}|state|blocks\?from=\d{1,12}&to=\d{1,12})$/ // = core ApiGuard
 
-async function phone(browser, file, { dark = false, locale = 'en-US', hash = '' } = {}) {
+async function phone(browser, file, { dark = false, locale = 'en-US', hash = '', mode = 'nextcloud', dev = device, resend = false, connecting = false } = {}) {
 	const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2.75, isMobile: true, hasTouch: true, colorScheme: dark ? 'dark' : 'light', locale })
 	const page = await ctx.newPage()
 	const errors = []
@@ -29,18 +29,20 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '' 
 		calls.push(channel)
 		let env
 		try {
-			if (channel === 'state') env = { data: { platform: 'android', locale } }
-			else if (channel === 'dbLoad') env = { data: device.db }
-			else if (channel === 'dbSave') { device.db = args[0]; env = { data: null } }
-			else if (channel === 'snapshot') { device.snapshot = args[0]; env = { data: null } }
+			if (channel === 'state') env = { data: { platform: 'android', locale, mode, connecting } }
+			else if (channel === 'dbLoad') env = { data: dev.db }
+			else if (channel === 'dbSave') { dev.db = args[0]; env = { data: null } }
+			else if (channel === 'snapshot') { dev.snapshot = args[0]; env = { data: null } }
+			else if (channel === 'takeResend') { env = { data: resend }; resend = false }
 			else if (channel === 'outbox' || channel === 'calendars' || channel === 'events') env = { data: [] }
 			else if (channel === 'calendarAccess') env = { data: false }
 			else if (channel === 'createEvent') env = { error: 'This commitment\'s calendar is not on this phone. Turn it on in DAVx5.', status: 0 }
 			else if (channel === 'remote') {
 				const [method, p, body] = args
-				device.remoteCalls.push(`${method} ${p}`)
+				dev.remoteCalls.push(`${method} ${p}`)
+				if (mode === 'local') throw new Error('no server on this phone only')
 				if (!(method === 'GET' ? GUARD.test(p) : method === 'POST' && p === 'sync')) throw new Error('refused by ApiGuard: ' + method + ' ' + p)
-				if (device.offline) throw new Error('offline')
+				if (dev.offline) throw new Error('offline')
 				const r = await fetch(`${SERVER}/index.php/apps/tracker/api/${p}`, { method, headers: { Authorization: AUTH, 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }, body: body === null ? undefined : JSON.stringify(body) })
 				const d = await r.json().catch(() => null)
 				env = r.ok ? { data: d } : { error: (d && d.message) || `HTTP ${r.status}`, status: r.status }
@@ -56,11 +58,60 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '' 
 
 ;(async () => {
 	const browser = await chromium.launch()
-	const s = await phone(browser, 'setup.html')
-	await s.page.waitForTimeout(400)
-	assert.match(await s.page.textContent('#intro'), /stored encrypted on this phone/)
+	const s = await phone(browser, 'setup.html', { mode: null })
+	await s.page.waitForSelector('#choose:not([hidden])')
+	assert.match(await s.page.textContent('#local'), /Start on this phone/)
 	await s.page.screenshot({ path: `${shots}/setup.png` })
+	await s.page.click('#nextcloud')
+	assert.match(await s.page.textContent('#intro'), /stored encrypted on this phone/)
+	await s.page.screenshot({ path: `${shots}/setup-nextcloud.png` })
+	await s.page.click('#back')
+	await s.page.click('#local')
+	await s.page.waitForTimeout(200)
+	assert.ok(s.calls.includes('useLocal'), 'start on this phone')
+	const sc = await phone(browser, 'setup.html', { mode: 'local', connecting: true, hash: '#connect' })
+	await sc.page.waitForSelector('#form:not([hidden])')
+	assert.match(await sc.page.textContent('#intro'), /go along to Nextcloud/)
+	await sc.page.click('#back')
+	await sc.page.waitForTimeout(200)
+	assert.ok(sc.calls.includes('backToApp'))
 	console.log('setup ok')
+
+	// On this phone only: no server, the built-in calendar; then Nextcloud, and the data comes along
+	{
+		const dev = { db: null, snapshot: null, offline: false, remoteCalls: [] }
+		const l = await phone(browser, 'app.html', { mode: 'local', dev, hash: '#now' })
+		await l.page.waitForSelector('.imp-page', { timeout: 15000 })
+		const name = 'Phone only ' + Date.now()
+		const c = await l.page.evaluate(async (name) => {
+			const api = window.trackerApp.api
+			const c = await api('POST', 'commitments', { name, color: '#0fa37f' })
+			const now = Math.floor(Date.now() / 1000)
+			await api('POST', 'blocks', { commitmentId: c.id, start: now - 600, end: now + 3000 })
+			await api('POST', 'tasks', { commitmentId: c.id, title: 'Read 20m' })
+			return c
+		}, name)
+		assert.equal((await l.page.evaluate(() => window.trackerApp.api('GET', 'state'))).features.builtinCalendar, true)
+		await l.page.waitForFunction(() => true)
+		await l.page.waitForTimeout(800)
+		assert.ok(dev.snapshot && dev.snapshot.blocks.some((b) => b.commitmentId === c.id), 'the notification gets the built-in blocks')
+		assert.deepEqual(dev.remoteCalls, [], 'nothing sent anywhere')
+		assert.ok(!l.calls.includes('calendarAccess'), 'no calendar permission asked')
+		await l.page.screenshot({ path: `${shots}/local-now.png` })
+		await l.ctx.close()
+		const n = await phone(browser, 'app.html', { mode: 'nextcloud', dev, resend: true, hash: '#tasks' })
+		await n.page.waitForSelector('.imp-tcols', { timeout: 15000 })
+		await n.page.waitForTimeout(1500)
+		const r = await fetch(`${SERVER}/index.php/apps/tracker/api/sync?since=0&limit=5000`, { headers: { Authorization: AUTH, 'OCS-APIRequest': 'true' } })
+		const recs = (await r.json()).records
+		assert.ok(recs.some((x) => x.type === 'commitment' && x.id === c.uuid && x.fields?.name === name), 'the commitment reached Nextcloud')
+		assert.ok(recs.some((x) => x.type === 'task' && x.fields?.title === 'Read' && x.fields?.commitment === c.uuid), 'its task too')
+		assert.ok(!recs.some((x) => x.type === 'block'), 'built-in blocks stay on the phone')
+		await n.page.evaluate((id) => window.trackerApp.api('DELETE', 'commitments/' + id), c.id)
+		await n.page.waitForTimeout(4000)
+		await n.ctx.close()
+		console.log('  ✔ on this phone only, then Nextcloud: the data comes along')
+	}
 
 	for (const [dark, locale] of [[false, 'en-US'], [true, 'en-US'], [false, 'it-IT'], [true, 'it-IT']]) {
 		const a = await phone(browser, 'app.html', { dark, locale, hash: '#now' })

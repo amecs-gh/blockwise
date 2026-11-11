@@ -12,7 +12,7 @@ public final class BootReceiver extends BroadcastReceiver {
         if (!Intent.ACTION_BOOT_COMPLETED.equals(action) && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
             return;
         }
-        if (!Store.loggedIn(context)) {
+        if (!Store.ready(context)) {
             return;
         }
         final PendingResult pending = goAsync();

@@ -14,11 +14,18 @@
 		<img src="icon.png" alt="" class="u-logo" width="72" height="72">
 		<h1 id="title"></h1>
 		<p id="intro" class="u-muted"></p>
-		<form id="form">
+		<div id="choose" hidden>
+			<button type="button" id="local" class="u-primary"></button>
+			<p id="local-note" class="u-note"></p>
+			<button type="button" id="nextcloud" class="u-secondary"></button>
+			<p id="nextcloud-note" class="u-note"></p>
+		</div>
+		<form id="form" hidden>
 			<label for="server" id="server-label"></label>
 			<input id="server" type="text" autocomplete="url" spellcheck="false" autocapitalize="off" required>
 			<p id="error" class="u-error" role="alert" hidden></p>
 			<button type="submit" id="submit" class="u-primary"></button>
+			<button type="button" id="back" class="u-text"></button>
 		</form>
 		<div id="waiting" hidden>
 			<p id="waiting-text"></p>

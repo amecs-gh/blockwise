@@ -1,6 +1,7 @@
 # Blockwise for Android
 
-The **Blockwise** Nextcloud app on your phone, like the Mac app:
+Blockwise on your phone, like the Mac app. It works on its own (no account,
+nothing synced, the built-in calendar), or syncs with your Nextcloud:
 
 - **The app:** Blockwise's pages (Now, Tasks, Done, Time, Settings, each
   commitment) with a bottom tab bar and your commitments as chips on top. It's
@@ -10,9 +11,9 @@ The **Blockwise** Nextcloud app on your phone, like the Mac app:
 - **Reminders:** before a block ends and for Pomodoro breaks. At the long break,
   tracking stops on its own, like on the web and the Mac.
 - **Calendar** opens your phone's calendar app on that day; the **person icon**
-  shows your account (notifications on/off, log out).
+  shows your account (notifications on/off, sync with Nextcloud, log out).
 
-Needs Blockwise 0.5.1 or newer on your Nextcloud (the Nextcloud app's folder and id stay `tracker`), and Android 8 or newer.
+Needs Android 8 or newer. To sync: Blockwise 0.5.1 or newer on your Nextcloud (the Nextcloud app's folder and id stay `tracker`).
 
 ## Build and install
 
@@ -63,8 +64,13 @@ of the key: Android only installs updates signed with the same key.
 
 ## First start
 
-Enter your Nextcloud address (your Tailscale name works) and tap **Log in**.
-Nextcloud's login page opens: log in and tap **Grant access**. The app gets its
+Choose **Start on this phone** to use Blockwise without any account: your data
+stays on the phone, encrypted, and blocks live in Blockwise's built-in calendar.
+You can sync later (person icon → **Sync with Nextcloud**): your commitments,
+tasks, notes and tracked time go along; blocks planned on the phone stay on it.
+
+Or choose **Sync with Nextcloud**, enter your Nextcloud address (your Tailscale
+name works) and tap **Log in**. Nextcloud's login page opens: log in and tap **Grant access**. The app gets its
 own app password (visible in Nextcloud under Settings → Security, where you can
 revoke it). Allow notifications when asked.
 

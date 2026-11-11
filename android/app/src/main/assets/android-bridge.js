@@ -5,8 +5,9 @@
  *
  * Blockwise runs here, on the phone (local-first): the interface's API requests
  * go to the engine (web/engine.js), which keeps your data on the phone
- * (encrypted by the app), reads blocks from the phone's calendars, and syncs
- * with Nextcloud whenever it can.
+ * (encrypted by the app). On this phone only, blocks live in the built-in
+ * calendar and nothing is synced; with Nextcloud, blocks come from the phone's
+ * calendars and the data syncs whenever it can.
  *
  * Every call goes through TrackerAndroid.call(id, channel, argsJson); the app
  * answers with window.__trackerAndroid.resolve(id, envelopeJson), where the
@@ -139,32 +140,56 @@
 	}
 
 	let enginePromise = null
+	let local = false // on this phone only: no server, the built-in calendar
 	let snapshotTimer = null
 	let syncTimer = null
 	let syncing = null
 	function engine() {
 		if (!enginePromise) {
-			enginePromise = window.TrackerEngine.createEngine({
-				storage: {
-					load: async () => { const t = await call('dbLoad'); return t ? JSON.parse(t) : null },
-					save: (db) => call('dbSave', JSON.stringify(db)),
-				},
-				remote: {
-					pull: (since, limit) => remote('GET', `sync?since=${since}&limit=${limit}`),
-					push: (records) => remote('POST', 'sync', { records }),
-				},
-				calendar,
-				// A change here: send it soon. After a sync: only update the notification.
-				onChange: (db, info) => { snapshotSoon(); if (!(info && info.sync)) syncSoon(3000) },
+			enginePromise = call('state').then((st) => {
+				local = st.mode === 'local'
+				return create()
 			})
 			// Could not open the data (e.g. the Keystore was busy): try again on the next request
 			enginePromise.catch(() => { enginePromise = null; firstSync = null })
 		}
 		return enginePromise
 	}
+	async function create() {
+		const e = await window.TrackerEngine.createEngine({
+			storage: {
+				load: async () => { const t = await call('dbLoad'); return t ? JSON.parse(t) : null },
+				save: (db) => call('dbSave', JSON.stringify(db)),
+			},
+			remote: local ? null : {
+				pull: (since, limit) => remote('GET', `sync?since=${since}&limit=${limit}`),
+				push: (records) => remote('POST', 'sync', { records }),
+				// Blocks planned on this phone only stay here (Nextcloud has real calendars)
+				localTypes: ['block'],
+			},
+			calendar: local ? { kind: 'builtin' } : calendar,
+			// A change here: send it soon. After a sync: only update the notification.
+			onChange: (db, info) => { snapshotSoon(); if (!local && !(info && info.sync)) syncSoon(3000) },
+		})
+		// Just connected Nextcloud after using the phone only: everything goes up
+		if (!local && await call('takeResend').catch(() => false)) await e.resendAll()
+		return e
+	}
 	function snapshotSoon() {
 		clearTimeout(snapshotTimer)
-		snapshotTimer = setTimeout(async () => { try { await call('snapshot', (await engine()).snapshot()) } catch (e) { /* next change */ } }, 300)
+		snapshotTimer = setTimeout(async () => {
+			try {
+				const e = await engine()
+				const snap = e.snapshot()
+				if (local) {
+					// The notification's blocks: the built-in calendar's, from yesterday to two weeks ahead
+					const now = Math.floor(Date.now() / 1000)
+					const { blocks } = await e.api('GET', `blocks?from=${now - 86400}&to=${now + 14 * 86400}`)
+					snap.blocks = (blocks || []).slice(0, 2000).map((b) => ({ uid: b.uid, title: b.title || '', start: b.start, end: b.end, commitmentId: b.commitmentId }))
+				}
+				await call('snapshot', snap)
+			} catch (e) { /* next change */ }
+		}, 300)
 	}
 	function syncSoon(ms) {
 		clearTimeout(syncTimer)
@@ -179,6 +204,7 @@
 				const e = await engine()
 				const box = await call('outbox').catch(() => [])
 				if (box && box.length) { e.importLocal(box); await call('outboxDone', box); always = true }
+				if (local) { snapshotSoon(); if (always) fire('changed'); return }
 				const r = await e.sync()
 				pulled = r.pulled || 0
 				if (r.refused && r.refused.length) {
@@ -202,6 +228,7 @@
 	function ready() {
 		if (!firstSync) {
 			firstSync = engine().then((e) => {
+				if (local) { snapshotSoon(); return }
 				if (e.lastSync()) { syncSoon(500); return }
 				return Promise.race([syncNow(false), new Promise((r) => setTimeout(r, 20000))])
 			}).catch(() => {})
@@ -216,7 +243,7 @@
 	setTimeout(() => {
 		let asked = false
 		try { asked = localStorage.getItem('askedCalendar') === '1'; localStorage.setItem('askedCalendar', '1') } catch (e) { /* ask */ }
-		if (!asked && window.TrackerEngine) call('calendarAccess').then((ok) => { if (ok) syncNow(true) }).catch(() => {})
+		if (!asked && window.TrackerEngine && !local) call('calendarAccess').then((ok) => { if (ok) syncNow(true) }).catch(() => {})
 	}, 1500)
 
 	window.trackerApp = {
@@ -228,6 +255,8 @@
 		},
 		refresh: () => call('refresh'),
 		login: (server) => call('login', server),
+		useLocal: () => call('useLocal'),
+		backToApp: () => call('backToApp'),
 		cancelLogin: () => call('cancelLogin'),
 		openCalendar: (ts) => call('openCalendar', typeof ts === 'number' ? ts : null),
 		onChanged: (cb) => listeners.changed.push(cb),

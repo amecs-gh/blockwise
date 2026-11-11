@@ -24,7 +24,7 @@ English and Italian.
 | | Folder | What it is |
 |---|---|---|
 | **Nextcloud** | [`nextcloud/`](nextcloud) | A Nextcloud app: the web interface, the sync server for the other apps, and calendars in Nextcloud Calendar. |
-| **Android** | [`android/`](android) | Blockwise on your phone, Material 3. Your data stays on the phone and syncs with Nextcloud; blocks come from the phone's calendars (Nextcloud calendars via DAVx⁵). |
+| **Android** | [`android/`](android) | Blockwise on your phone, Material 3. Works on its own (no account, the built-in calendar); optionally syncs with Nextcloud, with blocks from the phone's calendars (Nextcloud calendars via DAVx⁵). |
 | **Mac** | [`mac/`](mac) | A Mac app with a menu bar timer and notifications. Syncs with Nextcloud, or end-to-end encrypted through **Dropbox** or **Google Drive**, or keeps your data on the Mac only; blocks come from Apple Calendar. |
 
 All three show the same interface: it is written once, in `nextcloud/js` and

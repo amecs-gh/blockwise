@@ -99,16 +99,18 @@ final class Tracking {
             boolean elsewhere = false;
             Dash d = null;
             Nextcloud client = Store.client(c);
-            if (client != null) {
+            // On this phone only: the page's snapshot, its built-in blocks included
+            boolean local = client == null && Store.local(c);
+            if (client != null || local) {
                 I18n t = i18n();
                 try {
-                    if (askServer) {
+                    if (askServer && client != null) {
                         pushOutbox(c, client, t);
                     }
                     JSONObject snap = Local.snapshot(c);
                     boolean localChanges = (snap != null && snap.optInt("pending", 0) > 0) || !Local.outboxEmpty(c);
                     JSONObject server = null;
-                    if (askServer || snap == null) {
+                    if (client != null && (askServer || snap == null)) {
                         try {
                             server = new JSONObject(client.api("GET", "state", null, t));
                         } catch (Nextcloud.ApiException e) {
@@ -139,7 +141,9 @@ final class Tracking {
                     if (a.stopAt != null) {
                         // Pomodoro long break: stop exactly at its start
                         if (Local.stop(c, view, a.stopAt, true) != null) {
-                            pushOutbox(c, client, t);
+                            if (client != null) {
+                                pushOutbox(c, client, t);
+                            }
                             elsewhere = true;
                         }
                         d = build(c, Local.snapshot(c) != null && view == snap ? Local.snapshot(c) : stopped(view, a.stopAt), server, client, t);
@@ -158,8 +162,9 @@ final class Tracking {
                 }
             }
             last = d;
-            showTimer(c, client == null || loggedOut ? null : d);
-            schedule(c, client == null || loggedOut ? null : d);
+            boolean active = (client != null || local) && !loggedOut;
+            showTimer(c, active ? d : null);
+            schedule(c, active ? d : null);
             final Dash result = d;
             final boolean out = loggedOut;
             final boolean changed = elsewhere;
@@ -217,7 +222,7 @@ final class Tracking {
         final Context c = context.getApplicationContext();
         IO.execute(() -> {
             Nextcloud client = Store.client(c);
-            if (client != null) {
+            if (client != null || Store.local(c)) {
                 try {
                     Dash shown = last;
                     JSONObject snap = Local.snapshot(c);
@@ -229,7 +234,9 @@ final class Tracking {
                                 .put("hlc", snap == null ? "" : snap.optString("hlc", ""));
                     }
                     Local.stop(c, view, System.currentTimeMillis() / 1000, false);
-                    pushOutbox(c, client, i18n());
+                    if (client != null) {
+                        pushOutbox(c, client, i18n());
+                    }
                 } catch (JSONException | Nextcloud.ApiException ignored) {
                     // the refresh shows the real state
                 }
@@ -278,6 +285,29 @@ final class Tracking {
                 urls.add(u);
                 urlOf.put(o.getLong("id"), u);
             }
+        }
+        // The built-in calendar (on this phone only): its blocks come with the snapshot
+        JSONArray own = view.optJSONArray("blocks");
+        if (own != null) {
+            List<Calendars.Event> events = new ArrayList<>();
+            for (int i = 0; i < own.length() && i < 2000; i++) {
+                JSONObject b = own.optJSONObject(i);
+                if (b == null || b.optLong("end") <= b.optLong("start")) {
+                    continue;
+                }
+                Calendars.Event ev = new Calendars.Event();
+                ev.uid = b.optString("uid", "");
+                ev.title = b.optString("title", "");
+                ev.start = b.optLong("start");
+                ev.end = b.optLong("end");
+                ev.url = BUILTIN + b.optLong("commitmentId");
+                events.add(ev);
+            }
+            urlOf.clear();
+            for (Dash.Entry e : d.commitments) {
+                urlOf.put(e.commitmentId, BUILTIN + e.commitmentId);
+            }
+            return withBlocks(d, events, urlOf, now);
         }
         List<Calendars.Event> events = Calendars.events(c, from, to, urls);
         // Calendars not on the phone (no DAVx5): the server's blocks, when online
@@ -333,6 +363,14 @@ final class Tracking {
                 // offline: blocks from the phone only
             }
         }
+        return withBlocks(d, events, urlOf, now);
+    }
+
+    /** "blockwise:<commitment id>": the built-in calendar's blocks in the snapshot */
+    private static final String BUILTIN = "blockwise:";
+
+    /** Each commitment's current and next block. */
+    private static Dash withBlocks(Dash d, List<Calendars.Event> events, Map<Long, String> urlOf, long now) {
         Collections.sort(events, (a, b) -> Long.compare(a.start, b.start));
         for (Dash.Entry e : d.commitments) {
             String u = urlOf.get(e.commitmentId);
@@ -340,7 +378,7 @@ final class Tracking {
                 continue;
             }
             for (Calendars.Event ev : events) {
-                if (!CalendarPath.same(ev.url, u) || ev.end <= now) {
+                if (!(u.startsWith(BUILTIN) ? u.equals(ev.url) : CalendarPath.same(ev.url, u)) || ev.end <= now) {
                     continue;
                 }
                 if (ev.start <= now) {

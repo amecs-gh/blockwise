@@ -43,6 +43,34 @@ final class Store {
         return p.getString("server", null) != null && p.getString("loginName", null) != null && password(c) != null;
     }
 
+    /**
+     * "On this phone only": Blockwise works without any account (the built-in
+     * calendar, nothing synced). Nextcloud can be connected later; the data comes along.
+     */
+    static boolean local(Context c) {
+        return prefs(c).getBoolean("local", false) && !loggedIn(c);
+    }
+
+    /** Set up: on this phone only, or logged in to Nextcloud. */
+    static boolean ready(Context c) {
+        return loggedIn(c) || local(c);
+    }
+
+    /** Start (or go back to) "on this phone only", keeping the data on the phone. */
+    static synchronized void useLocal(Context c) {
+        Vault.claim(c, Vault.LOCAL);
+        prefs(c).edit().putBoolean("local", true).apply();
+    }
+
+    /** True once after connecting Nextcloud from "on this phone only": the page sends everything. */
+    static synchronized boolean takeResend(Context c) {
+        boolean r = prefs(c).getBoolean("resend", false);
+        if (r) {
+            prefs(c).edit().remove("resend").apply();
+        }
+        return r;
+    }
+
     static String server(Context c) {
         return prefs(c).getString("server", null);
     }
@@ -61,9 +89,11 @@ final class Store {
 
     /** @return false if the Keystore failed and the password lives in memory only */
     static synchronized boolean saveLogin(Context c, String server, String loginName, String appPassword) {
-        // Another account: the phone's Blockwise data starts empty
-        Vault.claim(c, server, loginName);
+        // Another account: the phone's Blockwise data starts empty; from "on this phone only" it comes along
+        boolean carry = Vault.claim(c, server + "\n" + loginName);
         SharedPreferences.Editor e = prefs(c).edit()
+                .remove("local")
+                .putBoolean("resend", carry)
                 .putString("server", server)
                 .putString("loginName", loginName)
                 .remove("password")

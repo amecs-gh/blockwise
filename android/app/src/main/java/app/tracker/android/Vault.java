@@ -152,17 +152,24 @@ final class Vault {
         return c.getApplicationContext().getSharedPreferences(OWNER_PREFS, Context.MODE_PRIVATE);
     }
 
+    /** The owner of data made "on this phone only" */
+    static final String LOCAL = "local";
+
     /**
      * Whose data this is. Logging in again as the same account keeps changes
      * not yet synced (e.g. after the app password was revoked); another
-     * account starts empty.
+     * account starts empty. Data made "on this phone only" goes along to the
+     * account you connect (and back, when you log out and keep it).
+     *
+     * @return true if the data came from "on this phone only" to an account
      */
-    static synchronized void claim(Context c, String server, String loginName) {
-        String who = server + "\n" + loginName;
+    static synchronized boolean claim(Context c, String who) {
         String was = owner(c).getString("owner", null);
-        if (was != null && !was.equals(who)) {
+        boolean carry = LOCAL.equals(was) && !LOCAL.equals(who);
+        if (was != null && !was.equals(who) && !carry && !LOCAL.equals(who)) {
             wipe(c);
         }
         owner(c).edit().putString("owner", who).apply();
+        return carry;
     }
 }

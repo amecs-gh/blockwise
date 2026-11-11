@@ -120,6 +120,21 @@ public final class Bridge {
             case "login":
                 login(id, args.optString(0, ""));
                 break;
+            case "useLocal":
+                activity.useLocal();
+                reply(id, data(null));
+                break;
+            case "connect":
+                activity.showConnect();
+                reply(id, data(null));
+                break;
+            case "backToApp":
+                activity.backToApp();
+                reply(id, data(null));
+                break;
+            case "takeResend":
+                background(id, () -> Store.takeResend(activity));
+                break;
             case "cancelLogin":
                 activity.cancelLogin();
                 reply(id, data(null));

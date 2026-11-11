@@ -46,6 +46,8 @@ public final class MainActivity extends Activity implements Tracking.Listener {
 
     private WebView web;
     private boolean appPage;
+    /** On the setup page from "on this phone only", to connect Nextcloud */
+    private boolean connecting;
     private OnBackInvokedCallback backCallback;
 
     // Login in progress (only one at a time)
@@ -78,8 +80,8 @@ public final class MainActivity extends Activity implements Tracking.Listener {
     protected void onResume() {
         super.onResume();
         Tracking.listener = this;
-        if (Store.loggedIn(this)) {
-            if (!appPage) {
+        if (Store.ready(this)) {
+            if (!appPage && !connecting) {
                 loadPage();
             } else {
                 // Changes made in the browser or on the Mac while you were away
@@ -125,7 +127,9 @@ public final class MainActivity extends Activity implements Tracking.Listener {
     }
 
     private void goBack() {
-        if (web != null && web.canGoBack()) {
+        if (connecting) {
+            backToApp();
+        } else if (web != null && web.canGoBack()) {
             web.goBack();
         } else {
             moveTaskToBack(true);
@@ -183,10 +187,13 @@ public final class MainActivity extends Activity implements Tracking.Listener {
 
     // --- the WebView -------------------------------------------------------------------------
 
-    private void loadPage() {
-        appPage = Store.loggedIn(this);
+    void loadPage() {
+        if (Store.loggedIn(this)) {
+            connecting = false;
+        }
+        appPage = Store.ready(this) && !connecting;
         web.clearHistory();
-        web.loadUrl(appPage ? APP_PAGE + "#now" : SETUP_PAGE);
+        web.loadUrl(appPage ? APP_PAGE + "#now" : SETUP_PAGE + (connecting ? "#connect" : ""));
     }
 
     /** Is the WebView showing one of the app's own pages? (Main thread only.) */
@@ -351,6 +358,8 @@ public final class MainActivity extends Activity implements Tracking.Listener {
                     .put("server", server == null ? JSONObject.NULL : server)
                     .put("host", server == null ? JSONObject.NULL : Nextcloud.host(server))
                     .put("loginName", Store.loginName(this) == null ? JSONObject.NULL : Store.loginName(this))
+                    .put("mode", Store.loggedIn(this) ? "nextcloud" : Store.local(this) ? "local" : JSONObject.NULL)
+                    .put("connecting", connecting)
                     .put("notifications", Store.notifications(this));
         } catch (JSONException ignored) {
             // can't happen with these values
@@ -451,10 +460,35 @@ public final class MainActivity extends Activity implements Tracking.Listener {
     }
 
     /** Account sheet: who you are, notifications, exact reminders, log out. */
+    /** "On this phone only": no account; Blockwise opens at once. */
+    void useLocal() {
+        Store.useLocal(this);
+        connecting = false;
+        loadPage();
+        askForNotifications();
+        Tracking.refresh(this, null);
+    }
+
+    /** From "on this phone only" to the Nextcloud login (the data comes along). */
+    void showConnect() {
+        connecting = true;
+        loadPage();
+    }
+
+    /** Leaving the Nextcloud login without connecting. */
+    void backToApp() {
+        cancelLogin();
+        connecting = false;
+        loadPage();
+    }
+
     void showAccount() {
         final I18n t = Tracking.i18n();
         String server = Store.server(this);
         if (server == null) {
+            if (Store.local(this)) {
+                showLocalAccount();
+            }
             return;
         }
         String host = Nextcloud.host(server);
@@ -479,25 +513,63 @@ public final class MainActivity extends Activity implements Tracking.Listener {
         b.show();
     }
 
+    /** Account sheet on this phone only: notifications, exact reminders, connecting Nextcloud. */
+    private void showLocalAccount() {
+        final I18n t = Tracking.i18n();
+        boolean[] on = {Store.notifications(this)};
+        AlertDialog.Builder b = new AlertDialog.Builder(this)
+                .setTitle(t.t("On this phone only"))
+                .setMultiChoiceItems(new String[] {t.t("Notifications")}, on, (d, which, checked) -> {
+                    Store.setNotifications(this, checked);
+                    Tracking.refresh(this, null);
+                })
+                .setPositiveButton(t.t("Close"), null)
+                .setNegativeButton(t.t("Sync with Nextcloud"), (d, w) -> showConnect());
+        if (!Tracking.canExactAlarms(this)) {
+            b.setNeutralButton(t.t("Allow exact reminders"), (d, w) -> {
+                try {
+                    startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + getPackageName())));
+                } catch (ActivityNotFoundException ignored) {
+                    // settings screen not available
+                }
+            });
+        }
+        b.show();
+    }
+
     private void confirmLogout(String host) {
         final I18n t = Tracking.i18n();
         new AlertDialog.Builder(this)
-                .setMessage(t.t("Log out of {host}? The app password is removed from Nextcloud.", Vars.of("host", host))
-                        + (pendingChanges() ? "\n\n" + t.t("Some changes on this phone are not synced yet and will be lost.") : ""))
-                .setPositiveButton(t.t("Log out"), (d, w) -> {
-                    final Nextcloud client = Store.client(this);
-                    Tracking.IO.execute(() -> {
-                        if (client != null) {
-                            client.revoke();
-                        }
-                        Store.clear(this);
-                        // Logging out removes Blockwise's data from this phone (it is on the server)
-                        Vault.wipe(this);
-                        Local.saveSnapshot(this, null);
-                        runOnUiThread(this::loggedOut);
-                    });
-                })
+                .setTitle(t.t("Log out of {host}?", Vars.of("host", host)))
+                .setMessage(t.t("The app password is removed from Nextcloud.") + "\n\n"
+                        + t.t("\"Keep on this phone\": Blockwise goes on without an account, with your commitments, tasks, notes and tracked time. Blocks stay in your Nextcloud calendars.")
+                        + (pendingChanges() ? "\n\n" + t.t("Some changes on this phone are not synced yet: \"Keep on this phone\" keeps them, \"Remove\" loses them.") : ""))
+                .setPositiveButton(t.t("Keep on this phone"), (d, w) -> logout(true))
+                .setNeutralButton(t.t("Remove"), (d, w) -> logout(false))
                 .setNegativeButton(t.t("Cancel"), null)
                 .show();
+    }
+
+    /** @param keep go on "on this phone only" with the data, else remove it from the phone */
+    private void logout(boolean keep) {
+        final Nextcloud client = Store.client(this);
+        Tracking.IO.execute(() -> {
+            if (client != null) {
+                client.revoke();
+            }
+            Store.clear(this);
+            if (keep) {
+                Store.useLocal(this);
+            } else {
+                // The data stays on the server only
+                Vault.wipe(this);
+                Local.saveSnapshot(this, null);
+            }
+            runOnUiThread(() -> {
+                Tracking.clearAll(this);
+                loadPage();
+                Tracking.refresh(this, null);
+            });
+        });
     }
 }
