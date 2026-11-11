@@ -3537,7 +3537,7 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 	position: fixed;
 	z-index: 10001;
 	box-sizing: border-box;
-	width: min(380px, calc(100vw - 16px));
+	width: min(410px, calc(100vw - 16px));
 	max-height: calc(100vh - 16px);
 	padding: 20px;
 	border: none;
@@ -3576,6 +3576,26 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 }
 .imp-cvpanel__actions--stack {
 	flex-direction: column;
+}
+#tracker-app .imp-cvpanel__actions .imp-button {
+	padding: 0 12px;
+}
+.imp-cvpanel__live {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0 12px;
+	border-radius: 14px;
+	background: color-mix(in srgb, var(--c, var(--tl-accent)) 14%, var(--tl-card));
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+}
+.imp-cvpanel__live .imp-dot {
+	margin: 0;
+	animation: imp-pulse 1.6s ease-in-out infinite;
+}
+@keyframes imp-pulse {
+	50% { opacity: 0.35; }
 }
 .imp-cvpanel__spacer {
 	flex: 1 1 auto;

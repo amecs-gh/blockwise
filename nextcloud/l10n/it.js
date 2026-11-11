@@ -364,6 +364,7 @@ OC.L10N.register(
  "Tracked outside blocks": "Registrato fuori dai blocchi",
  "tracked {time}": "registrato {time}",
  "Tracked: {name}": "Registrato: {name}",
+ "Tracking": "In corso",
  "Unchecked subtasks will move to the next block.": "I sottotask non spuntati passano al prossimo blocco.",
  "Unfinished tasks stay on top for the next block.": "I task non finiti restano in cima per il prossimo blocco.",
  "Unplanned": "Non pianificato",

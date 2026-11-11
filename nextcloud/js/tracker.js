@@ -3415,6 +3415,7 @@
 			const before = slotIndex >= 0 ? plan.slots.slice(0, slotIndex).reduce((n, s) => n + s.tasks.length, 0) : 0
 			const past = b.end <= now
 			const isNow = b.start <= now && now < b.end
+			const tracking = isNow && !!state.running && state.running.commitmentId === c.id
 			const toggle = async (t, s, done) => {
 				await api('PUT', `subtasks/${s.id}`, { done })
 				refill()
@@ -3443,7 +3444,11 @@
 					h('p', { class: 'imp-muted' }, `${calFmt.day.format(at(b.start))}`, h('br'), `${fmt.time.format(at(b.start))}–${fmt.time.format(at(b.end))} · ${duration(length, { short: true })}`,
 						b.repeat ? [h('br'), `↻ ${repeatLabel(b.repeat)}`, b.until ? `, ${tr('until {date}', { date: calFmt.dayShort.format(at(b.until)) })}` : ''] : null)),
 				h('div', { class: 'imp-cvpanel__actions' },
-					!past ? h('button', { type: 'button', class: 'imp-button imp-button--primary', onclick: async () => { closeCalPanel(); await startTracking(c.id) } }, isNow ? tr('Start now') : tr('Start')) : null,
+					// The block being tracked right now: how long so far and Stop, not "Start now"
+					tracking
+						? [h('span', { class: 'imp-cvpanel__live', style: { '--c': c.color } }, h('span', { class: 'imp-dot', style: { background: c.color } }), tr('Tracking'), ' ', h('span', { 'data-live': 'elapsed', 'data-ts': state.running.start }, clock(nowTs() - state.running.start))),
+							h('button', { type: 'button', class: 'imp-button', onclick: async () => { closeCalPanel(); await stopTracking() } }, icon(ICON_STOP, 14, true), tr('Stop'))]
+						: !past ? h('button', { type: 'button', class: 'imp-button imp-button--primary', onclick: async () => { closeCalPanel(); await startTracking(c.id) } }, isNow ? tr('Start now') : tr('Start')) : null,
 					h('button', { type: 'button', class: 'imp-button', onclick: () => blockEditor(anchor, b) }, tr('Edit')),
 					h('button', { type: 'button', class: 'imp-button imp-button--danger', onclick: () => deleteBlock(anchor, b) }, tr('Delete'))),
 				h('h3', { class: 'imp-cvpanel__sub' }, past ? tr('This block is over') : slotIndex >= 0 ? tr('To do in this block') : tr('Open tasks')),
