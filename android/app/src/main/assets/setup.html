@@ -15,11 +15,32 @@
 		<h1 id="title"></h1>
 		<p id="intro" class="u-muted"></p>
 		<div id="choose" hidden>
-			<button type="button" id="local" class="u-primary"></button>
-			<p id="local-note" class="u-note"></p>
+			<div id="local-box">
+				<button type="button" id="local" class="u-primary"></button>
+				<p id="local-note" class="u-note"></p>
+			</div>
+			<p id="sync-head" class="u-head"></p>
 			<button type="button" id="nextcloud" class="u-secondary"></button>
 			<p id="nextcloud-note" class="u-note"></p>
+			<div id="drives" hidden>
+				<button type="button" id="dropbox" class="u-secondary" hidden></button>
+				<button type="button" id="gdrive" class="u-secondary" hidden></button>
+				<p id="drives-note" class="u-note"></p>
+			</div>
+			<p id="choose-error" class="u-error" role="alert" hidden></p>
+			<button type="button" id="choose-back" class="u-text" hidden></button>
 		</div>
+		<form id="pass" hidden>
+			<label for="pass1" id="pass1-label"></label>
+			<input id="pass1" type="password" autocomplete="new-password" minlength="8" required>
+			<div id="pass2-box">
+				<label for="pass2" id="pass2-label"></label>
+				<input id="pass2" type="password" autocomplete="new-password" minlength="8">
+			</div>
+			<p id="pass-error" class="u-error" role="alert" hidden></p>
+			<button type="submit" id="pass-submit" class="u-primary"></button>
+			<button type="button" id="pass-back" class="u-text"></button>
+		</form>
 		<form id="form" hidden>
 			<label for="server" id="server-label"></label>
 			<input id="server" type="text" autocomplete="url" spellcheck="false" autocapitalize="off" required>
@@ -32,6 +53,7 @@
 			<button type="button" id="cancel" class="u-secondary"></button>
 		</div>
 	</main>
+	<script src="web/filesync.js"></script>
 	<script src="android-bridge.js"></script>
 	<script src="i18n.js"></script>
 	<script src="setup.js"></script>

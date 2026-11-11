@@ -88,7 +88,7 @@ final class Local {
         JSONArray all = entries(c);
         for (int i = 0; i < records.length(); i++) {
             // On this phone only: nothing to send, only to hand to the page
-            all.put(new JSONObject().put("rec", records.getJSONObject(i)).put("pushed", Store.local(c)).put("imported", false));
+            all.put(new JSONObject().put("rec", records.getJSONObject(i)).put("pushed", Store.noServer(c)).put("imported", false));
         }
         save(c, all);
     }

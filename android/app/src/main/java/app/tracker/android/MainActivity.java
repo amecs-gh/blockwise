@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
@@ -358,7 +359,10 @@ public final class MainActivity extends Activity implements Tracking.Listener {
                     .put("server", server == null ? JSONObject.NULL : server)
                     .put("host", server == null ? JSONObject.NULL : Nextcloud.host(server))
                     .put("loginName", Store.loginName(this) == null ? JSONObject.NULL : Store.loginName(this))
-                    .put("mode", Store.loggedIn(this) ? "nextcloud" : Store.local(this) ? "local" : JSONObject.NULL)
+                    .put("mode", Store.mode(this) == null ? JSONObject.NULL : Store.mode(this))
+                    .put("drives", new JSONObject()
+                            .put(Drives.DROPBOX, Drives.available(this, Drives.DROPBOX))
+                            .put(Drives.GOOGLE, Drives.available(this, Drives.GOOGLE)))
                     .put("connecting", connecting)
                     .put("notifications", Store.notifications(this));
         } catch (JSONException ignored) {
@@ -478,6 +482,7 @@ public final class MainActivity extends Activity implements Tracking.Listener {
     /** Leaving the Nextcloud login without connecting. */
     void backToApp() {
         cancelLogin();
+        cancelDrive();
         connecting = false;
         loadPage();
     }
@@ -486,7 +491,9 @@ public final class MainActivity extends Activity implements Tracking.Listener {
         final I18n t = Tracking.i18n();
         String server = Store.server(this);
         if (server == null) {
-            if (Store.local(this)) {
+            if (Store.drive(this) != null) {
+                showDriveAccount();
+            } else if (Store.local(this)) {
                 showLocalAccount();
             }
             return;
@@ -524,7 +531,7 @@ public final class MainActivity extends Activity implements Tracking.Listener {
                     Tracking.refresh(this, null);
                 })
                 .setPositiveButton(t.t("Close"), null)
-                .setNegativeButton(t.t("Sync with Nextcloud"), (d, w) -> showConnect());
+                .setNegativeButton(t.t("Set up sync"), (d, w) -> showConnect());
         if (!Tracking.canExactAlarms(this)) {
             b.setNeutralButton(t.t("Allow exact reminders"), (d, w) -> {
                 try {
@@ -548,6 +555,167 @@ public final class MainActivity extends Activity implements Tracking.Listener {
                 .setNeutralButton(t.t("Remove"), (d, w) -> logout(false))
                 .setNegativeButton(t.t("Cancel"), null)
                 .show();
+    }
+
+    // --- Dropbox / Google Drive ----------------------------------------------------------------------
+
+    /** The drive being connected (after the browser login, before the passphrase) */
+    private static volatile Drives.Folder pendingDrive;
+    private static volatile String pendingAccount;
+    private static volatile Drives.Login driveLogin;
+    private static Drives.Folder savedDrive;
+
+    /** The folder the page's file sync uses: the one being connected, else the saved one. */
+    static synchronized Drives.Folder driveFolder(Context c) {
+        if (pendingDrive != null) {
+            return pendingDrive;
+        }
+        String provider = Store.drive(c);
+        String token = provider == null ? null : Store.driveToken(c);
+        if (token == null) {
+            savedDrive = null;
+            return null;
+        }
+        if (savedDrive == null || !savedDrive.provider.equals(provider) || !savedDrive.refreshToken.equals(token)) {
+            savedDrive = new Drives.Folder(c, provider, token);
+        }
+        return savedDrive;
+    }
+
+    interface DriveDone {
+        /** @param error null on success; exists: a Blockwise folder is there already */
+        void done(String error, boolean exists);
+    }
+
+    /** You allow Blockwise in your browser; then the page asks for the passphrase. */
+    void connectDrive(String provider, DriveDone done) {
+        cancelDrive();
+        final Drives.Login login = new Drives.Login();
+        driveLogin = login;
+        new Thread(() -> {
+            try {
+                String[] r = Drives.login(this, provider, url -> runOnUiThread(() -> openLink(url)), login);
+                Drives.Folder f = new Drives.Folder(this, provider, r[0]);
+                String account = r[1] != null ? r[1] : f.account();
+                boolean exists = f.read("blockwise.json") != null;
+                if (login.cancelled) {
+                    f.revoke();
+                    return;
+                }
+                pendingDrive = f;
+                pendingAccount = account;
+                runOnUiThread(() -> done.done(null, exists));
+            } catch (Drives.DriveException e) {
+                final String msg = e.getMessage();
+                runOnUiThread(() -> done.done(msg, false));
+            } finally {
+                if (driveLogin == login) {
+                    driveLogin = null;
+                }
+            }
+        }, "tracker-drive-login").start();
+    }
+
+    /** The passphrase was right (or set up): keep the connection and open Blockwise. */
+    void saveDrive(String keyBase64, Done done) {
+        final Drives.Folder f = pendingDrive;
+        if (f == null) {
+            done.done(Tracking.i18n().t("Connect a drive first."));
+            return;
+        }
+        Tracking.IO.execute(() -> {
+            try {
+                Store.saveDrive(this, f.provider, pendingAccount, f.refreshToken, keyBase64);
+            } catch (Exception e) {
+                runOnUiThread(() -> done.done(Tracking.i18n().t("Blockwise could not use the Android Keystore")));
+                return;
+            }
+            pendingDrive = null;
+            pendingAccount = null;
+            runOnUiThread(() -> {
+                done.done(null);
+                connecting = false;
+                loadPage();
+                askForNotifications();
+                Tracking.refresh(this, null);
+            });
+        });
+    }
+
+    /** Leaving before the passphrase: the token is not kept, so it is ended at the provider. */
+    void cancelDrive() {
+        Drives.Login l = driveLogin;
+        if (l != null) {
+            l.cancel();
+        }
+        final Drives.Folder f = pendingDrive;
+        pendingDrive = null;
+        pendingAccount = null;
+        if (f != null) {
+            Tracking.IO.execute(f::revoke);
+        }
+    }
+
+    /** Account sheet with a drive: notifications, exact reminders, stop syncing. */
+    private void showDriveAccount() {
+        final I18n t = Tracking.i18n();
+        final String name = Drives.displayName(Store.drive(this));
+        boolean[] on = {Store.notifications(this)};
+        AlertDialog.Builder b = new AlertDialog.Builder(this)
+                .setTitle(t.t("Synced with {drive}", Vars.of("drive", name)))
+                .setMultiChoiceItems(new String[] {t.t("Notifications")}, on, (d, which, checked) -> {
+                    Store.setNotifications(this, checked);
+                    Tracking.refresh(this, null);
+                })
+                .setPositiveButton(t.t("Close"), null)
+                .setNegativeButton(t.t("Stop syncing"), (d, w) -> confirmStopDrive(name));
+        if (!Tracking.canExactAlarms(this)) {
+            b.setNeutralButton(t.t("Allow exact reminders"), (d, w) -> {
+                try {
+                    startActivity(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + getPackageName())));
+                } catch (ActivityNotFoundException ignored) {
+                    // settings screen not available
+                }
+            });
+        }
+        b.show();
+    }
+
+    private void confirmStopDrive(String name) {
+        final I18n t = Tracking.i18n();
+        new AlertDialog.Builder(this)
+                .setTitle(t.t("Stop syncing with {drive}?", Vars.of("drive", name)))
+                .setMessage(t.t("Blockwise forgets the drive and your passphrase on this phone. Your encrypted data on the drive stays.")
+                        + "\n\n" + t.t("\"Keep on this phone\": Blockwise goes on without syncing, with all your data.")
+                        + (pendingChanges() ? "\n\n" + t.t("Some changes on this phone are not synced yet: \"Keep on this phone\" keeps them, \"Remove\" loses them.") : ""))
+                .setPositiveButton(t.t("Keep on this phone"), (d, w) -> stopDrive(true))
+                .setNeutralButton(t.t("Remove"), (d, w) -> stopDrive(false))
+                .setNegativeButton(t.t("Cancel"), null)
+                .show();
+    }
+
+    private void stopDrive(boolean keep) {
+        final Drives.Folder f = driveFolder(this);
+        Tracking.IO.execute(() -> {
+            if (f != null) {
+                f.revoke();
+            }
+            synchronized (MainActivity.class) {
+                savedDrive = null;
+            }
+            Store.forgetDrive(this);
+            if (keep) {
+                Store.useLocal(this);
+            } else {
+                Vault.wipe(this);
+                Local.saveSnapshot(this, null);
+            }
+            runOnUiThread(() -> {
+                Tracking.clearAll(this);
+                loadPage();
+                Tracking.refresh(this, null);
+            });
+        });
     }
 
     /** @param keep go on "on this phone only" with the data, else remove it from the phone */

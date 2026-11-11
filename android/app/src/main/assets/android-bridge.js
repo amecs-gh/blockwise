@@ -139,15 +139,34 @@
 		createEvent: (ev) => call('createEvent', ev),
 	}
 
+	/** The drive's folder through the app (it holds the login); bytes as base64 over the bridge */
+	const b64 = (u8) => { let x = ''; for (let i = 0; i < u8.length; i += 0x8000) x += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(x) }
+	const driveStore = {
+		list: () => call('drive', 'list', '', '', false),
+		read: async (name) => { const d = await call('drive', 'read', name, '', false); return d ? Uint8Array.from(atob(d), (c) => c.charCodeAt(0)) : null },
+		write: async (name, bytes, opts = {}) => {
+			try {
+				await call('drive', 'write', name, b64(bytes), !!opts.create)
+			} catch (e) {
+				if (e.status === 409) throw Object.assign(new Error('exists'), { exists: true })
+				throw e
+			}
+		},
+		remove: (name) => call('drive', 'remove', name, '', false),
+	}
+
 	let enginePromise = null
-	let local = false // on this phone only: no server, the built-in calendar
+	let mode = null // 'local' (on this phone only), 'nextcloud', 'dropbox' or 'gdrive'
+	let local = false // no Nextcloud: the built-in calendar (on this phone only, or a drive)
+	let driveSync = null // the drive's file sync (web/filesync.js), once opened
 	let snapshotTimer = null
 	let syncTimer = null
 	let syncing = null
 	function engine() {
 		if (!enginePromise) {
 			enginePromise = call('state').then((st) => {
-				local = st.mode === 'local'
+				mode = st.mode
+				local = mode !== 'nextcloud'
 				return create()
 			})
 			// Could not open the data (e.g. the Keystore was busy): try again on the next request
@@ -161,19 +180,45 @@
 				load: async () => { const t = await call('dbLoad'); return t ? JSON.parse(t) : null },
 				save: (db) => call('dbSave', JSON.stringify(db)),
 			},
-			remote: local ? null : {
+			remote: mode === 'nextcloud' ? {
 				pull: (since, limit) => remote('GET', `sync?since=${since}&limit=${limit}`),
 				push: (records) => remote('POST', 'sync', { records }),
 				// Blocks planned on this phone only stay here (Nextcloud has real calendars)
 				localTypes: ['block'],
+			} : mode === 'local' ? null : {
+				// Dropbox / Google Drive: end-to-end encrypted files (opened below)
+				pull: async (since, limit) => (await openDrive()).pull(since, limit),
+				push: async (records) => (await openDrive()).push(records),
 			},
 			calendar: local ? { kind: 'builtin' } : calendar,
 			// A change here: send it soon. After a sync: only update the notification.
-			onChange: (db, info) => { snapshotSoon(); if (!local && !(info && info.sync)) syncSoon(3000) },
+			onChange: (db, info) => { snapshotSoon(); if (mode !== 'local' && !(info && info.sync)) syncSoon(3000) },
 		})
-		// Just connected Nextcloud after using the phone only: everything goes up
-		if (!local && await call('takeResend').catch(() => false)) await e.resendAll()
+		engineNode = e.node()
+		// Just connected a sync after using the phone only: everything goes up
+		if (mode !== 'local' && await call('takeResend').catch(() => false)) await e.resendAll()
 		return e
+	}
+	let engineNode = null
+	/** The drive's file sync, with the key kept (encrypted) by the app */
+	function openDrive() {
+		if (!driveSync) {
+			driveSync = (async () => {
+				const key = await call('driveKey')
+				if (!key) throw new Error('Connect a drive first.')
+				return window.BlockwiseFileSync.createRemote({
+					store: driveStore,
+					key: Uint8Array.from(atob(key), (c) => c.charCodeAt(0)),
+					node: engineNode,
+					state: {
+						load: async () => JSON.parse((await call('driveStateLoad')) || 'null'),
+						save: (st) => call('driveStateSave', JSON.stringify(st)),
+					},
+				})
+			})()
+			driveSync.catch(() => { driveSync = null })
+		}
+		return driveSync
 	}
 	function snapshotSoon() {
 		clearTimeout(snapshotTimer)
@@ -204,7 +249,7 @@
 				const e = await engine()
 				const box = await call('outbox').catch(() => [])
 				if (box && box.length) { e.importLocal(box); await call('outboxDone', box); always = true }
-				if (local) { snapshotSoon(); if (always) fire('changed'); return }
+				if (mode === 'local') { snapshotSoon(); if (always) fire('changed'); return }
 				const r = await e.sync()
 				pulled = r.pulled || 0
 				if (r.refused && r.refused.length) {
@@ -228,7 +273,7 @@
 	function ready() {
 		if (!firstSync) {
 			firstSync = engine().then((e) => {
-				if (local) { snapshotSoon(); return }
+				if (mode === 'local') { snapshotSoon(); return }
 				if (e.lastSync()) { syncSoon(500); return }
 				return Promise.race([syncNow(false), new Promise((r) => setTimeout(r, 20000))])
 			}).catch(() => {})
@@ -243,7 +288,7 @@
 	setTimeout(() => {
 		let asked = false
 		try { asked = localStorage.getItem('askedCalendar') === '1'; localStorage.setItem('askedCalendar', '1') } catch (e) { /* ask */ }
-		if (!asked && window.TrackerEngine && !local) call('calendarAccess').then((ok) => { if (ok) syncNow(true) }).catch(() => {})
+		if (!asked && window.TrackerEngine) engine().then(() => (mode === 'nextcloud' ? call('calendarAccess') : false)).then((ok) => { if (ok) syncNow(true) }).catch(() => {})
 	}, 1500)
 
 	window.trackerApp = {
@@ -256,6 +301,13 @@
 		refresh: () => call('refresh'),
 		login: (server) => call('login', server),
 		useLocal: () => call('useLocal'),
+		connectDrive: (provider) => call('connectDrive', provider),
+		cancelDrive: () => call('cancelDrive'),
+		/** The passphrase: sets up the drive's folder or opens it; then the app keeps the key */
+		unlockDrive: async (passphrase) => {
+			const key = await window.BlockwiseFileSync.unlock(driveStore, String(passphrase || ''))
+			await call('saveDrive', b64(key))
+		},
 		backToApp: () => call('backToApp'),
 		cancelLogin: () => call('cancelLogin'),
 		openCalendar: (ts) => call('openCalendar', typeof ts === 'number' ? ts : null),

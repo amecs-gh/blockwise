@@ -1,7 +1,8 @@
 # Blockwise for Android
 
 Blockwise on your phone, like the Mac app. It works on its own (no account,
-nothing synced, the built-in calendar), or syncs with your Nextcloud:
+nothing synced, the built-in calendar), or syncs with your Nextcloud, or with
+your Mac and other phones through Dropbox or Google Drive (end-to-end encrypted):
 
 - **The app:** Blockwise's pages (Now, Tasks, Done, Time, Settings, each
   commitment) with a bottom tab bar and your commitments as chips on top. It's
@@ -66,8 +67,17 @@ of the key: Android only installs updates signed with the same key.
 
 Choose **Start on this phone** to use Blockwise without any account: your data
 stays on the phone, encrypted, and blocks live in Blockwise's built-in calendar.
-You can sync later (person icon → **Sync with Nextcloud**): your commitments,
-tasks, notes and tracked time go along; blocks planned on the phone stay on it.
+You can sync later (person icon → **Set up sync**) and your data goes along.
+With Nextcloud, blocks planned on the phone stay on it (Nextcloud has its own
+calendars); with a drive, they go along too.
+
+**Dropbox or Google Drive:** tap it, allow Blockwise in your browser, then come
+back and choose a passphrase (or enter the one from your Mac). Everything is
+encrypted with it on the phone before it goes to the drive; Blockwise only sees
+its own folder there (Dropbox: Apps/Blockwise; Google Drive: hidden app data).
+The drive login and the key are kept encrypted by the Android Keystore. The
+drives are offered when the build has the app ids (the repository variables
+`DROPBOX_APP_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, same as the Mac app).
 
 Or choose **Sync with Nextcloud**, enter your Nextcloud address (your Tailscale
 name works) and tap **Log in**. Nextcloud's login page opens: log in and tap **Grant access**. The app gets its

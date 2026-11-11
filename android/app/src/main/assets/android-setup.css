@@ -117,3 +117,15 @@ body.setup {
 	font-size: 14px;
 	font-weight: 500;
 }
+.setup .u-head {
+	margin: 36px 0 -8px;
+	color: var(--md-onSurface);
+	font-size: 14px;
+	font-weight: 700;
+}
+.setup #drives .u-secondary {
+	margin-top: 12px;
+}
+.setup #pass2-box label {
+	margin-top: 16px;
+}

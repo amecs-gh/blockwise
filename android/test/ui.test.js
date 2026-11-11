@@ -17,6 +17,9 @@ const THEME = (dark) => ({ dark, insets: { top: 32, bottom: 24, left: 0, right: 
 const device = { db: null, snapshot: null, offline: false, remoteCalls: [] }
 const GUARD = /^(sync\?since=\d{1,18}&limit=\d{1,5}|state|blocks\?from=\d{1,12}&to=\d{1,12})$/ // = core ApiGuard
 
+// A stand-in Dropbox folder (what the app's Drives.Folder does), shared by the phones
+const folder = new Map()
+
 async function phone(browser, file, { dark = false, locale = 'en-US', hash = '', mode = 'nextcloud', dev = device, resend = false, connecting = false } = {}) {
 	const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2.75, isMobile: true, hasTouch: true, colorScheme: dark ? 'dark' : 'light', locale })
 	const page = await ctx.newPage()
@@ -29,7 +32,20 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		calls.push(channel)
 		let env
 		try {
-			if (channel === 'state') env = { data: { platform: 'android', locale, mode, connecting } }
+			if (channel === 'state') env = { data: { platform: 'android', locale, mode, connecting, drives: { dropbox: true, gdrive: false } } }
+			else if (channel === 'connectDrive') env = { data: folder.has('blockwise.json') }
+			else if (channel === 'saveDrive') { dev.key = args[0]; env = { data: null } }
+			else if (channel === 'driveKey') env = { data: dev.key || null }
+			else if (channel === 'driveStateLoad') env = { data: dev.driveState || null }
+			else if (channel === 'driveStateSave') { dev.driveState = args[0]; env = { data: null } }
+			else if (channel === 'drive') {
+				const [op, name, b64, create] = args
+				if (name && !/^[A-Za-z0-9_-][A-Za-z0-9._-]{0,79}$/.test(name)) throw new Error('Invalid file name')
+				if (op === 'list') env = { data: [...folder.keys()] }
+				else if (op === 'read') env = { data: folder.has(name) ? folder.get(name) : null }
+				else if (op === 'write') { if (create && folder.has(name)) env = { error: 'exists', status: 409 }; else { folder.set(name, b64); env = { data: null } } }
+				else if (op === 'remove') { folder.delete(name); env = { data: null } }
+			}
 			else if (channel === 'dbLoad') env = { data: dev.db }
 			else if (channel === 'dbSave') { dev.db = args[0]; env = { data: null } }
 			else if (channel === 'snapshot') { dev.snapshot = args[0]; env = { data: null } }
@@ -70,12 +86,81 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 	await s.page.waitForTimeout(200)
 	assert.ok(s.calls.includes('useLocal'), 'start on this phone')
 	const sc = await phone(browser, 'setup.html', { mode: 'local', connecting: true, hash: '#connect' })
-	await sc.page.waitForSelector('#form:not([hidden])')
+	await sc.page.waitForSelector('#choose:not([hidden])')
+	assert.ok(await sc.page.locator('#local').isHidden(), 'already on this phone: only the syncs')
+	await sc.page.click('#nextcloud')
 	assert.match(await sc.page.textContent('#intro'), /go along to Nextcloud/)
 	await sc.page.click('#back')
+	await sc.page.click('#choose-back')
 	await sc.page.waitForTimeout(200)
 	assert.ok(sc.calls.includes('backToApp'))
 	console.log('setup ok')
+
+	// Dropbox: allow in the browser, choose a passphrase; two phones sync through the encrypted folder
+	{
+		const devA = { db: null, snapshot: null, offline: false, remoteCalls: [] }
+		const d = await phone(browser, 'setup.html', { mode: null, dev: devA })
+		await d.page.waitForSelector('#dropbox:not([hidden])')
+		assert.ok(await d.page.locator('#gdrive').isHidden(), 'a drive without app keys is not offered')
+		await d.page.click('#dropbox')
+		await d.page.waitForSelector('#pass:not([hidden])')
+		assert.match(await d.page.textContent('#title'), /Choose a passphrase/)
+		await d.page.fill('#pass1', 'correct horse battery')
+		await d.page.fill('#pass2', 'correct horse batter')
+		await d.page.click('#pass-submit')
+		assert.match(await d.page.textContent('#pass-error'), /not the same/)
+		await d.page.fill('#pass2', 'correct horse battery')
+		await d.page.screenshot({ path: `${shots}/setup-passphrase.png` })
+		await d.page.click('#pass-submit')
+		await d.page.waitForFunction(() => true)
+		for (let i = 0; i < 100 && !devA.key; i++) await d.page.waitForTimeout(100)
+		assert.ok(devA.key && folder.has('blockwise.json'), 'folder set up, key kept by the app')
+		assert.ok(!/correct horse/.test(atob(folder.get('blockwise.json'))), 'no passphrase on the drive')
+		await d.ctx.close()
+
+		const a = await phone(browser, 'app.html', { mode: 'dropbox', dev: devA, hash: '#now' })
+		await a.page.waitForSelector('.imp-page', { timeout: 15000 })
+		const name = 'Drive sync ' + Date.now()
+		await a.page.evaluate(async (name) => {
+			const api = window.trackerApp.api
+			const c = await api('POST', 'commitments', { name, color: '#e8590c' })
+			const now = Math.floor(Date.now() / 1000)
+			await api('POST', 'blocks', { commitmentId: c.id, start: now + 3600, end: now + 7200, repeat: 'weekly' })
+		}, name)
+		for (let i = 0; i < 80 && ![...folder.keys()].some((k) => k.startsWith('log-')); i++) await a.page.waitForTimeout(100)
+		const logs = [...folder.keys()].filter((k) => k.startsWith('log-'))
+		assert.ok(logs.length, 'changes written to the drive')
+		assert.ok(!logs.some((k) => atob(folder.get(k)).includes(name)), 'encrypted: the drive never sees the name')
+		assert.deepEqual(devA.remoteCalls, [], 'nothing sent to a server')
+		await a.ctx.close()
+
+		// Another phone with the same passphrase
+		const devB = { db: null, snapshot: null, offline: false, remoteCalls: [] }
+		const s2 = await phone(browser, 'setup.html', { mode: null, dev: devB })
+		await s2.page.waitForSelector('#dropbox:not([hidden])')
+		await s2.page.click('#dropbox')
+		await s2.page.waitForSelector('#pass:not([hidden])')
+		assert.match(await s2.page.textContent('#title'), /Enter your passphrase/)
+		assert.ok(await s2.page.locator('#pass2-box').isHidden())
+		await s2.page.fill('#pass1', 'wrong passphrase')
+		await s2.page.click('#pass-submit')
+		await s2.page.waitForSelector('#pass-error:not([hidden])', { timeout: 15000 })
+		assert.match(await s2.page.textContent('#pass-error'), /Wrong passphrase/)
+		await s2.page.fill('#pass1', 'correct horse battery')
+		await s2.page.click('#pass-submit')
+		for (let i = 0; i < 100 && !devB.key; i++) await s2.page.waitForTimeout(100)
+		assert.equal(devB.key, devA.key, 'same key from the same passphrase')
+		await s2.ctx.close()
+		const b = await phone(browser, 'app.html', { mode: 'dropbox', dev: devB, hash: '#now' })
+		await b.page.waitForSelector('.imp-page', { timeout: 15000 })
+		await b.page.waitForFunction((name) => [...document.querySelectorAll('.imp-nav__commitments a')].some((x) => x.textContent.includes(name)), name, { timeout: 15000 })
+		const blocks = await b.page.evaluate(async () => { const now = Math.floor(Date.now() / 1000); return (await window.trackerApp.api('GET', `blocks?from=${now}&to=${now + 86400 * 8}`)).blocks })
+		assert.equal(blocks.length, 2, 'the weekly block came along (built-in calendar)')
+		await b.page.screenshot({ path: `${shots}/drive-second-phone.png` })
+		assert.deepEqual(b.errors, [])
+		await b.ctx.close()
+		console.log('  ✔ Dropbox: passphrase, encrypted folder, a second phone gets everything')
+	}
 
 	// On this phone only: no server, the built-in calendar; then Nextcloud, and the data comes along
 	{

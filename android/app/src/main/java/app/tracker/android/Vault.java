@@ -32,6 +32,8 @@ final class Vault {
     static final String DB = "db";
     static final String SNAPSHOT = "snapshot";
     static final String OUTBOX = "outbox";
+    /** Where the drive sync has read up to (web/filesync.js) */
+    static final String DRIVESTATE = "drivestate";
 
     private static final Map<String, String> memory = new HashMap<>();
 
@@ -132,7 +134,7 @@ final class Vault {
     static synchronized void wipe(Context c) {
         memory.clear();
         unreadable.clear();
-        for (String name : new String[] {DB, SNAPSHOT, OUTBOX}) {
+        for (String name : new String[] {DB, SNAPSHOT, OUTBOX, DRIVESTATE}) {
             File f = file(c, name);
             if (f != null) {
                 new AtomicFile(f).delete();

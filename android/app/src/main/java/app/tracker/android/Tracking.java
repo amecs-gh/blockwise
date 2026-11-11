@@ -99,8 +99,8 @@ final class Tracking {
             boolean elsewhere = false;
             Dash d = null;
             Nextcloud client = Store.client(c);
-            // On this phone only: the page's snapshot, its built-in blocks included
-            boolean local = client == null && Store.local(c);
+            // No Nextcloud (on this phone only, or a drive): the page's snapshot, its built-in blocks included
+            boolean local = client == null && Store.noServer(c);
             if (client != null || local) {
                 I18n t = i18n();
                 try {
@@ -222,7 +222,7 @@ final class Tracking {
         final Context c = context.getApplicationContext();
         IO.execute(() -> {
             Nextcloud client = Store.client(c);
-            if (client != null || Store.local(c)) {
+            if (client != null || Store.noServer(c)) {
                 try {
                     Dash shown = last;
                     JSONObject snap = Local.snapshot(c);

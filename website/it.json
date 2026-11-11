@@ -40,7 +40,7 @@
 	"priv.title": "I tuoi dati restano tuoi",
 	"priv.lead": "Nessun account da noi, nessun tracciamento, nessuna pubblicità. Blockwise funziona offline e sincronizza solo dove scegli tu.",
 	"priv.nc": "Sul tuo server. I blocchi sono eventi in Calendario di Nextcloud; Mac, telefono e web restano sincronizzati.",
-	"priv.drive": "Solo Mac. Sincronizzato tramite il tuo Dropbox o Google Drive, cifrato end-to-end con una passphrase che conosci solo tu.",
+	"priv.drive": "Su Mac e Android. Sincronizzato tramite il tuo Dropbox o Google Drive, cifrato end-to-end con una passphrase che conosci solo tu.",
 	"priv.local.t": "Solo sul tuo dispositivo",
 	"priv.local": "Sul Mac o sul telefono, senza account e senza sincronizzazione. Puoi collegarne una in seguito e i tuoi dati vengono con te.",
 	"dl.title": "Scarica",

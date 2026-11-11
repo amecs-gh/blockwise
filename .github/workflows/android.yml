@@ -44,6 +44,14 @@ jobs:
             echo "No signing key: building the debug version"
             echo "variant=debug" >> "$GITHUB_OUTPUT"
           fi
+      # Dropbox / Google Drive sync: the same app ids as the Mac app (variables, not secrets: public ids)
+      - name: App keys for Dropbox and Google Drive
+        env:
+          DROPBOX_APP_KEY: ${{ vars.DROPBOX_APP_KEY }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ vars.GOOGLE_CLIENT_SECRET }}
+        run: |
+          python3 -c 'import json,os; e=os.environ; json.dump({"dropboxAppKey": e.get("DROPBOX_APP_KEY",""), "googleClientId": e.get("GOOGLE_CLIENT_ID",""), "googleClientSecret": e.get("GOOGLE_CLIENT_SECRET","")}, open("app/src/main/assets/providers.json","w"))'
       - name: Test, check and build
         env:
           TRACKER_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}

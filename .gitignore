@@ -18,6 +18,7 @@ android/local.properties
 *.pem
 signing/
 mac/config/providers.json
+android/app/src/main/assets/providers.json
 .env
 
 # Test output, editors, OS

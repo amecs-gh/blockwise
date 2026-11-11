@@ -45,15 +45,96 @@ final class Store {
 
     /**
      * "On this phone only": Blockwise works without any account (the built-in
-     * calendar, nothing synced). Nextcloud can be connected later; the data comes along.
+     * calendar, nothing synced). A sync can be connected later; the data comes along.
      */
     static boolean local(Context c) {
-        return prefs(c).getBoolean("local", false) && !loggedIn(c);
+        return prefs(c).getBoolean("local", false) && !loggedIn(c) && drive(c) == null;
     }
 
-    /** Set up: on this phone only, or logged in to Nextcloud. */
+    /** No Nextcloud: on this phone only, or synced through a drive (the built-in calendar either way). */
+    static boolean noServer(Context c) {
+        return !loggedIn(c) && (local(c) || drive(c) != null);
+    }
+
+    /** Set up: on this phone only, a drive, or logged in to Nextcloud. */
     static boolean ready(Context c) {
-        return loggedIn(c) || local(c);
+        return loggedIn(c) || local(c) || drive(c) != null;
+    }
+
+    /** "nextcloud", "dropbox", "gdrive", "local", or null before the first start */
+    static String mode(Context c) {
+        if (loggedIn(c)) {
+            return "nextcloud";
+        }
+        String d = drive(c);
+        return d != null ? d : local(c) ? "local" : null;
+    }
+
+    // --- Dropbox / Google Drive: the refresh token and the sync key, encrypted by the Keystore ---
+
+    private static final String DRIVE_ALIAS = "tracker-drive";
+
+    /** The connected drive ("dropbox" or "gdrive"), or null */
+    static String drive(Context c) {
+        SharedPreferences p = prefs(c);
+        String d = p.getString("drive", null);
+        return d != null && p.getString("driveToken", null) != null && p.getString("syncKey", null) != null ? d : null;
+    }
+
+    static String driveAccount(Context c) {
+        return prefs(c).getString("driveAccount", null);
+    }
+
+    /** null if not connected or the key is gone (then connect again) */
+    static synchronized String driveToken(Context c) {
+        return unseal(prefs(c).getString("driveToken", null));
+    }
+
+    /** The sync folder's key (base64), for the page's file sync */
+    static synchronized String syncKey(Context c) {
+        return unseal(prefs(c).getString("syncKey", null));
+    }
+
+    private static String unseal(String stored) {
+        if (stored == null) {
+            return null;
+        }
+        try {
+            return decrypt(DRIVE_ALIAS, stored);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Keeps the connection (never unencrypted: if the Keystore fails, nothing is saved).
+     * From "on this phone only" the data comes along; another drive account starts empty.
+     */
+    static synchronized void saveDrive(Context c, String provider, String account, String refreshToken, String keyBase64) throws Exception {
+        String token = encrypt(DRIVE_ALIAS, refreshToken);
+        String key = encrypt(DRIVE_ALIAS, keyBase64);
+        boolean carry = Vault.claim(c, provider + ":" + (account == null ? "" : account));
+        prefs(c).edit()
+                .remove("local")
+                .putBoolean("resend", carry)
+                .putString("drive", provider)
+                .putString("driveToken", token)
+                .putString("syncKey", key)
+                .putString("driveAccount", account)
+                .apply();
+    }
+
+    /** Forget the drive on this phone (the encrypted data on the drive stays). */
+    static synchronized void forgetDrive(Context c) {
+        prefs(c).edit().remove("drive").remove("driveToken").remove("syncKey").remove("driveAccount").apply();
+        Vault.write(c, Vault.DRIVESTATE, null);
+        try {
+            KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
+            ks.load(null);
+            ks.deleteEntry(DRIVE_ALIAS);
+        } catch (Exception ignored) {
+            // nothing to delete
+        }
     }
 
     /** Start (or go back to) "on this phone only", keeping the data on the phone. */

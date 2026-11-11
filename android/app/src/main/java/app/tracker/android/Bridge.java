@@ -8,6 +8,7 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -132,6 +133,52 @@ public final class Bridge {
                 activity.backToApp();
                 reply(id, data(null));
                 break;
+            case "connectDrive": {
+                final String provider = args.optString(0, "");
+                if (!Drives.DROPBOX.equals(provider) && !Drives.GOOGLE.equals(provider)) {
+                    reply(id, error(i18n().t("Invalid request."), 0));
+                    break;
+                }
+                activity.connectDrive(provider, (err, exists) -> reply(id, err == null ? data(exists) : error(i18n().t(err), 0)));
+                break;
+            }
+            case "cancelDrive":
+                activity.cancelDrive();
+                reply(id, data(null));
+                break;
+            case "saveDrive": {
+                final String key = args.optString(0, "");
+                // A 256-bit key, base64
+                if (!key.matches("^[A-Za-z0-9+/]{43}=$")) {
+                    reply(id, error(i18n().t("Invalid request."), 0));
+                    break;
+                }
+                activity.saveDrive(key, (err) -> reply(id, err == null ? data(null) : error(err, 0)));
+                break;
+            }
+            case "drive":
+                drive(id, args);
+                break;
+            case "driveKey":
+                background(id, () -> Store.drive(activity) == null ? null : Store.syncKey(activity));
+                break;
+            case "driveStateLoad":
+                background(id, () -> Store.drive(activity) == null ? null : Vault.read(activity, Vault.DRIVESTATE));
+                break;
+            case "driveStateSave": {
+                final String st = args.optString(0, "");
+                if (st.isEmpty() || st.length() > 1024 * 1024 || st.charAt(0) != '{') {
+                    reply(id, error(i18n().t("Invalid request."), 0));
+                    break;
+                }
+                SAVE.execute(() -> {
+                    if (Store.drive(activity) != null) {
+                        Vault.write(activity, Vault.DRIVESTATE, st);
+                    }
+                    activity.runOnUiThread(() -> reply(id, data(null)));
+                });
+                break;
+            }
             case "takeResend":
                 background(id, () -> Store.takeResend(activity));
                 break;
@@ -202,6 +249,54 @@ public final class Bridge {
             }
             final String r = result;
             activity.runOnUiThread(() -> reply(id, r));
+        });
+    }
+
+    /**
+     * The drive's sync folder for the page's file sync (web/filesync.js): list,
+     * read, write, remove. The bytes are already end-to-end encrypted by the page.
+     * Errors: status 409 = the file exists (write with create), 0 = offline.
+     */
+    private void drive(String id, JSONArray args) {
+        final String op = args.optString(0, "");
+        final String name = args.optString(1, "");
+        final String b64 = args.optString(2, "");
+        final boolean create = args.optBoolean(3, false);
+        final Drives.Folder f = MainActivity.driveFolder(activity);
+        if (f == null) {
+            reply(id, error(i18n().t("Connect a drive first."), 0));
+            return;
+        }
+        PAGE_IO.execute(() -> {
+            String r;
+            try {
+                switch (op) {
+                    case "list":
+                        r = data(new JSONArray(f.list()));
+                        break;
+                    case "read": {
+                        byte[] bytes = f.read(name);
+                        r = data(bytes == null ? null : Base64.getEncoder().encodeToString(bytes));
+                        break;
+                    }
+                    case "write":
+                        f.write(name, Base64.getDecoder().decode(b64), create);
+                        r = data(null);
+                        break;
+                    case "remove":
+                        f.remove(name);
+                        r = data(null);
+                        break;
+                    default:
+                        r = error(i18n().t("Invalid request."), 0);
+                }
+            } catch (Drives.DriveException e) {
+                r = error(e.exists ? "exists" : i18n().t(e.getMessage()), e.exists ? 409 : e.offline ? 0 : e.status);
+            } catch (IllegalArgumentException e) {
+                r = error(i18n().t("Invalid request."), 0);
+            }
+            final String result = r;
+            activity.runOnUiThread(() -> reply(id, result));
         });
     }
 
