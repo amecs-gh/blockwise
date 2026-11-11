@@ -102,7 +102,7 @@ async function openWindow(browser, file, winName, opts = {}) {
 	const auth = 'Basic ' + Buffer.from(`${cfg.loginName}:${appPassword}`).toString('base64')
 	const mainWin = T.BrowserWindow.all.find((w) => w.file === 'app.html')
 	assert.ok(mainWin, 'main window opened')
-	console.log('  main window: app.html, vibrancy', mainWin.opts.vibrancy)
+	console.log('  main window: app.html, background', mainWin.opts.backgroundColor)
 
 	step('security: what the windows may ask the app to do')
 	const rejects = async (args, ev = EV) => (await T.handlers.api(ev, ...args)).error

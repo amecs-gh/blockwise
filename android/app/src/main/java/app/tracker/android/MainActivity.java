@@ -321,74 +321,14 @@ public final class MainActivity extends Activity implements Tracking.Listener {
         return (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
     }
 
-    private String hex(int colorRes) {
-        return String.format("#%06x", getColor(colorRes) & 0xffffff);
-    }
-
-    /**
-     * Material You (Android 12+): the color roles from your wallpaper's palette,
-     * following Material 3's mapping of tones to roles. Null before Android 12.
-     */
-    private JSONObject dynamicColors(boolean dark) throws JSONException {
-        if (Build.VERSION.SDK_INT < 31) {
-            return null;
-        }
-        JSONObject c = new JSONObject();
-        if (dark) {
-            c.put("primary", hex(android.R.color.system_accent1_200))
-                    .put("onPrimary", hex(android.R.color.system_accent1_800))
-                    .put("primaryContainer", hex(android.R.color.system_accent1_700))
-                    .put("onPrimaryContainer", hex(android.R.color.system_accent1_100))
-                    .put("secondaryContainer", hex(android.R.color.system_accent2_700))
-                    .put("onSecondaryContainer", hex(android.R.color.system_accent2_100))
-                    .put("tertiaryContainer", hex(android.R.color.system_accent3_700))
-                    .put("onTertiaryContainer", hex(android.R.color.system_accent3_100))
-                    .put("surface", hex(android.R.color.system_neutral1_900))
-                    .put("surfaceContainerLow", hex(android.R.color.system_neutral1_900))
-                    .put("surfaceContainer", hex(android.R.color.system_neutral1_800))
-                    .put("surfaceContainerHigh", hex(android.R.color.system_neutral1_800))
-                    .put("surfaceContainerHighest", hex(android.R.color.system_neutral1_700))
-                    .put("onSurface", hex(android.R.color.system_neutral1_100))
-                    .put("onSurfaceVariant", hex(android.R.color.system_neutral2_200))
-                    .put("outline", hex(android.R.color.system_neutral2_400))
-                    .put("outlineVariant", hex(android.R.color.system_neutral2_700))
-                    .put("inverseSurface", hex(android.R.color.system_neutral1_100))
-                    .put("inverseOnSurface", hex(android.R.color.system_neutral1_800));
-        } else {
-            c.put("primary", hex(android.R.color.system_accent1_600))
-                    .put("onPrimary", hex(android.R.color.system_accent1_0))
-                    .put("primaryContainer", hex(android.R.color.system_accent1_100))
-                    .put("onPrimaryContainer", hex(android.R.color.system_accent1_900))
-                    .put("secondaryContainer", hex(android.R.color.system_accent2_100))
-                    .put("onSecondaryContainer", hex(android.R.color.system_accent2_900))
-                    .put("tertiaryContainer", hex(android.R.color.system_accent3_100))
-                    .put("onTertiaryContainer", hex(android.R.color.system_accent3_900))
-                    .put("surface", hex(android.R.color.system_neutral1_10))
-                    .put("surfaceContainerLow", hex(android.R.color.system_neutral1_10))
-                    .put("surfaceContainer", hex(android.R.color.system_neutral1_50))
-                    .put("surfaceContainerHigh", hex(android.R.color.system_neutral1_100))
-                    .put("surfaceContainerHighest", hex(android.R.color.system_neutral1_100))
-                    .put("onSurface", hex(android.R.color.system_neutral1_900))
-                    .put("onSurfaceVariant", hex(android.R.color.system_neutral2_700))
-                    .put("outline", hex(android.R.color.system_neutral2_500))
-                    .put("outlineVariant", hex(android.R.color.system_neutral2_200))
-                    .put("inverseSurface", hex(android.R.color.system_neutral1_800))
-                    .put("inverseOnSurface", hex(android.R.color.system_neutral1_50));
-        }
-        return c;
-    }
-
-    /** Tells the page: light/dark, wallpaper colors, bar sizes (android-bridge.js). */
+    /** Tells the page: light/dark and bar sizes (android-bridge.js). */
     void applyTheme() {
         if (web == null || !showsOwnPage()) {
             return;
         }
         try {
-            boolean dark = dark();
-            JSONObject colors = dynamicColors(dark);
             JSONObject theme = new JSONObject()
-                    .put("dark", dark)
-                    .put("colors", colors == null ? JSONObject.NULL : colors)
+                    .put("dark", dark())
                     .put("insets", new JSONObject()
                             .put("top", (double) insetsCss[0])
                             .put("right", (double) insetsCss[1])

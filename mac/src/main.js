@@ -10,7 +10,7 @@
  */
 const {
 	app, BrowserWindow, Tray, Menu, nativeImage, Notification,
-	ipcMain, safeStorage, session, shell, net, screen, powerMonitor, dialog,
+	ipcMain, safeStorage, session, shell, net, screen, powerMonitor, dialog, nativeTheme,
 } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
@@ -762,10 +762,8 @@ function createMain(hash) {
 		minHeight: 360,
 		title: 'Blockwise',
 		titleBarStyle: 'hiddenInset',
-		trafficLightPosition: { x: 18, y: 18 },
-		vibrancy: 'sidebar',
-		visualEffectState: 'followWindow',
-		backgroundColor: '#00000000',
+		trafficLightPosition: { x: 20, y: 29 },
+		backgroundColor: nativeTheme.shouldUseDarkColors ? '#14121d' : '#f6f5fb',
 		show: false,
 		webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true },
 	})

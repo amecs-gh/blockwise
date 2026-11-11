@@ -11,20 +11,13 @@ const ASSETS = path.join(__dirname, '..', 'app/src/main/assets')
 const shots = process.env.SHOTS || '/tmp/claude-0/android'
 require('node:fs').mkdirSync(shots, { recursive: true })
 
-// What the app sends after loading: dark mode, wallpaper colors (Android 12+), bar sizes
-const THEME = (dark, dynamic) => ({
-	dark,
-	insets: { top: 32, bottom: 24, left: 0, right: 0 },
-	colors: dynamic ? (dark
-		? { primary: '#9bd59b', onPrimary: '#00390f', primaryContainer: '#1f5125', onPrimaryContainer: '#b6f1b5', secondaryContainer: '#3a4b39', onSecondaryContainer: '#d4e8d0', surface: '#101510', surfaceContainerLow: '#181d18', surfaceContainer: '#1c211c', surfaceContainerHigh: '#262b26', surfaceContainerHighest: '#313631', onSurface: '#dfe4dc', onSurfaceVariant: '#c2c8bd', outline: '#8c9389', outlineVariant: '#424940' }
-		: { primary: '#376a3a', onPrimary: '#ffffff', primaryContainer: '#b8f1b5', onPrimaryContainer: '#002107', secondaryContainer: '#d4e8d0', onSecondaryContainer: '#101f10', surface: '#f6fbf1', surfaceContainerLow: '#f0f5eb', surfaceContainer: '#eaefe5', surfaceContainerHigh: '#e4eadf', surfaceContainerHighest: '#dfe4da', onSurface: '#181d17', onSurfaceVariant: '#424940', outline: '#72796f', outlineVariant: '#c2c8bd' })
-		: null,
-})
+// What the app sends after loading: dark mode and bar sizes
+const THEME = (dark) => ({ dark, insets: { top: 32, bottom: 24, left: 0, right: 0 } })
 
 const device = { db: null, snapshot: null, offline: false, remoteCalls: [] }
 const GUARD = /^(sync\?since=\d{1,18}&limit=\d{1,5}|state|blocks\?from=\d{1,12}&to=\d{1,12})$/ // = core ApiGuard
 
-async function phone(browser, file, { dark = false, locale = 'en-US', hash = '', dynamic = false } = {}) {
+async function phone(browser, file, { dark = false, locale = 'en-US', hash = '' } = {}) {
 	const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2.75, isMobile: true, hasTouch: true, colorScheme: dark ? 'dark' : 'light', locale })
 	const page = await ctx.newPage()
 	const errors = []
@@ -57,22 +50,22 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 	})
 	await page.addInitScript(() => { window.TrackerAndroid = { call: (id, ch, a) => { window.__native(id, ch, a) } } })
 	await page.goto('file://' + path.join(ASSETS, file) + hash)
-	await page.evaluate((t) => window.__trackerAndroidTheme(t), THEME(dark, dynamic))
+	await page.evaluate((t) => window.__trackerAndroidTheme(t), THEME(dark))
 	return { page, errors, calls, ctx }
 }
 
 ;(async () => {
 	const browser = await chromium.launch()
-	const s = await phone(browser, 'setup.html', { dynamic: true })
+	const s = await phone(browser, 'setup.html')
 	await s.page.waitForTimeout(400)
 	assert.match(await s.page.textContent('#intro'), /stored encrypted on this phone/)
 	await s.page.screenshot({ path: `${shots}/setup.png` })
 	console.log('setup ok')
 
-	for (const [dark, locale, dynamic] of [[false, 'en-US', false], [true, 'en-US', false], [false, 'it-IT', true], [true, 'it-IT', true]]) {
-		const a = await phone(browser, 'app.html', { dark, locale, hash: '#now', dynamic })
+	for (const [dark, locale] of [[false, 'en-US'], [true, 'en-US'], [false, 'it-IT'], [true, 'it-IT']]) {
+		const a = await phone(browser, 'app.html', { dark, locale, hash: '#now' })
 		await a.page.waitForSelector('.imp-page', { timeout: 15000 })
-		const tag = `${dark ? 'dark' : 'light'}-${locale.slice(0, 2)}${dynamic ? '-you' : ''}`
+		const tag = `${dark ? 'dark' : 'light'}-${locale.slice(0, 2)}`
 		const firstC = await a.page.evaluate(() => document.querySelector('.imp-nav__commitments a')?.getAttribute('href')?.slice(1))
 		for (const pg of ['now', 'tasks', 'notes', 'done', 'time', 'settings', firstC]) {
 			await a.page.evaluate((h) => { location.hash = h }, '#' + pg)

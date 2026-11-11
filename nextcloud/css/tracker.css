@@ -1,86 +1,189 @@
 /*
- * Blockwise. Built on Nextcloud's theme variables so light/dark
- * mode and instance branding apply; each commitment's calendar color (--c)
- * is the only accent.
+ * Blockwise, "Timeline" look: a soft lavender page, white rounded cards and
+ * one violet accent. Each commitment's calendar color (--c) colors its own
+ * blocks, pills and timer. Nextcloud's theme variables are remapped inside the
+ * app, so every component follows the look in light and dark mode.
  */
 
 #tracker-app {
-	--imp-gap: 24px;
-	--imp-radius: var(--border-radius-large, 10px);
-	--imp-line: var(--color-border, #dbdbdb);
-	--imp-muted: var(--color-text-maxcontrast, #6b6b6b);
-	--imp-bg: var(--color-main-background, #fff);
-	--imp-bg-soft: var(--color-background-hover, #f5f5f5);
-	--imp-text: var(--color-main-text, #222);
+	--tl-accent: #6c5ce7;
+	--tl-accent-soft: #ece9fd;
+	--tl-page: #f6f5fb;
+	--tl-card: #ffffff;
+	--tl-pill: #f1effa;
+	--tl-shadow: 0 10px 30px rgba(60, 50, 140, 0.08);
+	--imp-text: #24223a;
+	--imp-muted: #6c6987;
+	--imp-line: #e6e3f3;
+	--imp-gap: 20px;
+	--imp-radius: 24px;
+	--imp-bg: var(--tl-card);
+	--imp-bg-soft: var(--tl-pill);
+	--color-main-background: var(--tl-card);
+	--color-main-background-blur: var(--tl-card);
+	--color-background-hover: var(--tl-pill);
+	--color-background-dark: var(--tl-pill);
+	--color-main-text: var(--imp-text);
+	--color-text-maxcontrast: var(--imp-muted);
+	--color-border: var(--imp-line);
+	--color-border-dark: #d4cfec;
+	--color-border-maxcontrast: #bdb7de;
+	--color-primary-element: var(--tl-accent);
+	--color-primary-element-hover: #5a4bd6;
+	--color-primary-element-text: #ffffff;
+	--color-primary-element-light: var(--tl-accent-soft);
+	--color-primary-element-light-text: #4b3cc4;
+	--border-radius-element: 14px;
+	--border-radius-large: 24px;
 	width: 100%;
 	height: 100%;
 	color: var(--imp-text);
+	font-family: ui-rounded, "SF Pro Rounded", Nunito, system-ui, sans-serif;
 	font-variant-numeric: tabular-nums;
+}
+body[data-themes*="dark"] #tracker-app,
+html.m3-dark #tracker-app {
+	--tl-accent: #8b7cf6;
+	--tl-accent-soft: #2e2850;
+	--tl-page: #14121d;
+	--tl-card: #1e1b2b;
+	--tl-pill: #2a2639;
+	--tl-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+	--imp-text: #eceaf6;
+	--imp-muted: #a29ebb;
+	--imp-line: #332f47;
+	--color-border-dark: #4a4563;
+	--color-border-maxcontrast: #5d5778;
+	--color-primary-element-hover: #9d90f8;
+	--color-primary-element-light-text: #cfc8ff;
+}
+@media (prefers-color-scheme: dark) {
+	body:not([data-themes*="light"]):not([data-themes*="dark"]) #tracker-app {
+		--tl-accent: #8b7cf6;
+		--tl-accent-soft: #2e2850;
+		--tl-page: #14121d;
+		--tl-card: #1e1b2b;
+		--tl-pill: #2a2639;
+		--tl-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+		--imp-text: #eceaf6;
+		--imp-muted: #a29ebb;
+		--imp-line: #332f47;
+		--color-border-dark: #4a4563;
+		--color-border-maxcontrast: #5d5778;
+		--color-primary-element-hover: #9d90f8;
+		--color-primary-element-light-text: #cfc8ff;
+	}
 }
 
 .imp-layout {
 	display: flex;
+	flex-direction: column;
 	height: 100%;
 	min-height: 0;
 	overflow: hidden;
 	border-radius: var(--body-container-radius, 0);
-	background: var(--imp-bg);
+	background: var(--tl-page);
 }
 
-/* --- navigation ---------------------------------------------------------- */
+/* --- navigation: logo, a white pill bar, the commitments as chips ------------ */
 
 .imp-nav {
-	flex: 0 0 260px;
-	padding: 8px;
-	border-right: 1px solid var(--imp-line);
-	background: var(--color-main-background-blur, var(--imp-bg));
-	overflow-y: auto;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px 14px;
+	padding: 16px 28px 4px;
 }
 .imp-nav ul {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
 	list-style: none;
 	margin: 0;
 	padding: 0;
 }
+.imp-nav .imp-nav__logo {
+	display: grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	border-radius: 13px;
+	background: #1e2a44;
+}
+.imp-nav__logo:hover {
+	background: #2b3a5c !important;
+}
+.imp-nav .imp-nav__main {
+	padding: 5px;
+	border-radius: 20px;
+	background: var(--tl-card);
+	box-shadow: 0 6px 20px rgba(60, 50, 140, 0.07);
+}
 .imp-nav a {
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	min-height: 40px;
-	padding: 0 12px;
-	border-radius: var(--border-radius-element, 8px);
-	color: var(--imp-text);
+	gap: 8px;
+	min-height: 38px;
+	padding: 0 14px;
+	border-radius: 15px;
+	color: var(--imp-muted);
+	font-weight: 700;
 	text-decoration: none;
+	white-space: nowrap;
 }
 .imp-nav a:hover {
-	background: var(--imp-bg-soft);
+	background: var(--tl-pill);
+	color: var(--imp-text);
 }
-.imp-nav a.active {
-	background: var(--color-primary-element-light, #e6f3fa);
-	color: var(--color-primary-element-light-text, var(--imp-text));
-	font-weight: 600;
+.imp-nav__main a.active {
+	background: var(--tl-accent);
+	color: #ffffff;
 }
 .imp-nav a:focus-visible {
-	outline: 2px solid var(--color-primary-element, #0082c9);
-	outline-offset: -2px;
+	outline: 2px solid var(--tl-accent);
+	outline-offset: 2px;
+}
+.imp-nav__ext {
+	font-size: 0.8em;
+	opacity: 0.7;
 }
 .imp-nav__heading {
-	margin: 20px 12px 6px;
-	font-size: 0.85em;
-	font-weight: 600;
-	color: var(--imp-muted);
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+}
+.imp-nav .imp-nav__commitments {
+	margin-left: auto;
+}
+.imp-nav__commitments a {
+	min-height: 34px;
+	padding: 0 12px;
+	border-radius: 999px;
+	background: var(--tl-card);
+	color: var(--imp-text);
+}
+.imp-nav__commitments a.active {
+	background: var(--c);
+	color: #ffffff;
+}
+.imp-nav__commitments a.active .imp-dot {
+	background: #ffffff !important;
 }
 .imp-nav__name {
-	flex: 1;
+	max-width: 14ch;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 .imp-nav__warn {
 	color: var(--color-error, #d91a1a);
-	font-weight: 700;
+	font-weight: 800;
 }
 .imp-nav__add {
-	color: var(--imp-muted) !important;
+	background: transparent !important;
+	border: 2px dashed var(--color-border-dark);
 }
 
 .imp-dot {
@@ -109,8 +212,43 @@
 }
 .imp-page h1 {
 	margin: 4px 0 16px;
-	font-size: 1.6em;
-	font-weight: 600;
+	font-size: 1.75em;
+	font-weight: 800;
+}
+.imp-page h2,
+.imp-page h3 {
+	font-weight: 800;
+}
+/* Every content block sits on a white rounded card */
+.imp-col,
+.imp-cal,
+.imp-others,
+.imp-cpage__section,
+.imp-settings__section,
+.imp-hours,
+.imp-report > .imp-figure,
+.imp-report > .imp-tablewrap,
+.imp-report > .imp-sessions,
+.imp-tq,
+.imp-cv__grid {
+	padding: 20px 22px;
+	border: none !important;
+	border-radius: var(--imp-radius);
+	background: var(--tl-card);
+	box-shadow: var(--tl-shadow);
+}
+/* A commitment's tile: its color with the first letter */
+.imp-tile {
+	display: inline-grid;
+	flex: 0 0 auto;
+	place-items: center;
+	width: 42px;
+	height: 42px;
+	border-radius: 14px;
+	background: var(--c);
+	color: var(--on-c, #fff);
+	font-size: 18px;
+	font-weight: 800;
 }
 .imp-muted {
 	color: var(--imp-muted);
@@ -134,19 +272,19 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 6px;
-	min-height: 36px;
+	min-height: 40px;
 	margin: 0;
-	padding: 0 14px;
-	border: 1px solid var(--imp-line);
-	border-radius: var(--border-radius-element, 8px);
-	background: var(--imp-bg);
+	padding: 0 16px;
+	border: none;
+	border-radius: 14px;
+	background: var(--tl-pill);
 	color: var(--imp-text);
-	font-weight: 500;
+	font-weight: 700;
 	cursor: pointer;
 	text-decoration: none;
 }
 #tracker-app .imp-button:hover {
-	background: var(--imp-bg-soft);
+	background: color-mix(in srgb, var(--tl-accent) 14%, var(--tl-pill));
 }
 #tracker-app .imp-button--primary {
 	border-color: var(--color-primary-element, #0082c9);
@@ -165,7 +303,7 @@
 	margin: 0;
 	padding: 0;
 	border: none;
-	border-radius: 50%;
+	border-radius: 12px;
 	background: transparent;
 	color: var(--imp-muted);
 	font-size: 1.1em;
@@ -247,15 +385,16 @@
 	justify-content: space-between;
 	gap: 16px;
 	margin-bottom: var(--imp-gap);
-	padding: 18px 22px;
-	border-radius: var(--imp-radius);
+	padding: 24px 28px;
+	border-radius: 28px;
 	background: var(--c);
 	color: var(--on-c);
+	box-shadow: 0 14px 34px color-mix(in srgb, var(--c) 30%, transparent);
 }
 .imp-timer--idle {
-	border: 1px dashed var(--imp-line);
-	background: transparent;
+	background: var(--tl-card);
 	color: var(--imp-text);
+	box-shadow: var(--tl-shadow);
 }
 .imp-timer__text {
 	display: flex;
@@ -264,17 +403,17 @@
 	min-width: 0;
 }
 .imp-timer__label {
-	font-weight: 600;
+	font-weight: 800;
 }
 .imp-timer__block {
 	font-weight: 400;
 	opacity: 0.85;
 }
 .imp-timer__clock {
-	font-size: 2.6em;
-	font-weight: 300;
-	line-height: 1.1;
-	letter-spacing: -0.01em;
+	font-size: 3.2em;
+	font-weight: 800;
+	line-height: 1.05;
+	letter-spacing: -0.02em;
 }
 .imp-timer--idle .imp-timer__clock {
 	font-size: 1.8em;
@@ -286,18 +425,18 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
-	min-height: 44px;
+	min-height: 48px;
 	margin: 0;
-	padding: 0 20px;
-	border: 2px solid currentColor;
-	border-radius: 999px;
-	background: transparent;
-	color: inherit;
-	font-weight: 600;
+	padding: 0 24px;
+	border: none;
+	border-radius: 16px;
+	background: #ffffff;
+	color: #24223a;
+	font-weight: 800;
 	cursor: pointer;
 }
 #tracker-app .imp-timer__stop:hover {
-	background: color-mix(in srgb, currentColor 14%, transparent);
+	filter: brightness(0.95);
 }
 .imp-pomo {
 	display: flex;
@@ -359,8 +498,7 @@
 	align-items: start;
 }
 .imp-col {
-	padding-top: 12px;
-	border-top: 4px solid var(--c);
+	padding: 20px 22px;
 }
 .imp-col__head {
 	display: flex;
@@ -369,9 +507,12 @@
 	gap: 12px;
 }
 .imp-col__head h2 {
+	display: flex;
+	align-items: center;
+	gap: 12px;
 	margin: 0;
 	font-size: 1.3em;
-	font-weight: 600;
+	font-weight: 800;
 	overflow-wrap: anywhere;
 }
 .imp-col__note {
@@ -386,7 +527,7 @@
 	margin: 0;
 	padding: 0;
 	border: none;
-	border-radius: 50%;
+	border-radius: 16px;
 	background: var(--c);
 	color: var(--on-c);
 	cursor: pointer;
@@ -496,27 +637,30 @@
 /* --- tasks page ------------------------------------------------------------ */
 
 .imp-tabs {
-	display: flex;
+	display: inline-flex;
+	margin-bottom: 14px;
 	flex-wrap: wrap;
 	gap: 4px;
-	border-bottom: 1px solid var(--imp-line);
+	padding: 4px;
+	border-radius: 18px;
+	background: var(--tl-card);
+	box-shadow: var(--tl-shadow);
 }
 #tracker-app .imp-tabs button {
 	display: inline-flex;
 	align-items: center;
-	min-height: 40px;
-	margin: 0 0 -1px;
+	min-height: 38px;
+	margin: 0;
 	padding: 0 14px;
 	border: none;
-	border-bottom: 3px solid transparent;
-	border-radius: 0;
+	border-radius: 14px;
 	background: transparent;
 	color: var(--imp-muted);
-	font-weight: 500;
+	font-weight: 700;
 	cursor: pointer;
 }
 #tracker-app .imp-tabs button.active {
-	border-bottom-color: var(--c);
+	background: var(--tl-pill);
 	color: var(--imp-text);
 }
 .imp-newtask{
@@ -765,41 +909,17 @@
 /* --- small screens ------------------------------------------------------------ */
 
 @media (max-width: 860px) {
-	.imp-layout {
-		flex-direction: column;
-	}
 	.imp-nav {
-		flex: 0 0 auto;
-		border-right: none;
-		border-bottom: 1px solid var(--imp-line);
+		padding: 12px 16px 4px;
 	}
-	.imp-nav__main {
-		display: flex;
+	.imp-nav ul {
+		flex-wrap: nowrap;
+		max-width: 100%;
 		overflow-x: auto;
-	}
-	.imp-nav__main a span {
-		white-space: nowrap;
-	}
-	.imp-nav__heading {
-		display: none;
-	}
-	/* Commitments stay reachable on phones: a row of chips */
-	.imp-nav__commitments {
-		display: flex;
-		gap: 6px;
-		overflow-x: auto;
-		padding: 2px 0 6px;
 		scrollbar-width: none;
 	}
-	.imp-nav__commitments a {
-		min-height: 32px;
-		padding: 0 12px;
-		border: 1px solid var(--imp-line);
-		border-radius: 999px;
-		white-space: nowrap;
-	}
-	.imp-nav__commitments .imp-nav__add {
-		border-style: dashed;
+	.imp-nav .imp-nav__commitments {
+		margin-left: 0;
 	}
 	.imp-page {
 		padding: 16px 16px 48px;
@@ -917,9 +1037,7 @@
 	font-size: 1.6em;
 }
 .imp-others {
-	padding: 12px 14px;
-	border-radius: var(--imp-radius);
-	background: var(--imp-bg-soft);
+	padding: 16px 18px;
 }
 .imp-others__head {
 	display: flex;
@@ -950,10 +1068,11 @@
 }
 .imp-compact__bar {
 	align-self: stretch;
-	flex: 0 0 4px;
-	border-radius: 2px;
+	flex: 0 0 6px;
+	border-radius: 3px;
 	background: var(--c);
 }
+
 .imp-compact__text {
 	display: flex;
 	flex: 1;
@@ -968,8 +1087,6 @@
 .imp-focuslink {
 	margin: -8px 0 12px;
 }
-
-/* --- week strip ---------------------------------------------------------------- */
 
 /* --- goal in the Time chart -------------------------------------------------- */
 
@@ -1044,7 +1161,7 @@
 .imp-tl__track {
 	position: relative;
 	height: 22px;
-	border-radius: 5px;
+	border-radius: 8px;
 	background: var(--imp-bg-soft);
 }
 .imp-tl--large .imp-tl__track {
@@ -1072,9 +1189,8 @@
 	top: 2px;
 	bottom: 2px;
 	min-width: 4px;
-	border-left: 3px solid var(--c);
-	border-radius: 3px;
-	background: color-mix(in srgb, var(--c) 38%, var(--imp-bg));
+	border-radius: 8px;
+	background: color-mix(in srgb, var(--c) 45%, var(--imp-bg));
 }
 .imp-tl__row.is-past .imp-tl__block {
 	background: color-mix(in srgb, var(--c) 22%, var(--imp-bg));
@@ -1435,12 +1551,6 @@
 		position: static;
 	}
 }
-.imp-nav__ext {
-	margin-left: auto;
-	color: var(--imp-muted);
-	font-size: 0.85em;
-}
-
 /* --- capacity: block time vs. task time ----------------------------------------- */
 
 .imp-cap {
@@ -1478,7 +1588,7 @@
 .imp-cap__ok {
 	color: var(--color-success-text, #2d7b41);
 }
-.imp-note { margin: 10px 0 0; font-size: 0.9em; }
+.imp-footnote { margin: 10px 0 0; font-size: 0.9em; }
 
 /* --- commitment page ---------------------------------------------------------------- */
 
@@ -1488,25 +1598,48 @@
 .imp-cpage__head {
 	display: flex;
 	flex-wrap: wrap;
-	align-items: flex-end;
-	justify-content: space-between;
-	gap: 12px 24px;
-	padding-top: 14px;
-	border-top: 6px solid var(--c);
+	align-items: center;
+	gap: 16px 22px;
+	padding: 26px 28px;
+	border-radius: 28px;
+	background: var(--c);
+	color: var(--on-c);
+	box-shadow: 0 14px 34px color-mix(in srgb, var(--c) 30%, transparent);
 }
-.imp-cpage__head h1 {
+.imp-cpage__head > div:not([class]) {
+	flex: 1 1 260px;
+}
+.imp-cpage__head .imp-tile {
+	width: 72px;
+	height: 72px;
+	border-radius: 22px;
+	background: color-mix(in srgb, var(--on-c) 20%, transparent);
+	font-size: 32px;
+}
+#tracker-app .imp-cpage__head h1 {
 	margin: 0 0 2px;
+	font-size: 2.1em;
 }
-.imp-cpage__head p {
+#tracker-app .imp-cpage__head p {
 	margin: 0;
+	color: inherit;
+	font-weight: 700;
+	opacity: 0.9;
+}
+.imp-cpage__head a {
+	color: inherit;
 }
 .imp-cpage__actions {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 }
+#tracker-app .imp-cpage__head :is(.imp-button, .imp-play) {
+	background: #ffffff;
+	color: #24223a;
+}
 .imp-cpage__section {
-	margin-top: 30px;
+	margin-top: var(--imp-gap);
 }
 .imp-cpage__section h2,
 .imp-hours h2,
@@ -1669,7 +1802,7 @@
 .imp-tq {
 	max-width: 860px;
 	margin: 0;
-	padding: 0;
+	padding: 10px 0;
 	list-style: none;
 }
 
@@ -2292,13 +2425,12 @@
 
 /* a note: a card with the rendered text */
 .tracker .imp-note {
-	position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 12px 8px 12px 14px;
-	border: 1px solid var(--color-border); border-left: 4px solid var(--c, var(--color-primary-element));
-	border-radius: var(--border-radius-large, 12px); background: var(--color-main-background);
-	box-shadow: 0 1px 2px rgba(0, 0, 0, .04); transition: box-shadow .15s, opacity .15s;
+	position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 16px 10px 16px 20px;
+	border: 0; border-radius: 22px; background: var(--tl-card);
+	box-shadow: inset 6px 0 0 var(--c, var(--tl-accent)), var(--tl-shadow); transition: box-shadow .15s, opacity .15s;
 }
-.tracker .imp-note:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, .08); }
-.tracker .imp-note.is-done { opacity: .7; border-left-color: var(--color-border-dark); }
+.tracker .imp-note:hover { box-shadow: inset 6px 0 0 var(--c, var(--tl-accent)), 0 14px 34px rgba(60, 50, 140, .14); }
+.tracker .imp-note.is-done { opacity: .7; box-shadow: inset 6px 0 0 var(--color-border-dark), var(--tl-shadow); }
 .tracker .imp-note.is-over { box-shadow: 0 -3px 0 var(--c, var(--color-primary-element)); }
 .tracker .imp-note.is-dragging { opacity: .4; }
 .tracker .imp-note.is-editing { display: block; padding: 0; border-left-width: 1px; box-shadow: none; border: 0; background: none; }
@@ -2498,7 +2630,7 @@
 	min-width: 1.8em;
 	height: 1.8em;
 	border-radius: 999px;
-	background: #e5484d;
+	background: var(--tl-accent);
 	color: #fff;
 	font-size: 1.05em;
 }
@@ -2536,7 +2668,7 @@
 	cursor: cell;
 }
 .imp-cv__col.is-today {
-	background: color-mix(in srgb, #e5484d 4%, transparent);
+	background: color-mix(in srgb, var(--tl-accent) 4%, transparent);
 }
 .imp-cv__now {
 	position: absolute;
@@ -2544,7 +2676,7 @@
 	right: 0;
 	left: 0;
 	height: 2px;
-	background: #e5484d;
+	background: var(--tl-accent);
 	pointer-events: none;
 }
 .imp-cv__now::before {
@@ -2554,7 +2686,7 @@
 	width: 10px;
 	height: 10px;
 	border-radius: 50%;
-	background: #e5484d;
+	background: var(--tl-accent);
 	content: '';
 }
 .imp-cv__ev {
@@ -2565,10 +2697,10 @@
 	gap: 1px;
 	box-sizing: border-box;
 	min-height: 14px;
-	padding: 3px 6px 3px 8px;
-	border-left: 3px solid var(--c);
-	border-radius: 5px;
-	background: color-mix(in srgb, var(--c) 22%, var(--imp-bg));
+	padding: 4px 8px;
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--c) 24%, var(--imp-bg));
+	font-weight: 700;
 	color: var(--imp-text);
 	font-size: 0.82em;
 	line-height: 1.25;
@@ -2675,7 +2807,7 @@
 	background: var(--imp-bg-soft);
 }
 .imp-cv__mday.is-today .imp-cv__mnum {
-	background: #e5484d;
+	background: var(--tl-accent);
 	color: #fff;
 }
 .imp-cv__mlist {

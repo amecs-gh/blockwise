@@ -113,6 +113,8 @@
 	}
 
 	/** Text color that reads on a given background color. */
+	// A commitment's tile: its color with the first letter of its name
+	const tile = (c) => h('span', { class: 'imp-tile', style: { '--c': c.color, '--on-c': onColor(c.color) }, 'aria-hidden': 'true' }, [...c.name.trim()][0]?.toUpperCase() || '·')
 	function onColor(hex) {
 		const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(hex || '')
 		if (!m) return '#fff'
@@ -374,28 +376,30 @@
 	const ICON_CAL = 'M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z'
 	const ICON_STOP = 'M7 7h10v10H7z'
 
+	// Blockwise's mark, as on the app icon: a white block over an amber one, forming a "B"
+	const LOGO = [['#ffffff', 'M33 19H54a14 14 0 0 1 0 28H33a4 4 0 0 1-4-4V23a4 4 0 0 1 4-4z'], ['#f4a62a', 'M33 52h26.5a14.5 14.5 0 0 1 0 29H33a4 4 0 0 1-4-4V56a4 4 0 0 1 4-4z']]
 	function navigation() {
-		return h('nav', { class: 'imp-nav', 'aria-label': tr('Commitments') },
-			h('ul', { class: 'imp-nav__main' }, ROUTES.map((r) => h('li', null,
-				h('a', { href: `#${r.id}`, class: state.route === r.id ? 'active' : '', 'aria-current': state.route === r.id ? 'page' : null, title: r.label() },
-					icon(r.icon), h('span', null, r.label()))))),
-			// Calendar: Blockwise's calendar page where blocks can be changed; else (phone) the calendar app. The phone adds its account sheet.
-			state.features.calendarView || desktop ? h('ul', { class: 'imp-nav__main imp-nav__apps' },
-				state.features.calendarView
-					? h('li', null, h('a', { href: '#calendar', title: tr('Calendar'), class: state.route === 'calendar' ? 'active' : '', 'aria-current': state.route === 'calendar' ? 'page' : null },
-						icon(ICON_CAL), h('span', null, tr('Calendar'))))
-					: h('li', { class: 'imp-nav__app' }, h('a', { href: '#', title: tr('Calendar'), onclick: (e) => { e.preventDefault(); desktop.openCalendar() } },
-						icon(ICON_CAL), h('span', null, tr('Calendar')), h('span', { class: 'imp-nav__ext', 'aria-hidden': 'true' }, '↗'))),
-				desktop && desktop.account ? h('li', { class: 'imp-nav__app' }, h('a', { href: '#', title: tr('Account'), onclick: (e) => { e.preventDefault(); desktop.account() } },
-					icon('M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0'), h('span', null, tr('Account')))) : null) : null,
+		const link = (href, label, d, active, onclick) => h('li', null, h('a', { href, title: label, class: active ? 'active' : '', 'aria-current': active ? 'page' : null, onclick },
+			icon(d), h('span', null, label), onclick ? h('span', { class: 'imp-nav__ext', 'aria-hidden': 'true' }, '↗') : null))
+		// Calendar: Blockwise's calendar page where blocks can be changed; else the calendar app
+		const cal = state.features.calendarView ? link('#calendar', tr('Calendar'), ICON_CAL, state.route === 'calendar')
+			: desktop ? link('#', tr('Calendar'), ICON_CAL, false, (e) => { e.preventDefault(); desktop.openCalendar() }) : null
+		const routes = ROUTES.map((r) => link(`#${r.id}`, r.label(), r.icon, state.route === r.id))
+		// Phones keep the calendar and the account sheet in the top bar, the rest in the bottom tabs
+		const phone = !!(desktop && desktop.account)
+		return h('nav', { class: 'imp-nav', 'aria-label': tr('Main') },
+			h('a', { class: 'imp-nav__logo', href: '#now', title: 'Blockwise' }, svg('svg', { viewBox: '20.5 19 62 62', width: 26, height: 26, 'aria-hidden': 'true' }, LOGO.map(([fill, d]) => svg('path', { fill, d })))),
+			h('ul', { class: 'imp-nav__main' }, phone ? routes : [routes[0], cal, ...routes.slice(1)]),
+			phone ? h('ul', { class: 'imp-nav__main imp-nav__apps' }, cal,
+				link('#', tr('Account'), 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0', false, (e) => { e.preventDefault(); desktop.account() })) : null,
 			h('div', { class: 'imp-nav__heading' }, tr('Commitments')),
 			h('ul', { class: 'imp-nav__commitments' },
 				state.commitments.map((c) => h('li', null,
-					h('a', { href: `#c/${c.id}`, title: c.name, class: state.route === 'commitment' && state.commitmentId === c.id ? 'active' : '', 'aria-current': state.route === 'commitment' && state.commitmentId === c.id ? 'page' : null },
+					h('a', { href: `#c/${c.id}`, title: c.name, style: { '--c': c.color }, class: state.route === 'commitment' && state.commitmentId === c.id ? 'active' : '', 'aria-current': state.route === 'commitment' && state.commitmentId === c.id ? 'page' : null },
 						h('span', { class: 'imp-dot', style: { background: c.color } }),
 						h('span', { class: 'imp-nav__name' }, c.name),
 						c.calendarId === null && state.features.calendars !== false ? h('span', { class: 'imp-nav__warn', title: tr('No calendar linked') }, '!') : null))),
-				h('li', null, h('a', { href: '#settings', class: 'imp-nav__add' }, '+ ', tr('New commitment')))),
+				h('li', null, h('a', { href: '#settings', class: 'imp-nav__add', title: tr('New commitment') }, '+ ', h('span', null, tr('New commitment'))))),
 		)
 	}
 
@@ -897,9 +901,9 @@
 				h('button', { class: 'imp-button', onclick: () => startTracking(null) }, icon(ICON_PLAY, 16), tr('Track unplanned time')))
 			return strip
 		}
-		const color = colorOf(r.commitmentId)
+		const color = r.commitmentId === null ? 'var(--tl-accent)' : colorOf(r.commitmentId)
 		const block = r.commitmentId !== null ? (d.commitments.find((e) => e.commitment.id === r.commitmentId) || {}).currentBlock : null
-		const strip = h('section', { class: 'imp-timer', style: { '--c': color, '--on-c': r.commitmentId === null ? 'var(--color-main-text)' : onColor(color) } },
+		const strip = h('section', { class: 'imp-timer', style: { '--c': color, '--on-c': r.commitmentId === null ? '#fff' : onColor(color) } },
 			h('div', { class: 'imp-timer__text' },
 				h('span', { class: 'imp-timer__label' }, nameOf(r.commitmentId),
 					block ? h('span', { class: 'imp-timer__block' }, ` · ${block.title || tr('Block')} ${fmt.time.format(at(block.start))}–${fmt.time.format(at(block.end))}`) : null),
@@ -946,7 +950,7 @@
 
 		return h('section', { class: `imp-col ${opts.focus ? 'imp-col--focus' : ''}`, style: { '--c': c.color, '--on-c': onColor(c.color) } },
 			h('header', { class: 'imp-col__head' },
-				h('h2', null, c.name),
+				h('h2', null, tile(c), c.name),
 				h('button', {
 					class: `imp-play ${running ? 'is-running' : ''}`,
 					onclick: () => (running ? stopTracking() : startTracking(c.id)),
@@ -2460,7 +2464,7 @@
 				h('td', { class: 'num imp-muted' }, duration(ids.reduce((s, id) => s + (id === null ? 0 : totalPlanned(id)), 0), { short: true })),
 				goalSum ? h('td', { class: 'num imp-muted' }, fmtMin(goalSum)) : null)))))
 
-		page.append(h('p', { class: 'imp-muted imp-note' }, tr('"Planned" is the time in calendar blocks during the days shown. Blocks coming up are on the Now page.')))
+		page.append(h('p', { class: 'imp-muted imp-footnote' }, tr('"Planned" is the time in calendar blocks during the days shown. Blocks coming up are on the Now page.')))
 
 		// Recent sessions, editable by deletion
 		const recent = [...sessions].sort((a, z) => z.start - a.start).slice(0, 15)
@@ -2552,7 +2556,7 @@
 		const page = h('div', { class: 'imp-page imp-cpage', style: { '--c': c.color, '--on-c': onColor(c.color) } })
 
 		// 1. Header
-		page.append(h('header', { class: 'imp-cpage__head' },
+		page.append(h('header', { class: 'imp-cpage__head' }, tile(c),
 			h('div', null,
 				h('h1', null, c.name),
 				h('p', { class: 'imp-muted' },
@@ -2706,7 +2710,7 @@
 					h('div', null, h('dt', null, tr('Blocks skipped')), h('dd', null, `${skipped.length}`, h('small', null, ` / ${past.length}`))),
 					h('div', null, h('dt', null, tr('Tracked outside blocks')), h('dd', null, duration(outside, { short: true })))),
 				skipped.length ? h('p', { class: 'imp-muted' }, tr('Skipped: {list}', { list: skipped.slice(-4).map((b) => fmt.day.format(at(b.start))).join(', ') })) : null,
-				h('p', { class: 'imp-muted imp-note' }, tr('Last 4 weeks, blocks that have ended.'))]
+				h('p', { class: 'imp-muted imp-footnote' }, tr('Last 4 weeks, blocks that have ended.'))]
 				: h('p', { class: 'imp-muted' }, tr('No blocks in the last 4 weeks.'))))
 
 		// 8. Tasks, most often carried over first
@@ -2796,7 +2800,7 @@
 					h('th', { scope: 'row' }, tr('All')),
 					h('td', { class: 'num' }, d(total.pp)), h('td', { class: 'num' }, d(total.tp)), h('td', { class: 'num' }, d(total.pn)),
 					h('td', { class: 'num' }, d(total.pm)), h('td', { class: 'num' }, d(total.tm)), h('td', { class: 'num imp-muted' }, d(total.g)))))),
-			h('p', { class: 'imp-muted imp-note' }, tr('"In blocks" is the time in calendar events of the commitment; "Tracked" is the time you recorded with play. The CSV has one row per week and commitment.')))
+			h('p', { class: 'imp-muted imp-footnote' }, tr('"In blocks" is the time in calendar events of the commitment; "Tracked" is the time you recorded with play. The CSV has one row per week and commitment.')))
 	}
 
 	// ---------------------------------------------------------------------------

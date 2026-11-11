@@ -89,6 +89,7 @@ module.exports = {
 	net: { fetch: (u, o) => fetch(u, o) },
 	screen: { getDisplayMatching: () => ({ workArea: { x: 0, y: 25, width: 1440, height: 875 } }) },
 	powerMonitor: { on() {} },
+	nativeTheme: { shouldUseDarkColors: false },
 	dialog: { response: 0, showMessageBox: async (o) => { record('dialog', o.message); return { response: module.exports.dialog.response } } },
 	// test helpers
 	__test: { log, handlers, listeners, sent, sessions, userData, ready: () => readyResolve(), BrowserWindow, Tray },

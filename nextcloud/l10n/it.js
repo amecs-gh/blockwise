@@ -170,6 +170,7 @@ OC.L10N.register(
  "Link": "Link",
  "Loading…": "Caricamento…",
  "Long break": "Pausa lunga",
+ "Main": "Principale",
  "Manage tasks": "Gestisci i task",
  "Markdown": "Markdown",
  "min": "min",
