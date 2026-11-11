@@ -1011,6 +1011,9 @@
 
 	function makeSubtaskDraggable(li, x, t) {
 		li.dataset.sid = x.id
+		// Grab it by the handle or by the row's empty space (not the title, which edits on click)
+		li.addEventListener('mousedown', (e) => { if (e.target === li) li.draggable = true })
+		li.addEventListener('mouseup', () => { if (!dragSub) li.draggable = false })
 		li.addEventListener('dragstart', (e) => {
 			e.stopPropagation()
 			e.dataTransfer.effectAllowed = 'move'

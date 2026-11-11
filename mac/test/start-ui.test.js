@@ -59,6 +59,25 @@ const ok = (n) => console.log('  ✔', n)
 	assert.ok(scroll.page <= 1, `the Now page itself doesn't scroll (${scroll.page})`)
 	assert.ok(scroll.list > 0 && scroll.bar === 0, `the tasks scroll inside, no scrollbar (${JSON.stringify(scroll)})`)
 	ok('Now: only the tasks in this block scroll')
+
+	// Tasks: a subtask moves by its own handle (not the task)
+	await page.evaluate(() => { location.hash = '#tasks' })
+	await page.waitForSelector('.imp-tcols .imp-tq__sub')
+	const order = () => page.evaluate(async () => {
+		const api = window.trackerApp.api
+		const c = (await api('GET', 'state')).commitments[0]
+		const t = (await api('GET', `tasks?commitmentId=${c.id}&status=open`)).find((x) => x.title === 'Long task')
+		return { subs: t.subtasks.map((x) => x.title), tasks: (await api('GET', `tasks?commitmentId=${c.id}&status=open`)).map((x) => x.title) }
+	})
+	const o0 = await order()
+	const subs = page.locator('.imp-tq__item:has-text("Long task") .imp-tq__sub')
+	await subs.nth(2).hover()
+	await page.dragAndDrop('.imp-tq__item:has-text("Long task") .imp-tq__sub >> nth=2 >> .imp-sub__handle', '.imp-tq__item:has-text("Long task") .imp-tq__sub >> nth=0', { targetPosition: { x: 40, y: 4 } })
+	await page.waitForTimeout(400)
+	const o1 = await order()
+	assert.equal(o1.subs[0], o0.subs[2], `third subtask moved to the top (${o1.subs.slice(0, 3)})`)
+	assert.deepEqual(o1.tasks, o0.tasks, 'the tasks kept their order')
+	ok('Tasks: drag a subtask by its handle')
 	assert.deepEqual(errors, [])
 	await browser.close()
 	console.log('\nstart-time page tests passed')

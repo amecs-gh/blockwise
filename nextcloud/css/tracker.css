@@ -2547,8 +2547,10 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 }
 .imp-tq__handle {
 	flex: 0 0 24px;
+	align-self: flex-start; /* only next to the task's title: the subtasks below have their own */
 	padding-top: 4px;
 	text-align: center;
+	cursor: grab;
 	opacity: 0;
 }
 .imp-tq__item:hover .imp-tq__handle {
@@ -2634,7 +2636,18 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 	margin: 0 !important;
 }
 .imp-tq__sub .imp-sub__handle {
-	top: 6px;
+	position: static;
+	flex: 0 0 18px;
+	align-self: stretch;
+	display: grid;
+	place-items: center;
+	margin-left: -4px;
+	border-radius: 6px;
+	opacity: 0.35;
+}
+.imp-tq__sub .imp-sub__handle:hover {
+	background: var(--tl-pill);
+	opacity: 1;
 }
 .imp-tq__subtitle {
 	min-width: 0;
