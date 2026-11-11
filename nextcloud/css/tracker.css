@@ -220,8 +220,8 @@ html.m3-dark #tracker-app {
 	font-weight: 800;
 }
 /* Every content block sits on a white rounded card */
-.imp-col,
-.imp-cal,
+.imp-day,
+.imp-inblock,
 .imp-others,
 .imp-cpage__section,
 .imp-settings__section,
@@ -491,33 +491,6 @@ html.m3-dark #tracker-app {
 
 /* --- commitment columns on Now --------------------------------------------- */
 
-.imp-columns {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-	gap: 28px var(--imp-gap);
-	align-items: start;
-}
-.imp-col {
-	padding: 20px 22px;
-}
-.imp-col__head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-}
-.imp-col__head h2 {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	margin: 0;
-	font-size: 1.3em;
-	font-weight: 800;
-	overflow-wrap: anywhere;
-}
-.imp-col__note {
-	margin: 10px 0;
-}
 #tracker-app .imp-play {
 	display: inline-grid !important;
 	flex: 0 0 auto;
@@ -539,60 +512,6 @@ html.m3-dark #tracker-app {
 	box-shadow: 0 0 0 4px color-mix(in srgb, var(--c) 30%, transparent);
 }
 
-.imp-block {
-	margin: 12px 0 16px;
-}
-.imp-block__head {
-	display: flex;
-	justify-content: space-between;
-	gap: 8px;
-	font-size: 0.92em;
-}
-.imp-block__head > span:first-child {
-	font-weight: 600;
-}
-.imp-block__time {
-	color: var(--imp-muted);
-	text-align: right;
-}
-.imp-block__title {
-	margin-top: 2px;
-	color: var(--imp-muted);
-	font-size: 0.92em;
-}
-.imp-block__bar {
-	position: relative;
-	height: 8px;
-	margin-top: 8px;
-	border-radius: 4px;
-	background: color-mix(in srgb, var(--c) 18%, transparent);
-	overflow: visible;
-}
-.imp-block__fill {
-	height: 100%;
-	border-radius: 4px;
-	background: var(--c);
-}
-.imp-block__now {
-	position: absolute;
-	top: -4px;
-	width: 2px;
-	height: 16px;
-	margin-left: -1px;
-	border-radius: 1px;
-	background: var(--imp-text);
-}
-.imp-block__left {
-	margin-top: 4px;
-	font-size: 0.88em;
-}
-
-.imp-plan h3 {
-	margin: 0 0 8px;
-	font-size: 0.95em;
-	font-weight: 600;
-	color: var(--imp-muted);
-}
 .imp-task {
 	padding: 8px 0;
 	border-bottom: 1px solid var(--imp-line);
@@ -1028,64 +947,10 @@ html.m3-dark #tracker-app {
 	font-size: 0.85em;
 }
 
-/* --- focus view ------------------------------------------------------------------ */
-
-.imp-col--focus {
-	max-width: 760px;
-}
-.imp-col--focus .imp-col__head h2 {
-	font-size: 1.6em;
-}
-.imp-others {
-	padding: 16px 18px;
-}
-.imp-others__head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 8px;
-	margin-bottom: 6px;
-}
-.imp-others__head h3 {
-	margin: 0;
-	font-size: 0.95em;
-	font-weight: 600;
-	color: var(--imp-muted);
-}
-.imp-others ul {
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-.imp-compact {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	padding: 8px 0;
-}
-.imp-compact + .imp-compact {
-	border-top: 1px solid var(--imp-line);
-}
-.imp-compact__bar {
-	align-self: stretch;
-	flex: 0 0 6px;
-	border-radius: 3px;
-	background: var(--c);
-}
-
-.imp-compact__text {
-	display: flex;
-	flex: 1;
-	flex-direction: column;
-	min-width: 0;
-	font-size: 0.92em;
-}
 #tracker-app .imp-play--small {
-	width: 32px;
-	height: 32px;
-}
-.imp-focuslink {
-	margin: -8px 0 12px;
+	width: 40px;
+	height: 40px;
+	border-radius: 13px;
 }
 
 /* --- goal in the Time chart -------------------------------------------------- */
@@ -1404,121 +1269,276 @@ html.m3-dark #tracker-app {
 	}
 }
 
-/* --- Now: work on the left, calendar on the right --------------------------------- */
+/* --- Now: the day on the left; timer, this block and the commitments on the right */
 
 .imp-now {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 260px;
+	grid-template-columns: minmax(320px, 440px) minmax(0, 1fr);
 	gap: var(--imp-gap);
 	align-items: start;
 }
-.imp-now__side {
+.imp-now__main {
 	display: grid;
-	gap: 16px;
-	position: sticky;
-	top: 12px;
+	gap: var(--imp-gap);
+	min-width: 0;
 }
-.imp-cal {
-	padding: 10px 12px 12px;
-	border: 1px solid var(--imp-line);
-	border-radius: var(--imp-radius);
-	font-size: 0.85em;
+.imp-now__main > .imp-timer {
+	margin: 0;
 }
-.imp-cal__head {
+
+/* the day: time, a pill as tall as the block, what it is */
+.imp-day {
+	padding: 24px;
+}
+.imp-day__head {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	margin-bottom: 4px;
+	gap: 12px;
+	margin-bottom: 18px;
 }
-#tracker-app .imp-cal__month {
-	min-height: 28px;
+.imp-day__head h2 {
 	margin: 0;
-	padding: 0 8px;
-	border: none;
-	border-radius: var(--border-radius-element, 8px);
-	background: transparent;
-	color: var(--imp-text);
-	font-weight: 600;
+	font-size: 1.65em;
 	text-transform: capitalize;
+}
+.imp-day__head p {
+	margin: 2px 0 0;
+	font-weight: 700;
+}
+.imp-day__nav {
+	display: flex;
+	gap: 6px;
+}
+#tracker-app .imp-day__nav .imp-icon-btn {
+	width: 44px;
+	height: 44px;
+	border-radius: 14px;
+	background: var(--tl-pill);
+	color: var(--imp-text);
+	font-size: 1.3em;
+}
+.imp-day__list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.imp-day__item {
+	display: grid;
+	grid-template-columns: 62px 52px minmax(0, 1fr);
+	align-items: center;
+	gap: 12px;
+	min-height: var(--h);
+}
+.imp-day__time {
+	color: var(--imp-muted);
+	font-size: 0.85em;
+	font-weight: 700;
+	text-align: right;
+	white-space: nowrap;
+}
+#tracker-app .imp-day__pill {
+	display: grid;
+	justify-self: center;
+	place-items: center;
+	width: 46px;
+	height: var(--h);
+	min-height: 0;
+	margin: 0;
+	padding: 0;
+	border: none;
+	border-radius: 23px;
+	background: var(--c);
+	color: var(--on-c);
+	font-size: 1.15em;
+	font-weight: 800;
+}
+#tracker-app button.imp-day__pill {
 	cursor: pointer;
 }
-#tracker-app .imp-cal__month:hover {
-	background: var(--imp-bg-soft);
+/* the pill's play icon shows on hover */
+.imp-day__pill svg {
+	display: none;
 }
-.imp-cal__grid {
-	display: grid;
-	grid-template-columns: repeat(7, minmax(0, 1fr));
-	gap: 2px;
+button.imp-day__pill:is(:hover, :focus-visible) svg {
+	display: block;
 }
-.imp-cal__wd {
-	padding: 2px 0 4px;
+button.imp-day__pill:is(:hover, :focus-visible) {
+	font-size: 0 !important;
+}
+.imp-day__item.is-now .imp-day__pill {
+	box-shadow: 0 0 0 5px color-mix(in srgb, var(--c) 25%, transparent);
+}
+.imp-day__item.is-past {
+	opacity: 0.5;
+}
+.imp-day__text {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	color: inherit;
+	text-decoration: none;
+}
+.imp-day__text > * {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.imp-day__text .imp-muted,
+.imp-day__sub {
 	color: var(--imp-muted);
-	font-size: 0.9em;
-	text-align: center;
+	font-size: 0.88em;
+	font-weight: 700;
 }
-#tracker-app .imp-cal__day {
-	position: relative;
+.imp-day__text strong {
+	font-size: 1.08em;
+	font-weight: 800;
+}
+.imp-day__sub.is-now {
+	color: var(--c);
+}
+.imp-day__empty {
+	padding: 20px 0;
+}
+
+/* the running timer: a filled card with the block as a ring */
+.imp-timer__side {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 2px;
-	min-height: 0;
-	height: 32px;
-	margin: 0;
-	padding: 2px 2px 0;
-	border: none;
-	border-radius: 6px;
-	background: transparent;
-	color: var(--imp-text);
-	font-size: 1em;
-	font-weight: 400;
-	cursor: pointer;
+	gap: 10px;
 }
-#tracker-app .imp-cal__day:hover,
-#tracker-app .imp-cal__day:focus-visible {
-	background: var(--imp-bg-soft);
-}
-.imp-cal__num {
-	display: inline-grid;
+.imp-timer__ring {
+	display: grid;
 	place-items: center;
-	width: 22px;
-	height: 22px;
+	width: 96px;
+	height: 96px;
 	border-radius: 50%;
-	line-height: 1;
+	background: conic-gradient(var(--on-c) 0 var(--p), color-mix(in srgb, var(--on-c) 25%, transparent) var(--p) 100%);
+	font-weight: 800;
 }
-.imp-cal__day.is-today .imp-cal__num {
-	background: var(--color-primary-element, #0082c9);
-	color: var(--color-primary-element-text, #fff);
+.imp-timer__ring span {
+	display: grid;
+	place-items: center;
+	width: 76px;
+	height: 76px;
+	border-radius: 50%;
+	background: var(--c);
+	font-size: 0.95em;
+}
+
+/* in this block: each task a soft row */
+.imp-inblock {
+	padding: 22px 24px;
+}
+.imp-inblock__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 4px 12px;
+	margin-bottom: 12px;
+}
+.imp-inblock__head h2 {
+	margin: 0;
+	font-size: 1.25em;
+}
+.imp-inblock__head .imp-muted {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
 	font-weight: 700;
 }
-.imp-cal__day.is-other {
-	opacity: 0.4;
+.imp-inblock .imp-task {
+	margin-bottom: 6px;
+	padding: 0;
+	border: none;
 }
-.imp-cal__day.is-past:not(.is-today) .imp-cal__num {
+.imp-inblock .imp-task__head {
+	margin: 10px 4px 6px;
 	color: var(--imp-muted);
+	font-size: 0.9em;
 }
-.imp-cal__bar {
+.imp-inblock .imp-subtasks {
+	margin: 0;
+}
+/* every subtask (or single task) a soft pill row, as in the mockup */
+#tracker-app .imp-inblock :is(.imp-subtasks li, .imp-task__title) {
+	align-items: center;
+	gap: 14px;
+	min-height: 50px;
+	margin-bottom: 6px;
+	padding: 0 14px;
+	border-radius: 16px;
+	background: var(--tl-page);
+	font-weight: 700;
+}
+#tracker-app .imp-inblock .imp-check input[type="checkbox"] {
+	width: 22px;
+	height: 22px !important;
+	margin: 0 !important;
+}
+.imp-inblock .imp-check label {
+	flex: 1 1 auto;
+}
+.imp-inblock .imp-task__name,
+.imp-inblock .imp-task__title label {
+	font-weight: 800;
+}
+.imp-now > .imp-day {
+	align-self: stretch;
+}
+.imp-inblock .imp-est {
+	padding: 2px 10px;
+	border-radius: 999px;
+	background: var(--tl-card);
+	color: var(--imp-muted);
+	font-weight: 700;
+}
+
+/* the commitments, one row each */
+.imp-others {
+	padding: 20px 22px;
+}
+.imp-others h2 {
+	margin: 0 0 8px;
+	font-size: 1.25em;
+}
+.imp-others ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.imp-compact {
 	display: flex;
-	gap: 1px;
-	width: 80%;
-	height: 4px;
-	overflow: hidden;
-	border-radius: 2px;
+	align-items: center;
+	gap: 14px;
+	padding: 10px 0;
 }
-.imp-cal__bar span {
-	flex: 0 0 auto;
-	min-width: 3px;
-	height: 100%;
+.imp-compact + .imp-compact {
+	border-top: 1px solid var(--imp-line);
 }
-.imp-cal__warn {
-	position: absolute;
-	top: 3px;
-	right: 4px;
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-	background: var(--color-error, #d91a1a);
+.imp-compact__text {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
 }
+.imp-compact__text a {
+	color: inherit;
+	font-size: 1.05em;
+	font-weight: 800;
+	text-decoration: none;
+}
+@media (max-width: 1000px) {
+	.imp-now {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
 .imp-pop__blocks {
 	margin: 8px 0 0;
 	padding: 0;
@@ -1542,14 +1562,6 @@ html.m3-dark #tracker-app {
 	margin: 8px 0 0;
 	color: var(--color-error-text, var(--color-error, #c9302c));
 	font-weight: 600;
-}
-@media (max-width: 1000px) {
-	.imp-now {
-		grid-template-columns: minmax(0, 1fr);
-	}
-	.imp-now__side {
-		position: static;
-	}
 }
 /* --- capacity: block time vs. task time ----------------------------------------- */
 
@@ -2534,17 +2546,19 @@ html.m3-dark #tracker-app {
 .imp-main:has(.imp-cv) {
 	overflow: hidden;
 }
+/* The header and the grid are one card */
 .imp-cv__head {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 10px 14px;
-	margin-bottom: 14px;
+	gap: 10px 8px;
+	padding: 22px 24px 14px;
+	border-radius: var(--imp-radius) var(--imp-radius) 0 0;
+	background: var(--tl-card);
 }
 .imp-cv__head h1 {
-	flex: 1 1 auto;
 	margin: 0;
-	font-size: 1.5em;
+	font-size: 1.6em;
 	text-transform: capitalize;
 }
 .imp-cv__nav,
@@ -2552,29 +2566,33 @@ html.m3-dark #tracker-app {
 	display: flex;
 	gap: 4px;
 }
+.imp-cv__nav {
+	margin-left: auto;
+}
 .imp-cv__arrow {
 	min-width: 36px;
 	font-size: 1.2em;
 	line-height: 1;
 }
 .imp-cv__views {
-	padding: 2px;
-	border-radius: var(--imp-radius);
-	background: var(--imp-bg-soft);
+	padding: 4px;
+	border-radius: 16px;
+	background: var(--tl-pill);
 }
-.imp-cv__views button {
-	min-height: 30px;
-	padding: 0 12px;
+#tracker-app .imp-cv__views button {
+	min-height: 36px;
+	padding: 0 14px;
 	border: none;
-	border-radius: calc(var(--imp-radius) - 2px);
+	border-radius: 12px;
 	background: transparent;
-	color: var(--imp-text);
-	font-weight: 500;
+	color: var(--imp-muted);
+	font-weight: 800;
 	cursor: pointer;
 }
-.imp-cv__views button.active {
-	background: var(--imp-bg);
-	box-shadow: 0 1px 3px color-mix(in srgb, #000 18%, transparent);
+#tracker-app .imp-cv__views button.active {
+	background: var(--tl-card);
+	color: var(--imp-text);
+	box-shadow: 0 2px 8px rgba(60, 50, 140, 0.1);
 }
 
 /* day and week */
@@ -2583,9 +2601,16 @@ html.m3-dark #tracker-app {
 	flex-direction: column;
 	flex: 1 1 auto;
 	min-height: 0;
-	border: 1px solid var(--imp-line);
-	border-radius: var(--imp-radius);
+	padding: 0 24px 16px !important;
+	border-radius: 0 0 var(--imp-radius) var(--imp-radius) !important;
 	overflow: hidden;
+}
+.imp-cv__head,
+.imp-cv__grid {
+	box-shadow: none !important;
+}
+.imp-cv {
+	filter: drop-shadow(0 10px 24px rgba(60, 50, 140, 0.08));
 }
 .imp-cv__dayheads,
 .imp-cv__body {
@@ -2594,19 +2619,18 @@ html.m3-dark #tracker-app {
 }
 .imp-cv__dayheads {
 	grid-template-columns: 52px repeat(var(--days), 1fr);
-	border-bottom: 1px solid var(--imp-line);
-	background: var(--imp-bg);
+	column-gap: 8px;
+	padding-bottom: 8px;
 }
 .imp-cv__dayhead {
 	display: flex;
-	align-items: baseline;
-	justify-content: center;
-	gap: 6px;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
 	min-height: 40px;
-	padding: 6px 4px;
+	padding: 4px;
 	border: none;
-	border-left: 1px solid var(--imp-line);
-	border-radius: 0;
+	border-radius: 14px;
 	background: none;
 	color: var(--imp-text);
 	cursor: pointer;
@@ -2616,23 +2640,22 @@ html.m3-dark #tracker-app {
 }
 .imp-cv__wd {
 	color: var(--imp-muted);
-	font-size: 0.85em;
-	text-transform: uppercase;
-	letter-spacing: 0.03em;
+	font-size: 0.9em;
+	font-weight: 700;
+	text-transform: capitalize;
 }
 .imp-cv__dn {
-	font-size: 1.25em;
-	font-weight: 600;
-}
-.imp-cv__dayhead.is-today .imp-cv__dn {
 	display: inline-grid;
 	place-items: center;
-	min-width: 1.8em;
-	height: 1.8em;
-	border-radius: 999px;
+	min-width: 34px;
+	height: 34px;
+	border-radius: 12px;
+	font-size: 1.1em;
+	font-weight: 800;
+}
+.imp-cv__dayhead.is-today .imp-cv__dn {
 	background: var(--tl-accent);
 	color: #fff;
-	font-size: 1.05em;
 }
 .imp-cv__scroll {
 	flex: 1 1 auto;
@@ -2653,41 +2676,36 @@ html.m3-dark #tracker-app {
 	right: 8px;
 	transform: translateY(-50%);
 	color: var(--imp-muted);
-	font-size: 0.75em;
+	font-size: 0.78em;
+	font-weight: 700;
+	opacity: 0.8;
 	white-space: nowrap;
 }
+/* Days as rounded columns with hour lines */
 .imp-cv__cols {
 	display: grid;
 	grid-template-columns: repeat(var(--days), 1fr);
-	background-image: repeating-linear-gradient(to bottom, var(--imp-line) 0 1px, transparent 1px 48px),
-		repeating-linear-gradient(to bottom, transparent 0 24px, color-mix(in srgb, var(--imp-line) 45%, transparent) 24px 25px, transparent 25px 48px);
+	column-gap: 8px;
 }
 .imp-cv__col {
 	position: relative;
-	border-left: 1px solid var(--imp-line);
+	border-radius: 18px;
+	background: color-mix(in srgb, var(--tl-page) 55%, var(--tl-card));
+	background-image: repeating-linear-gradient(to bottom, var(--imp-line) 0 1px, transparent 1px 48px);
 	cursor: cell;
 }
 .imp-cv__col.is-today {
-	background: color-mix(in srgb, var(--tl-accent) 4%, transparent);
+	background-color: color-mix(in srgb, var(--tl-accent) 7%, var(--tl-card));
 }
 .imp-cv__now {
 	position: absolute;
 	z-index: 3;
-	right: 0;
-	left: 0;
-	height: 2px;
-	background: var(--tl-accent);
+	right: -4px;
+	left: -4px;
+	height: 3px;
+	border-radius: 2px;
+	background: #e64980;
 	pointer-events: none;
-}
-.imp-cv__now::before {
-	position: absolute;
-	top: -4px;
-	left: -5px;
-	width: 10px;
-	height: 10px;
-	border-radius: 50%;
-	background: var(--tl-accent);
-	content: '';
 }
 .imp-cv__ev {
 	position: absolute;
@@ -2697,25 +2715,25 @@ html.m3-dark #tracker-app {
 	gap: 1px;
 	box-sizing: border-box;
 	min-height: 14px;
-	padding: 4px 8px;
-	border-radius: 12px;
-	background: color-mix(in srgb, var(--c) 24%, var(--imp-bg));
+	padding: 6px 10px;
+	border-radius: 14px;
+	background: var(--c);
 	font-weight: 700;
-	color: var(--imp-text);
+	color: var(--on-c);
 	font-size: 0.82em;
 	line-height: 1.25;
 	overflow: hidden;
 	cursor: grab;
 }
 .imp-cv__ev:hover {
-	background: color-mix(in srgb, var(--c) 32%, var(--imp-bg));
+	filter: brightness(1.06);
 }
 .imp-cv__ev:focus-visible {
 	outline: 2px solid var(--c);
 	outline-offset: 1px;
 }
 .imp-cv__ev.is-past {
-	opacity: 0.6;
+	opacity: 0.55;
 }
 .imp-cv__ev.is-short {
 	flex-direction: row;
@@ -2730,7 +2748,8 @@ html.m3-dark #tracker-app {
 }
 .imp-cv__evtitle {
 	overflow: hidden;
-	font-weight: 600;
+	font-size: 1.12em;
+	font-weight: 800;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
@@ -2739,7 +2758,9 @@ html.m3-dark #tracker-app {
 	opacity: 0.7;
 }
 .imp-cv__evtime {
-	color: color-mix(in srgb, var(--imp-text) 70%, transparent);
+	overflow: hidden;
+	opacity: 0.9;
+	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 .imp-cv__resize {
@@ -2751,10 +2772,20 @@ html.m3-dark #tracker-app {
 	cursor: ns-resize;
 }
 .imp-cv__ghost {
-	--c: var(--color-primary-element, #0082c9);
-	border-left-style: dashed;
+	--c: var(--tl-accent);
+	border: 2px dashed var(--c);
 	background: color-mix(in srgb, var(--c) 18%, transparent);
+	color: var(--imp-text);
 	pointer-events: none;
+}
+
+/* "31h planned" next to the title */
+.imp-cv__planned {
+	padding: 4px 12px;
+	border-radius: 999px;
+	background: var(--tl-pill);
+	color: var(--imp-muted);
+	font-weight: 700;
 }
 
 /* month */

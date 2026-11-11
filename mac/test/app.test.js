@@ -137,7 +137,7 @@ async function openWindow(browser, file, winName, opts = {}) {
 
 	step('main window: Tracker interface through the app, every page')
 	const win = await openWindow(browser, 'app.html', mainWin.name, { width: 1240, height: 820, hash: '#now' })
-	await win.page.waitForSelector('.imp-col, .imp-empty', { timeout: 15000 })
+	await win.page.waitForSelector('.imp-day, .imp-empty', { timeout: 15000 })
 	const firstId = (await call('api', 'GET', 'state')).commitments[0].id
 	for (const pg of ['now', 'tasks', 'done', 'time', 'settings', 'calendar', 'c/' + firstId]) {
 		await win.page.evaluate((h) => { location.hash = h }, '#' + pg)
@@ -221,10 +221,10 @@ async function openWindow(browser, file, winName, opts = {}) {
 	assert.ok(await win.page.evaluate(() => !!document.querySelector('.imp-timer:not(.imp-timer--idle)')), 'window shows the running timer')
 	await win.page.screenshot({ path: `${shots}/mac-win-now-running.png` })
 	const darkWin = await openWindow(browser, 'app.html', mainWin.name, { width: 1240, height: 820, dark: true, hash: '#now' })
-	await darkWin.page.waitForSelector('.imp-col'); await sleep(800)
+	await darkWin.page.waitForSelector('.imp-inblock'); await sleep(800)
 	await darkWin.page.screenshot({ path: `${shots}/mac-win-now-dark.png` })
 	const itWin = await openWindow(browser, 'app.html', mainWin.name, { width: 1240, height: 820, locale: 'it-IT', hash: '#now' })
-	await itWin.page.waitForSelector('.imp-col'); await sleep(800)
+	await itWin.page.waitForSelector('.imp-inblock'); await sleep(800)
 	assert.ok((await itWin.page.innerText('.imp-nav')).includes('Adesso'), 'Italian window')
 	await itWin.page.screenshot({ path: `${shots}/mac-win-now-it.png` })
 	console.log('  ok (also dark and Italian)')

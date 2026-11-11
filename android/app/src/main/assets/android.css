@@ -507,13 +507,13 @@ body.android .imp-tabs button[aria-selected="true"]::after {
 
 /* --- cards ------------------------------------------------------------------------------ */
 
-body.android :is(.imp-timer, .imp-col, .imp-warning, .imp-cal, .imp-cpage__section, .imp-settings__section, .imp-composer, .imp-chart, .imp-empty, .imp-hours, .imp-done__week, .imp-tablewrap) {
+body.android :is(.imp-timer, .imp-day, .imp-inblock, .imp-others, .imp-warning, .imp-cpage__section, .imp-settings__section, .imp-composer, .imp-chart, .imp-empty, .imp-hours, .imp-done__week, .imp-tablewrap) {
 	border: none;
 	border-radius: 24px;
 	background: var(--md-surfaceContainerLow);
 	box-shadow: 0 8px 24px rgba(60, 50, 140, 0.07);
 }
-body.android :is(.imp-timer, .imp-col, .imp-warning, .imp-cpage__section, .imp-settings__section, .imp-composer, .imp-empty) {
+body.android :is(.imp-timer, .imp-day, .imp-inblock, .imp-others, .imp-warning, .imp-cpage__section, .imp-settings__section, .imp-composer, .imp-empty) {
 	padding: 16px;
 }
 body.android .imp-timer:not(.imp-timer--idle) {
@@ -527,8 +527,8 @@ body.android .imp-warning {
 body.android .imp-warning * {
 	color: inherit;
 }
-body.android .imp-columns,
-body.android .imp-now {
+body.android .imp-now,
+body.android .imp-now__main {
 	gap: 12px;
 }
 

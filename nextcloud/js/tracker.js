@@ -183,8 +183,7 @@
 		tasksFor: null, // commitment id on the Tasks page
 		editingTask: null, // task id whose editor is open
 		addingTo: null, // task id with the inline "add subtask" field open on Now
-		showAll: false, // Now page: show all commitments while tracking
-		calMonth: 0, // months from now in the mini calendar
+		nowDay: 0, // days from today in Now's day timeline
 		calView: localStorageGet('calView', 'week'), // the built-in calendar: day | week | month
 		calDate: new Date(new Date().setHours(0, 0, 0, 0)),
 		calScroll: null, // where the time grid was scrolled to
@@ -292,7 +291,6 @@
 
 	async function startTracking(commitmentId) {
 		askNotificationPermission()
-		state.showAll = false
 		state.running = await api('POST', 'sessions/start', { commitmentId })
 		state.longBreakUntil = null
 		await refresh()
@@ -324,7 +322,7 @@
 		document.querySelectorAll('[data-now-marker]').forEach((el) => {
 			const s = Number(el.dataset.start)
 			const e = Number(el.dataset.end)
-			el.style.left = `${Math.min(100, Math.max(0, ((now - s) / (e - s)) * 100))}%`
+			el.style.setProperty('--p', `${Math.min(100, Math.max(0, ((now - s) / (e - s)) * 100))}%`)
 		})
 
 		const r = state.running
@@ -454,13 +452,9 @@
 		state.running = d.running
 		state.longBreakUntil = d.longBreakUntil
 		state.settings = d.settings
-		// Two columns: the work on the left, calendar (and other commitments while focusing) on the right
-		const main = h('div', { class: 'imp-now__main' })
-		const side = h('aside', { class: 'imp-now__side' })
-		const page = h('div', { class: 'imp-page imp-now' }, main, side)
-
-		main.append(timerStrip(d))
-		if (state.commitments.length) side.append(miniCalendar())
+		// The day on the left; the timer, what to do in this block and the commitments on the right
+		const main = h('div', { class: 'imp-now__main' }, timerStrip(d))
+		const page = h('div', { class: 'imp-page imp-now' }, dayCard(), main)
 
 		if (d.overlaps.length) {
 			main.append(h('section', { class: 'imp-warning', role: 'alert' },
@@ -479,43 +473,29 @@
 				h('a', { class: 'imp-button imp-button--primary', href: '#settings' }, tr('Create a commitment'))))
 			return page
 		}
-
-		const focusId = d.running && d.running.commitmentId !== null ? d.running.commitmentId : null
-		const focusEntry = focusId !== null ? d.commitments.find((e) => e.commitment.id === focusId) : null
-		const focusing = focusEntry && !state.showAll && d.commitments.length > 1
-		if (focusing) {
-			const others = d.commitments.filter((e) => e !== focusEntry)
-			main.append(commitmentColumn(focusEntry, d, { focus: true }))
-			side.append(h('section', { class: 'imp-others' },
-				h('div', { class: 'imp-others__head' },
-					h('h3', null, tr('Other commitments')),
-					h('button', { class: 'imp-link', onclick: () => { state.showAll = true; render() } }, tr('Show all'))),
-				h('ul', null, others.map((e) => compactRow(e, d)))))
-		} else {
-			if (focusEntry && d.commitments.length > 1) {
-				main.append(h('p', { class: 'imp-focuslink' }, h('button', { class: 'imp-link', onclick: () => { state.showAll = false; render() } }, tr('Focus on {name}', { name: focusEntry.commitment.name }))))
-			}
-			main.append(h('div', { class: 'imp-columns' }, d.commitments.map((entry) => commitmentColumn(entry, d))))
-		}
+		main.append(blockCard(d), h('section', { class: 'imp-others' },
+			h('h2', null, tr('Commitments')),
+			h('ul', null, d.commitments.map((e) => compactRow(e, d)))))
 		return page
 	}
 
-	/** One line per commitment next to the focus view. */
+	/** One line per commitment on Now: its tile, next block, weekly goal, play */
 	function compactRow(entry, d) {
 		const c = entry.commitment
 		const block = entry.currentBlock || entry.nextBlock
+		const running = d.running && d.running.commitmentId === c.id
 		return h('li', { class: 'imp-compact', style: { '--c': c.color, '--on-c': onColor(c.color) } },
-			h('span', { class: 'imp-compact__bar' }),
+			tile(c),
 			h('div', { class: 'imp-compact__text' },
-				h('strong', null, c.name),
-				h('span', { class: 'imp-muted' }, block ? blockTime(block) : tr('No block planned')),
+				h('a', { href: `#c/${c.id}` }, h('strong', null, c.name)),
+				h('span', { class: 'imp-muted' }, c.calendarId === null ? tr('No calendar linked') : block ? blockTime(block) : tr('No block planned')),
 				goalProgress(c, d, true)),
 			h('button', {
-				class: 'imp-play imp-play--small',
-				onclick: () => startTracking(c.id),
-				'aria-label': tr('Start tracking {name}', { name: c.name }),
-				title: tr('Start'),
-			}, icon(ICON_PLAY, 14, true)))
+				class: `imp-play imp-play--small ${running ? 'is-running' : ''}`,
+				onclick: () => (running ? stopTracking() : startTracking(c.id)),
+				'aria-label': running ? tr('Stop tracking {name}', { name: c.name }) : tr('Start tracking {name}', { name: c.name }),
+				title: running ? tr('Stop') : tr('Start'),
+			}, icon(running ? ICON_STOP : ICON_PLAY, 14, true)))
 	}
 
 	/**
@@ -779,78 +759,59 @@
 	 * every commitment as colored segments; days with overlaps get a red mark.
 	 * Hover, focus or tap a day for its blocks; the popover links to the Calendar app.
 	 */
-	function miniCalendar() {
-		const el = h('section', { class: 'imp-cal', 'aria-label': tr('Calendar') })
-		fillCalendar(el)
+	const hourMin = new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' })
+	/** The day as a timeline: each block a pill as tall as it is long (‹ › for other days) */
+	function dayCard() {
+		const el = h('section', { class: 'imp-day', 'aria-label': tr('Day') })
+		fillDay(el)
 		return el
 	}
 
-	async function fillCalendar(el) {
-		const month = startOfMonth(addPeriod(startOfMonth(new Date()), 'month', state.calMonth))
-		const gridStart = startOfWeek(month)
-		const nextMonth = addPeriod(month, 'month', 1)
-		let gridEnd = startOfWeek(nextMonth)
-		if (gridEnd < nextMonth) gridEnd = addPeriod(gridEnd, 'week', 1)
-		const from = Math.floor(gridStart / 1000)
-		const to = Math.floor(gridEnd / 1000)
-		let data = { blocks: [], overlaps: [] }
-		try { data = await api('GET', `blocks?from=${from}&to=${to}`) } catch (e) { /* toast shown */ }
+	async function fillDay(el) {
+		const day = addPeriod(new Date(new Date().setHours(0, 0, 0, 0)), 'day', state.nowDay)
+		const from = Math.floor(day / 1000)
+		const to = Math.floor(addPeriod(day, 'day', 1) / 1000)
+		let blocks = []
+		try { blocks = (await api('GET', `blocks?from=${from}&to=${to}`)).blocks } catch (e) { /* toast shown */ }
+		blocks = blocks.filter((b) => b.start < to && b.end > from).sort((a, b) => a.start - b.start)
 		const now = nowTs()
-		const nav = (delta) => { state.calMonth = delta === 0 ? 0 : state.calMonth + delta; fillCalendar(el) }
-
-		const weekdays = Array.from({ length: 7 }, (_, i) => new Intl.DateTimeFormat(locale, { weekday: 'narrow' }).format(addPeriod(gridStart, 'day', i)))
-		const cells = []
-		for (let d = new Date(gridStart); d < gridEnd; d = addPeriod(d, 'day', 1)) {
-			const ds = Math.floor(d / 1000)
-			const de = Math.floor(addPeriod(d, 'day', 1) / 1000)
-			const blocks = data.blocks.filter((b) => b.start < de && b.end > ds)
-			const overlaps = data.overlaps.filter((o) => o.start < de && o.end > ds)
-			const perCommitment = {}
-			blocks.forEach((b) => { perCommitment[b.commitmentId] = (perCommitment[b.commitmentId] || 0) + (Math.min(b.end, de) - Math.max(b.start, ds)) })
-			const total = Object.values(perCommitment).reduce((a, b) => a + b, 0)
-			const ordered = state.commitments.filter((c) => perCommitment[c.id])
-			const isToday = now >= ds && now < de
-			const inMonth = d.getMonth() === month.getMonth()
-			const label = `${fmt.day.format(d)}${total ? `, ${tr('{hours} planned', { hours: fmtMin(Math.round(total / 60)) })}` : ''}${overlaps.length ? `, ${trn('%n overlap', '%n overlaps', overlaps.length)}` : ''}. ${tr('Opens the calendar')}`
-			const cell = h('button', {
-				type: 'button',
-				class: `imp-cal__day ${isToday ? 'is-today' : ''} ${inMonth ? '' : 'is-other'} ${de <= now ? 'is-past' : ''}`,
-				'aria-label': label,
-			},
-			h('span', { class: 'imp-cal__num' }, String(d.getDate())),
-			overlaps.length ? h('span', { class: 'imp-cal__warn', 'aria-hidden': 'true' }) : null,
-			h('span', { class: 'imp-cal__bar', 'aria-hidden': 'true' },
-				// Segment width: share of a 10-hour day, so busy days look busy
-				ordered.map((c) => h('span', { style: { background: c.color, width: `${Math.min(100, (perCommitment[c.id] / (10 * 3600)) * 100)}%` } }))))
-			const date = new Date(d)
-			popover(cell, () => [
-				h('div', { class: 'imp-pop__head' },
-					h('strong', null, fmt.day.format(date)),
-					total ? h('span', { class: 'imp-muted' }, tr('{hours} planned', { hours: fmtMin(Math.round(total / 60)) })) : null),
-				blocks.length
-					? h('ul', { class: 'imp-pop__blocks' }, blocks.map((b) => h('li', { style: { '--c': colorOf(b.commitmentId) } },
-						h('span', { class: 'imp-pop__time' }, `${fmt.time.format(at(b.start))}–${fmt.time.format(at(b.end))}`),
-						h('span', null, h('strong', null, nameOf(b.commitmentId)), b.title ? h('span', { class: 'imp-muted' }, ` · ${b.title}`) : null))))
-					: h('p', { class: 'imp-pop__empty' }, tr('No blocks planned.')),
-				overlaps.length ? h('p', { class: 'imp-pop__warn' }, trn('%n overlap between commitments', '%n overlaps between commitments', overlaps.length)) : null,
-			], {
-				// Clicking a day opens it in the calendar (Apple Calendar in the Mac app)
-				onClick: () => {
-					if (desktop) desktop.openCalendar(Math.floor(date / 1000))
-					else window.location.href = OC.generateUrl(`/apps/calendar/timeGridDay/${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`)
-				},
-			})
-			cells.push(cell)
+		const d = state.dashboard
+		const nav = (delta) => { state.nowDay = delta && state.nowDay + delta; fillDay(el) }
+		const planned = blocks.reduce((sum, b) => sum + Math.min(b.end, to) - Math.max(b.start, from), 0)
+		const item = (b) => {
+			const c = commitmentById(b.commitmentId) || { id: b.commitmentId, name: nameOf(b.commitmentId), color: colorOf(b.commitmentId) }
+			const entry = d && d.commitments.find((e) => e.commitment.id === c.id)
+			const inside = b.start <= now && now < b.end
+			const isNext = !inside && entry && entry.nextBlock && entry.nextBlock.start === b.start
+			const tasks = entry && (inside || isNext) ? entry.plannedTaskIds.length : 0
+			const min = (b.end - b.start) / 60
+			const range = `${hourMin.format(at(b.start))} – ${hourMin.format(at(b.end))}`
+			const running = d && d.running && d.running.commitmentId === c.id
+			const pill = b.end > now && !running
+				? h('button', { type: 'button', class: 'imp-day__pill', onclick: () => startTracking(c.id), title: tr('Start'), 'aria-label': tr('Start tracking {name}', { name: c.name }) }, c.name.trim().charAt(0).toUpperCase(), icon(ICON_PLAY, 14, true))
+				: h('span', { class: 'imp-day__pill', 'aria-hidden': 'true' }, c.name.trim().charAt(0).toUpperCase())
+			return h('li', { class: `imp-day__item ${inside ? 'is-now' : ''} ${b.end <= now ? 'is-past' : ''}`, style: { '--c': c.color, '--on-c': onColor(c.color), '--h': `${Math.round(Math.min(140, Math.max(46, 20 + min * 0.85)))}px` } },
+				h('span', { class: 'imp-day__time' }, hourMin.format(at(b.start))),
+				pill,
+				h('a', { class: 'imp-day__text', href: `#c/${c.id}` },
+					h('span', { class: 'imp-muted' }, range),
+					h('strong', null, c.name, b.title ? ` · ${b.title}` : ''),
+					inside ? h('span', { class: 'imp-day__sub is-now' }, tr('Now'), ' · ', h('span', { 'data-live': 'left-short', 'data-ts': b.end }, duration(b.end - now)), ' ', tr('left'))
+						: tasks ? h('span', { class: 'imp-day__sub' }, trn('%n task', '%n tasks', tasks)) : null))
 		}
-
 		el.replaceChildren(
-			h('div', { class: 'imp-cal__head' },
-				h('button', { class: 'imp-icon-btn', 'aria-label': tr('Previous month'), onclick: () => nav(-1) }, '‹'),
-				h('button', { class: 'imp-cal__month', onclick: () => nav(0), title: tr('This month') }, fmt.monthLong.format(month)),
-				h('button', { class: 'imp-icon-btn', 'aria-label': tr('Next month'), onclick: () => nav(1) }, '›')),
-			h('div', { class: 'imp-cal__grid' },
-				weekdays.map((w) => h('span', { class: 'imp-cal__wd', 'aria-hidden': 'true' }, w)),
-				cells))
+			h('header', { class: 'imp-day__head' },
+				h('div', null,
+					h('h2', null, new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(day)),
+					h('p', { class: 'imp-muted' }, new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long' }).format(day),
+						planned ? ` · ${tr('{hours} planned', { hours: fmtMin(Math.round(planned / 60)) })}` : '')),
+				h('div', { class: 'imp-day__nav' },
+					state.nowDay ? h('button', { class: 'imp-button', onclick: () => nav(0) }, tr('Today')) : null,
+					h('button', { class: 'imp-icon-btn', 'aria-label': tr('Previous day'), onclick: () => nav(-1) }, '‹'),
+					h('button', { class: 'imp-icon-btn', 'aria-label': tr('Next day'), onclick: () => nav(1) }, '›'))),
+			blocks.length
+				? h('ol', { class: 'imp-day__list' }, blocks.map(item))
+				: h('p', { class: 'imp-muted imp-day__empty' }, tr('No blocks planned.'), ' ', state.features.calendarView ? h('a', { href: '#calendar' }, tr('Plan a block')) : null))
 	}
 
 	/** You started before pressing play: move the running session's start back */
@@ -906,12 +867,16 @@
 		const strip = h('section', { class: 'imp-timer', style: { '--c': color, '--on-c': r.commitmentId === null ? '#fff' : onColor(color) } },
 			h('div', { class: 'imp-timer__text' },
 				h('span', { class: 'imp-timer__label' }, nameOf(r.commitmentId),
-					block ? h('span', { class: 'imp-timer__block' }, ` · ${block.title || tr('Block')} ${fmt.time.format(at(block.start))}–${fmt.time.format(at(block.end))}`) : null),
+					block ? h('span', { class: 'imp-timer__block', title: `${fmt.time.format(at(block.start))}–${fmt.time.format(at(block.end))}` }, ` · ${block.title || tr('Block')}`) : null),
 				h('span', { class: 'imp-timer__clock', 'data-live': 'elapsed', 'data-ts': r.start }, clock(now - r.start)),
 				h('button', { type: 'button', class: 'imp-timer__since', title: tr('Started earlier? Change the start'), onclick: (e) => startMenu(e.currentTarget, r) },
 					tr('Started {time}', { time: fmt.time.format(at(r.start)) }), h('span', { 'aria-hidden': 'true' }, ' ✎')),
 				block ? h('span', { class: 'imp-timer__sub' }, h('span', { 'data-live': 'left-short', 'data-ts': block.end }, duration(block.end - now)), ' ', tr('left in this block')) : null),
-			h('button', { class: 'imp-timer__stop', onclick: () => stopTracking(), 'aria-label': tr('Stop tracking') }, icon(ICON_STOP, 16, true), tr('Stop')))
+			h('div', { class: 'imp-timer__side' },
+				// The block so far, as a ring
+				block ? h('div', { class: 'imp-timer__ring', 'aria-hidden': 'true', 'data-now-marker': '', 'data-start': block.start, 'data-end': block.end, style: { '--p': `${Math.min(100, ((now - block.start) / (block.end - block.start)) * 100)}%` } },
+					h('span', { 'data-live': 'left-short', 'data-ts': block.end }, duration(block.end - now))) : null,
+				h('button', { class: 'imp-timer__stop', onclick: () => stopTracking(), 'aria-label': tr('Stop tracking') }, icon(ICON_STOP, 16, true), tr('Stop'))))
 
 		if (r.pomodoro) {
 			const p = pomodoroPhase(r.start, state.settings, now)
@@ -927,51 +892,28 @@
 		return strip
 	}
 
-	function blockTimeline(block, color) {
-		const now = nowTs()
-		const inside = block.start <= now && now < block.end
-		return h('div', { class: 'imp-block' },
-			h('div', { class: 'imp-block__head' },
-				h('span', null, inside ? tr('Now') : tr('Next')),
-				h('span', { class: 'imp-block__time' }, blockTime(block))),
-			block.title ? h('div', { class: 'imp-block__title' }, block.title) : null,
-			h('div', { class: 'imp-block__bar', style: { '--c': color } },
-				h('div', { class: 'imp-block__fill', style: { width: inside ? `${((now - block.start) / (block.end - block.start)) * 100}%` : '0' } }),
-				inside ? h('div', { class: 'imp-block__now', 'data-now-marker': '', 'data-start': block.start, 'data-end': block.end }) : null),
-			inside ? h('div', { class: 'imp-block__left imp-muted' }, h('span', { 'data-live': 'left-short', 'data-ts': block.end }, duration(block.end - now)), ' ', tr('left')) : null)
-	}
-
-	function commitmentColumn(entry, d, opts = {}) {
+	/** What to do now: the tasks for the running (or current, or next) block */
+	function blockCard(d) {
+		const r = d.running
+		const soonest = (e) => (e.currentBlock ? 0 : e.nextBlock ? e.nextBlock.start : Infinity)
+		const entry = (r && d.commitments.find((e) => e.commitment.id === r.commitmentId)) || d.commitments.slice().sort((a, b) => soonest(a) - soonest(b))[0]
 		const c = entry.commitment
-		const running = d.running && d.running.commitmentId === c.id
+		const block = entry.currentBlock || entry.nextBlock
 		const planned = entry.queue.filter((t) => entry.plannedTaskIds.includes(t.id))
 		const later = entry.queue.filter((t) => !entry.plannedTaskIds.includes(t.id))
-		const block = entry.currentBlock || entry.nextBlock
-
-		return h('section', { class: `imp-col ${opts.focus ? 'imp-col--focus' : ''}`, style: { '--c': c.color, '--on-c': onColor(c.color) } },
-			h('header', { class: 'imp-col__head' },
-				h('h2', null, tile(c), c.name),
-				h('button', {
-					class: `imp-play ${running ? 'is-running' : ''}`,
-					onclick: () => (running ? stopTracking() : startTracking(c.id)),
-					'aria-label': running ? tr('Stop tracking {name}', { name: c.name }) : tr('Start tracking {name}', { name: c.name }),
-					title: running ? tr('Stop') : tr('Start'),
-				}, icon(running ? ICON_STOP : ICON_PLAY, 18, true))),
-			goalProgress(c, d, false),
-			capacityLine(entry),
-			c.calendarId === null
-				? h('p', { class: 'imp-muted imp-col__note' }, tr('Its calendar was deleted. Link a calendar in Settings to plan blocks.'))
-				: block ? blockTimeline(block, c.color) : h('p', { class: 'imp-muted imp-col__note' }, tr('No block in the next two weeks. Add an event to the "{name}" calendar.', { name: c.name })),
+		return h('section', { class: 'imp-inblock', style: { '--c': c.color, '--on-c': onColor(c.color) } },
+			h('header', { class: 'imp-inblock__head' },
+				h('h2', null, entry.currentBlock ? tr('In this block') : block ? tr('For the next block') : tr('Up next')),
+				h('span', { class: 'imp-muted' }, h('span', { class: 'imp-dot', style: { background: c.color } }), c.name, block ? ` · ${blockTime(block)}` : '')),
 			planned.length
-				? h('div', { class: 'imp-plan' },
-					h('h3', null, entry.currentBlock ? tr('In this block') : entry.nextBlock ? tr('For the next block') : tr('Up next')),
-					planned.map((t) => taskChecklist(t, { addable: true })))
-				: h('p', { class: 'imp-muted imp-col__note' }, tr('No open tasks.'), ' ', h('a', { href: '#tasks', onclick: () => { state.tasksFor = c.id } }, tr('Add tasks'))),
+				? planned.map((t) => taskChecklist(t, { addable: true }))
+				: h('p', { class: 'imp-muted' }, tr('No open tasks.'), ' ', h('a', { href: '#tasks', onclick: () => { state.tasksFor = c.id } }, tr('Add tasks'))),
 			later.length
 				? h('details', { class: 'imp-later' },
 					h('summary', null, trn('%n more task in the queue', '%n more tasks in the queue', later.length)),
 					h('ol', null, later.map((t) => h('li', null, t.title, t.subtasks.length ? h('span', { class: 'imp-muted' }, ` ${t.subtasks.filter((s) => s.done).length}/${t.subtasks.length}`) : null))))
-				: null)
+				: null,
+			capacityLine(entry))
 	}
 
 	/**
@@ -3024,11 +2966,13 @@
 		const to = tsOf(addDays(days[days.length - 1], 1))
 		const { blocks } = await api('GET', `blocks?from=${from}&to=${to}`)
 		state.calBlocks = blocks
-		page.append(calHeader(days), state.calView === 'month' ? monthGrid(days, blocks) : timeGrid(days, blocks))
+		page.append(calHeader(days, blocks), state.calView === 'month' ? monthGrid(days, blocks) : timeGrid(days, blocks))
 		return page
 	}
 
-	function calHeader(days) {
+	function calHeader(days, blocks) {
+		const from = tsOf(days[0]), to = tsOf(addDays(days[days.length - 1], 1))
+		const planned = blocks.reduce((sum, b) => sum + Math.max(0, Math.min(b.end, to) - Math.max(b.start, from)), 0)
 		const d = state.calDate
 		const title = state.calView === 'month' ? calFmt.month.format(d)
 			: state.calView === 'day' ? calFmt.day.format(d)
@@ -3036,6 +2980,7 @@
 		const seg = (v, label, key) => h('button', { type: 'button', class: state.calView === v ? 'active' : '', 'aria-pressed': state.calView === v ? 'true' : 'false', title: `${label} (${key})`, onclick: () => calSetView(v) }, label)
 		return h('header', { class: 'imp-cv__head' },
 			h('h1', null, title),
+			planned ? h('span', { class: 'imp-cv__planned' }, tr('{hours} planned', { hours: fmtMin(Math.round(planned / 60)) })) : null,
 			h('div', { class: 'imp-cv__nav' },
 				h('button', { type: 'button', class: 'imp-button imp-cv__arrow', 'aria-label': tr('Previous'), title: tr('Previous (←)'), onclick: () => calMove(-1) }, '‹'),
 				h('button', { type: 'button', class: 'imp-button', title: tr('Today (T)'), onclick: () => { state.calDate = startOfDay(new Date()); state.calScroll = null; render() } }, tr('Today')),
@@ -3132,8 +3077,9 @@
 				if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteBlock(el, b) }
 			},
 		},
-		h('span', { class: 'imp-cv__evtitle' }, title, b.repeat ? h('span', { class: 'imp-cv__rep', title: repeatLabel(b.repeat), 'aria-hidden': 'true' }, ' ↻') : null),
-		short ? null : h('span', { class: 'imp-cv__evtime' }, `${fmt.time.format(at(b.start))}–${fmt.time.format(at(b.end))}`),
+		// The commitment in bold; below it, the block's title and time
+		h('span', { class: 'imp-cv__evtitle' }, c ? c.name : title, b.repeat ? h('span', { class: 'imp-cv__rep', title: repeatLabel(b.repeat), 'aria-hidden': 'true' }, ' ↻') : null),
+		short ? null : h('span', { class: 'imp-cv__evtime' }, b.title && c ? `${b.title} · ` : '', `${hourMin.format(at(b.start))}–${hourMin.format(at(b.end))}`),
 		clipEnd ? null : h('span', { class: 'imp-cv__resize', 'aria-hidden': 'true' }))
 		el.calBlock = b
 		return el
