@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+	<meta name="referrer" content="no-referrer">
+	<!--seo-->
+	<link rel="icon" href="logo.svg" type="image/svg+xml">
+	<link rel="apple-touch-icon" href="img/icon-180.png">
+	<link rel="stylesheet" href="style.css">
+	<link rel="preload" as="image" href="img/mac-now.webp" fetchpriority="high">
+</head>
+<body>
+<header class="bar">
+	<div class="bar__in">
+		<a class="brand" href="#top"><img src="logo.svg" alt="" width="24" height="24">Blockwise</a>
+		<nav aria-label="Site">
+			<a href="#how" data-t="nav.how">How it works</a>
+			<a href="#features" data-t="nav.features">Features</a>
+			<a href="#privacy" data-t="nav.privacy">Your data</a>
+		</nav>
+		<!--lang-->
+		<a class="btn btn--small" href="#download" data-t="nav.download">Download</a>
+	</div>
+</header>
+
+<main id="top">
+	<section class="hero">
+		<img class="hero__icon" src="logo.svg" alt="" width="88" height="88">
+		<h1><span data-t="hero.title">Plan your week in blocks.</span> <span class="muted" data-t="hero.sub">Get through it one block at a time.</span></h1>
+		<p class="lead" data-t="hero.lead">Give each commitment blocks of time in the calendar. Blockwise fills every block with the next tasks, tracks your time with one tap, and shows where your week really went.</p>
+		<div class="cta">
+			<a class="btn" href="#download" data-t="hero.cta">Download</a>
+			<a class="more" href="#how" data-t="hero.more">See how it works</a>
+		</div>
+		<p class="note" data-t="hero.eyebrow">A time-blocking planner and time tracker for Mac, Android and Nextcloud</p>
+		<figure class="stage">
+			<div class="window"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+				<picture>
+					<source srcset="img/mac-now-dark.webp" media="(prefers-color-scheme: dark)">
+					<img src="img/mac-now.webp" width="1600" height="1058" alt="The Now page: today's blocks as a timeline, the running timer and the tasks for this block" data-t-alt="shot.now" fetchpriority="high">
+				</picture>
+			</div>
+			<img class="phone" src="img/android-now.webp" width="720" height="1561" alt="Blockwise on an Android phone" data-t-alt="shot.phone" loading="lazy">
+		</figure>
+	</section>
+
+	<section id="how" class="band">
+		<div class="wrap">
+			<h2 class="title" data-t="how.title">How it works</h2>
+			<ol class="steps">
+				<li><span class="num">1</span><h3 data-t="how.1.t">Commitments</h3><p data-t="how.1.p">What you give time to: Thesis, Work, Teaching. Each one gets its own color and its own calendar.</p></li>
+				<li><span class="num">2</span><h3 data-t="how.2.t">Blocks</h3><p data-t="how.2.p">Every event in a commitment's calendar is a block of time for it. Drag to plan them; repeat them every weekday or every week.</p></li>
+				<li><span class="num">3</span><h3 data-t="how.3.t">Tasks fill the blocks</h3><p data-t="how.3.p">Tasks queue up per commitment, with subtasks and estimates like "Draft 45m". Each block takes tasks from the top until it's full; what you don't finish moves to the next block.</p></li>
+				<li><span class="num">4</span><h3 data-t="how.4.t">Press play</h3><p data-t="how.4.p">Track time with one tap, on the Mac from the menu bar too. Forgot to start? Move the start back. Done and Time show your week as it really was.</p></li>
+			</ol>
+		</div>
+	</section>
+
+	<section class="showcase">
+		<h2 class="title" data-t="shots.cal.t">A calendar made for blocks</h2>
+		<p class="lead" data-t="shots.cal.p">Day, week and month. Drag to create, move or resize a block; click one to see the tasks waiting in it. Use the built-in calendar, Apple Calendar or your Nextcloud calendars.</p>
+		<figure class="window window--wide"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+			<picture>
+				<source srcset="img/mac-calendar-dark.webp" media="(prefers-color-scheme: dark)">
+				<img src="img/mac-calendar.webp" width="1600" height="1058" alt="The calendar: a week of blocks in each commitment's color" data-t-alt="shot.calendar" loading="lazy">
+			</picture>
+		</figure>
+	</section>
+
+	<section id="features" class="band">
+		<div class="wrap">
+			<h2 class="title" data-t="feat.title">Everything for focused weeks</h2>
+			<div class="bento">
+				<article class="tile tile--wide tile--accent"><h3 data-t="feat.1.t">Now</h3><p data-t="feat.1.p">Today as a timeline, the running timer, and only the tasks for this block.</p></article>
+				<article class="tile"><h3 data-t="feat.4.t">Weekly goals</h3><p data-t="feat.4.p">Hours per week for each commitment, with progress on the Now page.</p></article>
+				<article class="tile"><h3 data-t="feat.2.t">Tasks and estimates</h3><p data-t="feat.2.p">An ordered queue per commitment. Check off subtasks in order; it warns you when the tasks need more time than the blocks have.</p></article>
+				<article class="tile"><h3 data-t="feat.3.t">Notes</h3><p data-t="feat.3.p">Notes per commitment in Markdown, with checklists you can tick.</p></article>
+				<article class="tile"><h3 data-t="feat.6.t">Pomodoro and reminders</h3><p data-t="feat.6.p">Optional Pomodoro rounds, and a reminder before a block ends.</p></article>
+				<article class="tile tile--full"><h3 data-t="feat.5.t">Done and Time</h3><p data-t="feat.5.p">Your week on a timeline: planned blocks, tracked time and what you checked off. Hours per commitment, with CSV export.</p></article>
+			</div>
+		</div>
+	</section>
+
+	<section id="privacy" class="dark">
+		<div class="wrap">
+			<h2 class="title" data-t="priv.title">Your data stays yours</h2>
+			<p class="lead" data-t="priv.lead">No accounts with us, no tracking, no ads. Blockwise works offline and syncs only where you choose.</p>
+			<div class="cols">
+				<div><h3>Nextcloud</h3><p data-t="priv.nc">On your own server. Blocks are events in Nextcloud Calendar; Mac, phone and web stay in sync.</p></div>
+				<div><h3>Dropbox · Google Drive</h3><p data-t="priv.drive">Mac only. Synced through your own Dropbox or Google Drive, end-to-end encrypted with a passphrase only you know.</p></div>
+				<div><h3 data-t="priv.local.t">This Mac only</h3><p data-t="priv.local">No sync at all. You can connect a sync later and your data comes along.</p></div>
+			</div>
+		</div>
+	</section>
+
+	<section id="download" class="showcase">
+		<h2 class="title" data-t="dl.title">Download</h2>
+		<p class="lead" data-t="hero.free">Free and open source (AGPL-3.0). English and Italian.</p>
+		<div class="downloads">
+			<article class="dl">
+				<svg class="dl__icon" viewBox="0 0 48 48" aria-hidden="true"><rect x="8" y="10" width="32" height="21" rx="3"/><path d="M4 36h40l-3 4H7z"/></svg>
+				<h3>Mac</h3>
+				<p class="req" data-t="dl.mac.req">Apple silicon, macOS 13 or later</p>
+				<a class="btn" href="https://github.com/amecs-gh/tracker-android/releases/download/mac-latest/Blockwise-mac.dmg" data-t="dl.mac.btn">Download for Mac (.dmg)</a>
+				<details><summary data-t="dl.how">How to install</summary>
+					<ol>
+						<li data-t="dl.mac.1">Open the .dmg and drag Blockwise onto Applications.</li>
+						<li data-t="dl.mac.2">The app isn't notarized by Apple yet. The first time, open it, then go to System Settings → Privacy &amp; Security and click Open Anyway.</li>
+					</ol>
+				</details>
+			</article>
+			<article class="dl">
+				<svg class="dl__icon" viewBox="0 0 48 48" aria-hidden="true"><rect x="14" y="4" width="20" height="40" rx="4"/><path d="M21 39h6"/></svg>
+				<h3>Android</h3>
+				<p class="req" data-t="dl.and.req">Android 8 or later · needs a Nextcloud</p>
+				<a class="btn" href="https://github.com/amecs-gh/tracker-android/releases/download/latest/Blockwise.apk" data-t="dl.and.btn">Download for Android (.apk)</a>
+				<details><summary data-t="dl.how">How to install</summary>
+					<ol>
+						<li data-t="dl.and.1">Open Blockwise.apk on your phone; allow your browser to install apps if asked.</li>
+						<li data-t="dl.and.2">Log in to your Nextcloud. Blocks come from the phone's calendars: sync your Nextcloud calendars with DAVx⁵.</li>
+					</ol>
+				</details>
+			</article>
+			<article class="dl">
+				<svg class="dl__icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M14 36a9 9 0 0 1-1-18 12 12 0 0 1 23 3 7.5 7.5 0 0 1-1 15z"/></svg>
+				<h3>Nextcloud</h3>
+				<p class="req" data-t="dl.nc.req">Nextcloud 32 to 35, with the Calendar app</p>
+				<a class="btn" href="https://github.com/amecs-gh/tracker-android/releases/download/nextcloud-latest/blockwise-nextcloud.tar.gz" data-t="dl.nc.btn">Download the Nextcloud app</a>
+				<details><summary data-t="dl.how">How to install</summary>
+					<ol>
+						<li data-t="dl.nc.1">Extract it into your server's apps folder: it makes a folder called tracker.</li>
+						<li data-t="dl.nc.2">Enable Blockwise under Apps, or run: occ app:enable tracker</li>
+					</ol>
+				</details>
+			</article>
+		</div>
+		<a class="more" href="https://github.com/amecs-gh/tracker-android/releases" data-t="dl.all">All releases and source code on GitHub</a>
+	</section>
+</main>
+
+<footer class="foot">
+	<div class="wrap">
+		<p data-t="foot">Open source under the AGPL-3.0. Started from TimeManager by Thomas Ebert.</p>
+		<p>© 2026 Blockwise</p>
+	</div>
+</footer>
+</body>
+</html>

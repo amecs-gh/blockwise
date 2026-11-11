@@ -125,6 +125,7 @@ img {
 	text-decoration: none;
 }
 .lang {
+	display: inline-block;
 	padding: 4px 8px;
 	border: 1px solid var(--line);
 	border-radius: 8px;
@@ -481,6 +482,7 @@ img {
 		display: none;
 	}
 	.lang {
+	display: inline-block;
 		margin-left: auto;
 	}
 	.steps {
