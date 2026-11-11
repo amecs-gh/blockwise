@@ -1488,8 +1488,56 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 .imp-inblock .imp-task__title label {
 	font-weight: 800;
 }
-.imp-now > .imp-day {
-	align-self: stretch;
+.imp-now__side {
+	display: flex;
+	flex-direction: column;
+	gap: var(--imp-gap);
+	min-width: 0;
+}
+.imp-now__side > .imp-day {
+	flex: 1 0 auto;
+}
+/* Wide windows: the page stays put; the day and this block's tasks scroll inside,
+   without a scrollbar (a fade at the bottom shows there is more) */
+@media (min-width: 1001px) and (min-height: 560px) {
+	.imp-now {
+		height: 100%;
+		padding-bottom: 20px;
+		align-items: stretch;
+		grid-template-rows: minmax(0, 1fr);
+	}
+	.imp-now__side,
+	.imp-now__main {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+	}
+	.imp-now__side > .imp-day {
+		flex: 1 1 auto;
+		min-height: 0;
+		overflow-y: auto;
+	}
+	.imp-now__main > .imp-inblock {
+		display: flex;
+		flex: 1 1 auto;
+		flex-direction: column;
+		min-height: 160px;
+	}
+	.imp-inblock__list {
+		flex: 1 1 auto;
+		min-height: 0;
+		margin: 0 -6px;
+		padding: 0 6px 24px;
+		overflow-y: auto;
+		-webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+		mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+	}
+	:is(.imp-inblock__list, .imp-now__side > .imp-day) {
+		scrollbar-width: none;
+	}
+	:is(.imp-inblock__list, .imp-now__side > .imp-day)::-webkit-scrollbar {
+		display: none;
+	}
 }
 .imp-inblock .imp-est {
 	padding: 2px 10px;
@@ -1605,7 +1653,7 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 /* --- commitment page ---------------------------------------------------------------- */
 
 .imp-cpage {
-	max-width: 980px;
+	max-width: 1180px;
 }
 .imp-cpage__head {
 	display: flex;
@@ -1646,19 +1694,140 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 	align-items: center;
 	gap: 8px;
 }
-#tracker-app .imp-cpage__head :is(.imp-button, .imp-play) {
+#tracker-app .imp-cpage__head .imp-button {
+	background: color-mix(in srgb, var(--on-c) 20%, transparent);
+	color: inherit;
+}
+#tracker-app .imp-cpage__head .imp-cpage__start {
+	min-height: 52px;
+	padding: 0 24px;
+	border-radius: 18px;
 	background: #ffffff;
 	color: #24223a;
+	font-size: 1.05em;
+	font-weight: 800;
+}
+/* this week against the goal */
+.imp-cpage__goal {
+	max-width: 520px;
+	height: 12px;
+	margin-top: 12px;
+	border-radius: 6px;
+	background: color-mix(in srgb, var(--on-c) 25%, transparent);
+	overflow: hidden;
+}
+.imp-cpage__goal span {
+	display: block;
+	height: 100%;
+	border-radius: 6px;
+	background: var(--on-c);
+}
+/* the numbers at a glance */
+#tracker-app .imp-cpage__stats {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: var(--imp-gap);
+	margin: var(--imp-gap) 0 0;
+}
+.imp-cpage__stats > div {
+	padding: 18px 20px;
+	border-radius: var(--imp-radius);
+	background: var(--tl-card);
+	box-shadow: var(--tl-shadow);
+}
+#tracker-app .imp-cpage__stats dt {
+	color: var(--imp-muted);
+	font-size: 0.88em;
+	font-weight: 700;
+}
+#tracker-app .imp-cpage__stats dd {
+	margin: 4px 0 0;
+	font-size: 1.7em;
+	font-weight: 800;
+	line-height: 1.15;
+}
+.imp-cpage__stats dd small {
+	display: block;
+	color: var(--imp-muted);
+	font-size: 0.5em;
+	font-weight: 700;
+}
+/* two cards side by side */
+.imp-cpage__row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+	gap: var(--imp-gap);
+	align-items: start;
+}
+.imp-cpage__row--even {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.imp-cpage__row > .imp-cpage__section {
+	margin-top: var(--imp-gap);
 }
 .imp-cpage__section {
 	margin-top: var(--imp-gap);
+	padding: 22px 24px;
+}
+/* coming blocks: a bar in the commitment's color, as tall as the block */
+.imp-cpage__blocks ul {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.imp-cpage__blocks li {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 6px;
+	padding: 10px 12px;
+	border-radius: 16px;
+	background: var(--tl-page);
+}
+.imp-cpage__blocks li.is-now {
+	background: color-mix(in srgb, var(--c) 14%, var(--tl-card));
+}
+.imp-cpage__blocks li > span:last-child {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	font-size: 0.92em;
+}
+.imp-cpage__blocks .imp-muted {
+	font-weight: 700;
+}
+.imp-cpage__bar {
+	flex: 0 0 10px;
+	border-radius: 5px;
+	background: var(--c);
+}
+/* planning a block from here: part of the card */
+.imp-cpage__blocks .imp-newblock {
+	margin: 12px 0 0;
+	padding: 0;
+	border-radius: 0;
+	background: none;
+	box-shadow: none !important;
+}
+/* stats inside a card: soft tiles */
+.imp-cpage__section .imp-stats > div {
+	padding: 12px 14px;
+	border-left: none;
+	border-radius: 16px;
+	background: var(--tl-page);
+}
+.imp-cpage__section .imp-stats dd {
+	font-weight: 800;
+}
+.imp-cpage .imp-figure svg {
+	max-height: 260px;
 }
 .imp-cpage__section h2,
 .imp-hours h2,
 .imp-report__sub {
 	margin: 0 0 10px;
-	font-size: 1.15em;
-	font-weight: 600;
+	font-size: 1.2em;
+	font-weight: 800;
 }
 .imp-report__sub {
 	margin-top: 32px;
@@ -1693,9 +1862,6 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 	padding-left: 12px;
 	border-left: 3px solid color-mix(in srgb, var(--c) 45%, transparent);
 }
-.imp-stats__wide {
-	grid-column: span 2;
-}
 .imp-stats dt {
 	color: var(--imp-muted);
 	font-size: 0.88em;
@@ -1708,13 +1874,6 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 .imp-stats dd small {
 	color: var(--imp-muted);
 	font-size: 0.68em;
-	font-weight: 400;
-}
-.imp-cpage__next {
-	margin: 2px 0 0;
-	padding: 0;
-	list-style: none;
-	font-size: 0.72em;
 	font-weight: 400;
 }
 .imp-table--compact th,
@@ -1746,8 +1905,10 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 	list-style: none;
 }
 .imp-cpage__tasks li {
-	padding: 8px 0;
-	border-bottom: 1px solid var(--imp-line);
+	margin-bottom: 6px;
+	padding: 12px 14px;
+	border-radius: 16px;
+	background: var(--tl-page);
 }
 .imp-cpage__task {
 	display: flex;
@@ -1756,16 +1917,16 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 	gap: 4px 10px;
 }
 .imp-cpage__tname {
-	font-weight: 500;
+	font-weight: 800;
 }
 .imp-cpage__tmeta {
 	margin-left: auto;
 	font-size: 0.9em;
 }
 .imp-cpage__tbar {
-	height: 4px;
-	margin-top: 6px;
-	border-radius: 2px;
+	height: 6px;
+	margin-top: 8px;
+	border-radius: 3px;
 	background: color-mix(in srgb, var(--c) 16%, transparent);
 	overflow: hidden;
 }
@@ -1780,9 +1941,31 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 .imp-hours {
 	margin-bottom: 8px;
 }
-@media (max-width: 700px) {
-	.imp-stats__wide {
-		grid-column: auto;
+@media (max-width: 600px) {
+	.imp-cpage__head {
+		padding: 20px;
+	}
+	.imp-cpage__head .imp-tile {
+		width: 52px;
+		height: 52px;
+		border-radius: 16px;
+		font-size: 24px;
+	}
+	#tracker-app .imp-cpage__head h1 {
+		margin: 0;
+		font-size: 1.6em;
+	}
+}
+@media (max-width: 900px) {
+	#tracker-app .imp-cpage__stats {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.imp-cpage__row,
+	.imp-cpage__row--even {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.imp-cpage__row > .imp-cpage__section + .imp-cpage__section {
+		margin-top: 0;
 	}
 }
 /* Nextcloud styles definition lists; reset them for the stat row */

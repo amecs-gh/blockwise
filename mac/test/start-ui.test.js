@@ -41,6 +41,24 @@ const ok = (n) => console.log('  ✔', n)
 	assert.equal(await startOf(), Math.floor(d.setSeconds(0, 0) / 1000))
 	await page.screenshot({ path: `${shots}/start-after.png` })
 	ok('an exact time: started at that minute')
+
+	// Wide window: the page stays put; only the block's tasks scroll, without a scrollbar
+	await page.evaluate(async () => {
+		const api = window.trackerApp.api
+		const c = (await api('GET', 'state')).commitments[0]
+		await api('POST', 'tasks', { commitmentId: c.id, title: 'Long task', subtasks: Array.from({ length: 14 }, (_, i) => `Step ${i + 1} 10m`) })
+		location.hash = '#tasks'
+	})
+	await page.waitForSelector('.imp-tq__top')
+	await page.evaluate(() => { location.hash = '#now' })
+	await page.waitForSelector('.imp-inblock__list .imp-check')
+	const scroll = await page.evaluate(() => {
+		const m = document.querySelector('.imp-main'), l = document.querySelector('.imp-inblock__list')
+		return { page: m.scrollHeight - m.clientHeight, list: l.scrollHeight - l.clientHeight, bar: l.offsetWidth - l.clientWidth }
+	})
+	assert.ok(scroll.page <= 1, `the Now page itself doesn't scroll (${scroll.page})`)
+	assert.ok(scroll.list > 0 && scroll.bar === 0, `the tasks scroll inside, no scrollbar (${JSON.stringify(scroll)})`)
+	ok('Now: only the tasks in this block scroll')
 	assert.deepEqual(errors, [])
 	await browser.close()
 	console.log('\nstart-time page tests passed')

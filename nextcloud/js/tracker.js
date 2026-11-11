@@ -453,8 +453,11 @@
 		state.longBreakUntil = d.longBreakUntil
 		state.settings = d.settings
 		// The day on the left; the timer, what to do in this block and the commitments on the right
+		// Left: the day and the commitments; right: the timer and this block. On wide
+		// windows the page stays put and only the block's tasks scroll.
 		const main = h('div', { class: 'imp-now__main' }, timerStrip(d))
-		const page = h('div', { class: 'imp-page imp-now' }, dayCard(), main)
+		const side = h('div', { class: 'imp-now__side' }, dayCard())
+		const page = h('div', { class: 'imp-page imp-now' }, side, main)
 
 		if (d.overlaps.length) {
 			main.append(h('section', { class: 'imp-warning', role: 'alert' },
@@ -473,7 +476,8 @@
 				h('a', { class: 'imp-button imp-button--primary', href: '#settings' }, tr('Create a commitment'))))
 			return page
 		}
-		main.append(blockCard(d), h('section', { class: 'imp-others' },
+		main.append(blockCard(d))
+		side.append(h('section', { class: 'imp-others' },
 			h('h2', null, tr('Commitments')),
 			h('ul', null, d.commitments.map((e) => compactRow(e, d)))))
 		return page
@@ -914,9 +918,10 @@
 			h('header', { class: 'imp-inblock__head' },
 				h('h2', null, entry.currentBlock ? tr('In this block') : block ? tr('For the next block') : tr('Up next')),
 				h('span', { class: 'imp-muted' }, h('span', { class: 'imp-dot', style: { background: c.color } }), c.name, block ? ` · ${blockTime(block)}` : '')),
-			planned.length
-				? planned.map((t) => taskChecklist(t, { addable: true, hideDone: true }))
-				: h('p', { class: 'imp-muted' }, tr('No open tasks.'), ' ', h('a', { href: '#tasks', onclick: () => { state.tasksFor = c.id } }, tr('Add tasks'))),
+			h('div', { class: 'imp-inblock__list' },
+				planned.length
+					? planned.map((t) => taskChecklist(t, { addable: true, hideDone: true }))
+					: h('p', { class: 'imp-muted' }, tr('No open tasks.'), ' ', h('a', { href: '#tasks', onclick: () => { state.tasksFor = c.id } }, tr('Add tasks')))),
 			later.length
 				? h('details', { class: 'imp-later' },
 					h('summary', null, trn('%n more task in the queue', '%n more tasks in the queue', later.length)),
@@ -2508,39 +2513,39 @@
 
 		const page = h('div', { class: 'imp-page imp-cpage', style: { '--c': c.color, '--on-c': onColor(c.color) } })
 
-		// 1. Header
-		page.append(h('header', { class: 'imp-cpage__head' }, tile(c),
-			h('div', null,
-				h('h1', null, c.name),
-				h('p', { class: 'imp-muted' },
-					cal ? tr('Calendar "{name}"', { name: cal.name }) : tr('No calendar linked'),
-					' · ',
-					c.weeklyGoal ? tr('Goal {time} per week', { time: fmtMin(c.weeklyGoal) }) : h('a', { href: '#settings' }, tr('Set a weekly goal')))),
-			h('div', { class: 'imp-cpage__actions' },
-				h('a', { class: 'imp-button', href: '#tasks', onclick: () => { state.tasksFor = c.id } }, tr('Tasks')),
-				h('a', { class: 'imp-button', href: '#settings' }, tr('Edit')),
-				h('button', {
-					class: `imp-play ${running ? 'is-running' : ''}`,
-					onclick: () => (running ? stopTracking() : startTracking(c.id)),
-					'aria-label': running ? tr('Stop tracking {name}', { name: c.name }) : tr('Start tracking {name}', { name: c.name }),
-				}, icon(running ? ICON_STOP : ICON_PLAY, 18, true)))))
-
-		// 2. This week
+		// 1. Header: the commitment in its color, this week against the goal, start/stop
 		const wk = weekAt(0)
 		const trackedWeek = trackedIn(sessions, c.id, wk.start, wk.end)
 		const plannedWeek = plannedIn(blocks, c.id, wk.start, wk.end)
 		const plannedLeft = plannedIn(blocks, c.id, Math.max(now, wk.start), wk.end)
-		const next = blocks.filter((b) => b.end > now).slice(0, 3)
-		page.append(h('section', { class: 'imp-cpage__section' },
-			h('h2', null, tr('This week')),
-			h('dl', { class: 'imp-stats' },
-				h('div', null, h('dt', null, tr('Tracked')), h('dd', null, duration(trackedWeek, { short: true }), c.weeklyGoal ? h('small', null, ` / ${fmtMin(c.weeklyGoal)}`) : null)),
-				h('div', null, h('dt', null, tr('In blocks')), h('dd', null, duration(plannedWeek, { short: true }), plannedLeft ? h('small', null, ` · ${tr('{time} still to come', { time: duration(plannedLeft, { short: true }) })}`) : null)),
-				h('div', { class: 'imp-stats__wide' }, h('dt', null, tr('Next blocks')), h('dd', null, next.length
-					? h('ul', { class: 'imp-cpage__next' }, next.map((b) => h('li', null, blockTime(b), b.title ? h('span', { class: 'imp-muted' }, ` · ${b.title}`) : null)))
-					: h('span', { class: 'imp-muted' }, tr('No blocks planned.')))))))
+		const coming = blocks.filter((b) => b.end > now).slice(0, 5)
+		const head = h('header', { class: 'imp-cpage__head' }, tile(c),
+			h('div', null,
+				h('h1', null, c.name),
+				h('p', null,
+					c.weeklyGoal ? tr('{done} of {goal} this week', { done: duration(trackedWeek, { short: true }), goal: fmtMin(c.weeklyGoal) }) : tr('{time} tracked this week', { time: duration(trackedWeek, { short: true }) }),
+					coming[0] ? ` · ${tr('next block {when}', { when: blockTime(coming[0]) })}` : ''),
+				c.weeklyGoal ? h('div', { class: 'imp-cpage__goal', role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': c.weeklyGoal, 'aria-valuenow': Math.floor(trackedWeek / 60), 'aria-label': tr('Weekly goal for {name}', { name: c.name }) },
+					h('span', { style: { width: `${Math.min(100, (trackedWeek / 60 / c.weeklyGoal) * 100)}%` } })) : null),
+			h('div', { class: 'imp-cpage__actions' },
+				h('a', { class: 'imp-button', href: '#tasks', onclick: () => { state.tasksFor = c.id } }, tr('Tasks')),
+				h('a', { class: 'imp-button', href: '#settings', title: cal ? tr('Calendar "{name}"', { name: cal.name }) : tr('No calendar linked') }, tr('Edit')),
+				h('button', {
+					class: `imp-button imp-cpage__start ${running ? 'is-running' : ''}`,
+					onclick: () => (running ? stopTracking() : startTracking(c.id)),
+					'aria-label': running ? tr('Stop tracking {name}', { name: c.name }) : tr('Start tracking {name}', { name: c.name }),
+				}, icon(running ? ICON_STOP : ICON_PLAY, 16, true), running ? tr('Stop') : tr('Start'))))
 
-		if (state.features.createBlocks) page.append(newBlockForm(c))
+		// 2. Coming blocks: each as a bar as tall as it is long, and planning a new one
+		const blocksCard = h('section', { class: 'imp-cpage__section imp-cpage__blocks' },
+			h('div', { class: 'imp-cpage__titlebar' }, h('h2', null, tr('Coming blocks')),
+				plannedLeft ? h('span', { class: 'imp-muted' }, tr('{time} still to come this week', { time: duration(plannedLeft, { short: true }) })) : null),
+			coming.length
+				? h('ul', null, coming.map((b) => h('li', { class: b.start <= now ? 'is-now' : '' },
+					h('span', { class: 'imp-cpage__bar', style: { height: `${Math.round(Math.min(56, Math.max(18, (b.end - b.start) / 180)))}px` } }),
+					h('span', null, h('strong', null, blockTime(b)), b.title ? h('span', { class: 'imp-muted' }, b.title) : null))))
+				: h('p', { class: 'imp-muted' }, tr('No blocks planned.')),
+			state.features.createBlocks ? newBlockForm(c) : null)
 
 		// 3. Hours committed (for work or university)
 		const rows = []
@@ -2550,7 +2555,7 @@
 		const nextFour = rows.filter((w) => w.o > 0)
 		const m0 = monthAt(0)
 		const m1 = monthAt(-1)
-		page.append(h('section', { class: 'imp-cpage__section' },
+		const hoursSec = h('section', { class: 'imp-cpage__section' },
 			h('div', { class: 'imp-cpage__titlebar' },
 				h('h2', null, tr('Hours committed')),
 				h('button', {
@@ -2586,7 +2591,7 @@
 						h('td', { class: 'num' }, p ? duration(p, { short: true }) : '–'),
 						h('td', { class: `num ${met ? 'is-met' : ''}` }, tsec === null ? '' : tsec ? duration(tsec, { short: true }) : '–', met ? ' ✓' : ''),
 						c.weeklyGoal ? h('td', { class: 'num imp-muted' }, fmtMin(c.weeklyGoal)) : null)
-				}))))))
+				})))))
 
 		// 4. Trend: 12 weeks
 		const trendWeeks = []
@@ -2599,7 +2604,7 @@
 			let i = met[met.length - 1] ? met.length - 1 : met.length - 2
 			for (; i >= 0 && met[i]; i--) streak++
 		}
-		page.append(h('section', { class: 'imp-cpage__section' },
+		const trendSec = h('section', { class: 'imp-cpage__section' },
 			h('div', { class: 'imp-cpage__titlebar' },
 				h('h2', null, tr('Last 12 weeks')),
 				c.weeklyGoal ? h('span', { class: streak ? 'imp-goal__ok' : 'imp-muted' }, streak ? trn('Goal reached %n week in a row', 'Goal reached %n weeks in a row', streak) : tr('Goal not reached last week')) : null),
@@ -2614,7 +2619,7 @@
 				}),
 				h('figcaption', null,
 					h('span', { class: 'imp-legend__ghost' }, h('span', { class: 'imp-dot', style: { background: c.color } }), tr('Tracked')),
-					h('span', { class: 'imp-legend__ghost' }, h('span', { class: 'imp-ghost-swatch' }), tr('Planned in the calendar'))))))
+					h('span', { class: 'imp-legend__ghost' }, h('span', { class: 'imp-ghost-swatch' }), tr('Planned in the calendar')))))
 
 		// 5. Forecast
 		const remaining = tasks.reduce((a, t) => a + t.subtasks.filter((x) => !x.done).reduce((b, x) => b + (x.estimate ?? def) * 60, 0), 0)
@@ -2643,7 +2648,7 @@
 					? h('span', { class: 'imp-cap__ok' }, tr('Enough for the open tasks.'))
 					: h('span', { class: 'imp-cap__warn' }, tr('{time} short of the open tasks.', { time: duration(remaining - ahead, { short: true }) }))))
 		}
-		page.append(h('section', { class: 'imp-cpage__section' }, h('h2', null, tr('Forecast')), forecast))
+		const forecastSec = h('section', { class: 'imp-cpage__section' }, h('h2', null, tr('Forecast')), forecast)
 
 		// 6. Block discipline: last 4 weeks
 		const dFrom = weekAt(-4).start
@@ -2655,7 +2660,7 @@
 		const skipped = past.filter((b) => inBlock(b) === 0)
 		const trackedAll = trackedIn(sessions, c.id, dFrom, now)
 		const outside = Math.max(0, trackedAll - trackedInside)
-		page.append(h('section', { class: 'imp-cpage__section' },
+		const keptSec = h('section', { class: 'imp-cpage__section' },
 			h('h2', null, tr('Blocks kept')),
 			plannedPast
 				? [h('dl', { class: 'imp-stats' },
@@ -2664,11 +2669,11 @@
 					h('div', null, h('dt', null, tr('Tracked outside blocks')), h('dd', null, duration(outside, { short: true })))),
 				skipped.length ? h('p', { class: 'imp-muted' }, tr('Skipped: {list}', { list: skipped.slice(-4).map((b) => fmt.day.format(at(b.start))).join(', ') })) : null,
 				h('p', { class: 'imp-muted imp-footnote' }, tr('Last 4 weeks, blocks that have ended.'))]
-				: h('p', { class: 'imp-muted' }, tr('No blocks in the last 4 weeks.'))))
+				: h('p', { class: 'imp-muted' }, tr('No blocks in the last 4 weeks.')))
 
 		// 8. Tasks, most often carried over first
 		const sorted = [...tasks].sort((a, b) => b.carried - a.carried || a.position - b.position)
-		page.append(h('section', { class: 'imp-cpage__section' },
+		const tasksSec = h('section', { class: 'imp-cpage__section imp-cpage__open' },
 			h('div', { class: 'imp-cpage__titlebar' },
 				h('h2', null, tr('Open tasks')),
 				h('a', { href: '#tasks', onclick: () => { state.tasksFor = c.id } }, tr('Manage tasks'))),
@@ -2683,7 +2688,20 @@
 							h('span', { class: 'imp-muted imp-cpage__tmeta' }, `${done}/${t.subtasks.length}`, left ? ` · ${tr('{time} left', { time: fmtMin(left) })}` : '')),
 						h('div', { class: 'imp-cpage__tbar', 'aria-hidden': 'true' }, h('span', { style: { width: `${t.subtasks.length ? (done / t.subtasks.length) * 100 : 0}%` } })))
 				}))
-				: h('p', { class: 'imp-muted' }, tr('No open tasks.'))))
+				: h('p', { class: 'imp-muted' }, tr('No open tasks.')))
+
+		// The numbers at a glance, then blocks and tasks side by side, then the history
+		const stat = (label, value, sub) => h('div', null, h('dt', null, label), h('dd', null, value, sub ? h('small', null, sub) : null))
+		page.append(head,
+			h('dl', { class: 'imp-cpage__stats' },
+				stat(tr('Tracked'), duration(trackedWeek, { short: true }), c.weeklyGoal ? ` / ${fmtMin(c.weeklyGoal)}` : tr('this week')),
+				stat(tr('In blocks'), duration(plannedWeek, { short: true }), tr('this week')),
+				stat(tr('Block time used'), plannedPast ? `${Math.round((trackedInside / plannedPast) * 100)}%` : '–', tr('last 4 weeks')),
+				stat(tr('Work left'), remaining ? duration(remaining, { short: true }) : '–', trn('%n open task', '%n open tasks', tasks.length))),
+			h('div', { class: 'imp-cpage__row' }, blocksCard, tasksSec),
+			trendSec,
+			h('div', { class: 'imp-cpage__row imp-cpage__row--even' }, forecastSec, keptSec),
+			hoursSec)
 		return page
 	}
 

@@ -55,6 +55,10 @@
 			"%n task nei blocchi precedenti",
 			"%n task nei blocchi precedenti"
 		],
+		"_%n task_::_%n tasks_": [
+			"%n task",
+			"%n task"
+		],
 		"_%n ticked_::_%n ticked_": [
 			"%n spuntata",
 			"%n spuntate"
@@ -135,6 +139,7 @@
 		"Code": "Codice",
 		"code": "codice",
 		"Color": "Colore",
+		"Coming blocks": "Prossimi blocchi",
 		"Commitment": "Impegno",
 		"Commitment created": "Impegno creato",
 		"Commitments": "Impegni",
@@ -223,6 +228,7 @@
 		"Its calendar was deleted. Link a calendar in Settings to plan blocks.": "Il suo calendario è stato eliminato. Collega un calendario nelle Impostazioni per pianificare i blocchi.",
 		"lands in the block {when}": "finisce nel blocco di {when}",
 		"Last 12 weeks": "Ultime 12 settimane",
+		"last 4 weeks": "ultime 4 settimane",
 		"Last 4 weeks, blocks that have ended.": "Ultime 4 settimane, blocchi già finiti.",
 		"Last 4 weeks, per week": "Ultime 4 settimane, a settimana",
 		"Later": "Dopo",
@@ -263,7 +269,9 @@
 		"Next 4 weeks, per week": "Prossime 4 settimane, a settimana",
 		"Next 7 days: time in calendar blocks and time the open tasks need": "Prossimi 7 giorni: tempo nei blocchi del calendario e tempo necessario per i task aperti",
 		"Next 7 days: {blocks} in blocks · {needed} of tasks": "Prossimi 7 giorni: {blocks} nei blocchi · {needed} di task",
+		"next block {when}": "prossimo blocco {when}",
 		"Next blocks": "Prossimi blocchi",
+		"Next day": "Giorno successivo",
 		"Next month": "Mese successivo",
 		"Next week": "Settimana successiva",
 		"no block in the next 2 weeks": "nessun blocco nelle prossime 2 settimane",
@@ -324,6 +332,7 @@
 		"Preview": "Anteprima",
 		"Previous": "Precedente",
 		"Previous (←)": "Precedente (←)",
+		"Previous day": "Giorno precedente",
 		"Previous month": "Mese precedente",
 		"Previous week": "Settimana precedente",
 		"Quote": "Citazione",
@@ -383,6 +392,7 @@
 		"This month": "Questo mese",
 		"This page could not be loaded. Reload to try again.": "Impossibile caricare questa pagina. Ricarica per riprovare.",
 		"This week": "Questa settimana",
+		"this week": "questa settimana",
 		"Tick a note when it's dealt with: it shows in Done.": "Spunta una nota quando è sistemata: comparirà in Fatto.",
 		"Tick off (shows in Done)": "Spunta (compare in Fatto)",
 		"Tick: {title}": "Spunta: {title}",
@@ -425,6 +435,7 @@
 		"Weekly goals": "Obiettivi settimanali",
 		"Weeks": "Settimane",
 		"With Nextcloud, blocks are in your Nextcloud calendars.": "Con Nextcloud, i blocchi sono nei tuoi calendari Nextcloud.",
+		"Work left": "Lavoro rimasto",
 		"Write": "Scrivi",
 		"Write a note…": "Scrivi una nota…",
 		"Write a note… Markdown works: **bold**, - [ ] checklists, links": "Scrivi una nota… Funziona il Markdown: **grassetto**, - [ ] checklist, link",
@@ -445,6 +456,8 @@
 		"{time} of work": "{time} di lavoro",
 		"{time} short of the open tasks.": "Mancano {time} per i task aperti.",
 		"{time} still to come": "ancora {time} in arrivo",
+		"{time} still to come this week": "ancora {time} questa settimana",
+		"{time} tracked this week": "{time} registrate questa settimana",
 		"{used} of {time}": "{used} su {time}"
 	},
 	"pluralForm": "nplurals=2; plural=(n != 1);"
