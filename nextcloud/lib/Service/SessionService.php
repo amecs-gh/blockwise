@@ -121,6 +121,46 @@ class SessionService {
 		return $s->jsonSerialize() + ['clamped' => $start !== $want];
 	}
 
+	/**
+	 * Time you worked but didn't track, added afterwards: in the past, at most
+	 * 24 hours, and over no other tracked time (it would count twice).
+	 */
+	public function add(string $userId, ?int $commitmentId, int $start, int $end): Session {
+		$now = $this->time->getTime();
+		if ($start < 946684800) {
+			throw new ServiceException('Invalid time');
+		}
+		if ($end <= $start) {
+			throw new ServiceException('The end must be after the start');
+		}
+		if ($end > $now) {
+			throw new ServiceException('Tracked time can only be added for the past');
+		}
+		if ($end - $start > 86400) {
+			throw new ServiceException('At most 24 hours at once');
+		}
+		$blockUid = null;
+		if ($commitmentId !== null) {
+			$c = $this->commitments->find($commitmentId, $userId);
+			foreach ($this->commitmentService->blocks($userId, $start, $end, [$c]) as $b) {
+				$blockUid = $b['uid'];
+				break;
+			}
+		}
+		if ($this->sessions->findBetween($userId, $start, $end) !== []) {
+			throw new ServiceException('This overlaps time you tracked already');
+		}
+		$s = new Session();
+		$s->setUserId($userId);
+		$s->setCommitmentId($commitmentId);
+		$s->setStart($start);
+		$s->setEnd($end);
+		$s->setBlockUid($blockUid);
+		$s->setPomodoro(0);
+		$s->setReminded(1);
+		return $this->sessions->insert($s);
+	}
+
 	/** @return Session[] */
 	public function list(string $userId, int $from, int $to): array {
 		return $this->sessions->findBetween($userId, $from, $to);

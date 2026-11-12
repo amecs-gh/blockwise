@@ -971,6 +971,24 @@
 				changed()
 				return { session: sessionJson(run[0], db.records.session[run[0]]), longBreakUntil: longBreakUntil() }
 			}],
+			// Time you worked but didn't track: added afterwards, in the past, over no other tracked time
+			['POST', /^sessions$/, async (m, q, body) => {
+				const t = now()
+				const start = Math.trunc(Number(body.start))
+				const end = Math.trunc(Number(body.end))
+				if (!Number.isFinite(start) || !Number.isFinite(end) || start < 946684800) throw new ApiError('Invalid time')
+				if (end <= start) throw new ApiError('The end must be after the start')
+				if (end > t) throw new ApiError('Tracked time can only be added for the past')
+				if (end - start > 86400) throw new ApiError('At most 24 hours at once')
+				const cu = body.commitmentId === undefined || body.commitmentId === null ? null : commitmentUuid(body.commitmentId)
+				const clash = Object.values(db.records.session).some((r) => complete('session', r) && r.f.start < end && (r.f.end === null || r.f.end === undefined ? t : r.f.end) > start)
+				if (clash) throw new ApiError('This overlaps time you tracked already')
+				const block = cu ? (await blocks(start, end, [cu]))[0] : null
+				const su = uuid4()
+				write('session', su, { commitment: cu, start, end, blockUid: block ? block.uid : null, pomodoro: false })
+				changed()
+				return sessionJson(su, db.records.session[su])
+			}],
 			// You started earlier than you pressed play: the running session starts earlier (at most 12 hours
 			// back). Right after a switch, the session before ends then too; else it can't reach into it.
 			['PUT', /^sessions\/(\d+)$/, async (m, q, body) => {

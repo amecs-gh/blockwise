@@ -418,6 +418,12 @@ class ApiController extends Controller {
 		return $this->handle(fn () => $this->sessions->start($this->uid(), $commitmentId, $pomodoro));
 	}
 
+	/** Time you worked but didn't track, added afterwards */
+	#[NoAdminRequired]
+	public function addSession(?int $commitmentId = null, mixed $start = null, mixed $end = null): JSONResponse {
+		return $this->handle(fn () => $this->sessions->add($this->uid(), $commitmentId, $this->int($start), $this->int($end)));
+	}
+
 	#[NoAdminRequired]
 	public function stopSession(?int $at = null, bool $longBreak = false): JSONResponse {
 		return $this->handle(fn () => ['session' => $this->sessions->stop($this->uid(), $at, $longBreak), 'longBreakUntil' => $this->settings->getLongBreakUntil($this->uid())]);

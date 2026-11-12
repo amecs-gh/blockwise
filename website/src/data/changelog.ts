@@ -14,6 +14,7 @@ export const CHANGELOG: Release[] = [
 			{ en: 'Settings → Your data: export everything to one file, encrypted with a passphrase if you like, and import it on any device; it is merged like a sync and never deletes anything.', it: 'Impostazioni → I tuoi dati: esporta tutto in un file, cifrato con una passphrase se vuoi, e importalo su qualsiasi dispositivo; viene unito come in una sincronizzazione e non elimina mai nulla.' },
 			{ en: 'Android: Export CSV works (it saved nothing before), and saving or opening a file uses the phone’s own file picker.', it: 'Android: Esporta CSV funziona (prima non salvava nulla), e salvare o aprire un file usa il selettore di file del telefono.' },
 			{ en: 'Mac: files are saved and opened with macOS’s own dialogs.', it: 'Mac: i file si salvano e si aprono con le finestre di macOS.' },
+			{ en: 'Done → Add tracked time: worked without pressing play? Add the time afterwards, or open a past block and choose “I worked in this block”. It never overlaps time you tracked already.', it: 'Fatto → Aggiungi tempo registrato: hai lavorato senza premere play? Aggiungi il tempo dopo, oppure apri un blocco passato e scegli “Ho lavorato in questo blocco”. Non si sovrappone mai a tempo già registrato.' },
 			{ en: 'The Android app now has the same version number as the others.', it: 'L’app per Android ora ha lo stesso numero di versione delle altre.' },
 		],
 	},

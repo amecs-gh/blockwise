@@ -40,6 +40,7 @@ return [
 		['name' => 'api#done', 'url' => '/api/done', 'verb' => 'GET'],
 
 		['name' => 'api#sessions', 'url' => '/api/sessions', 'verb' => 'GET'],
+		['name' => 'api#addSession', 'url' => '/api/sessions', 'verb' => 'POST'],
 		['name' => 'api#startSession', 'url' => '/api/sessions/start', 'verb' => 'POST'],
 		['name' => 'api#stopSession', 'url' => '/api/sessions/stop', 'verb' => 'POST'],
 		['name' => 'api#updateSession', 'url' => '/api/sessions/{id}', 'verb' => 'PUT'],

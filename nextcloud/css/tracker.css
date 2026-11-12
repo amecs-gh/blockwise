@@ -1848,6 +1848,21 @@ html.m3-dark #tracker-app {
 	margin: 6px 0 0;
 	color: var(--color-text-maxcontrast, #6b6b6b);
 }
+.imp-pop .imp-pop__action {
+	display: block;
+	min-height: 0;
+	margin: 8px 0 0;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: var(--color-primary-element, #0082c9);
+	font: inherit;
+	font-weight: 600;
+	cursor: pointer;
+}
+.imp-pop .imp-pop__action:hover {
+	text-decoration: underline;
+}
 
 /* --- Done page ---------------------------------------------------------------- */
 

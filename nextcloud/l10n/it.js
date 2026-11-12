@@ -462,6 +462,14 @@ OC.L10N.register(
  "_%n note_::_%n notes_": ["%n nota", "%n note"],
  "_%n tracked time_::_%n tracked times_": ["%n tempo registrato", "%n tempi registrati"],
  "_%n block_::_%n blocks_": ["%n blocco", "%n blocchi"],
- "_%n block was not imported: here, blocks are events in your calendars._::_%n blocks were not imported: here, blocks are events in your calendars._": ["%n blocco non è stato importato: qui i blocchi sono eventi nei tuoi calendari.", "%n blocchi non sono stati importati: qui i blocchi sono eventi nei tuoi calendari."]
+ "_%n block was not imported: here, blocks are events in your calendars._::_%n blocks were not imported: here, blocks are events in your calendars._": ["%n blocco non è stato importato: qui i blocchi sono eventi nei tuoi calendari.", "%n blocchi non sono stati importati: qui i blocchi sono eventi nei tuoi calendari."],
+ "Add tracked time": "Aggiungi tempo registrato",
+ "I worked in this block, add it": "Ho lavorato in questo blocco, aggiungilo",
+ "For time you worked without pressing play. It can't overlap time you tracked already.": "Per il tempo in cui hai lavorato senza premere play. Non può sovrapporsi a tempo già registrato.",
+ "Tracked time added": "Tempo registrato aggiunto",
+ "The end must be after the start": "La fine deve essere dopo l'inizio",
+ "Tracked time can only be added for the past": "Il tempo registrato si può aggiungere solo nel passato",
+ "At most 24 hours at once": "Al massimo 24 ore alla volta",
+ "This overlaps time you tracked already": "Si sovrappone a tempo già registrato"
 },
 "nplurals=2; plural=(n != 1);");

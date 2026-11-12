@@ -797,6 +797,9 @@
 							tr('Planned {time}', { time: duration(b.end - b.start, { short: true }) }),
 							b.start < now ? ` · ${tr('tracked {time}', { time: duration(tracked, { short: true }) })}` : ''),
 						b.start < now ? doneList(items, tr('Nothing checked off in this block.')) : h('p', { class: 'imp-pop__empty' }, tr('Not started yet.')),
+						w.onAddTime && b.start < now && tracked === 0
+							? h('button', { type: 'button', class: 'imp-link imp-pop__action', onclick: (e) => { e.stopPropagation(); if (popEl) popEl.hidden = true; w.onAddTime(el, { commitmentId: b.commitmentId, start: b.start, end: Math.min(b.end, now) }) } }, tr('I worked in this block, add it'))
+							: null,
 					]
 				}))
 			})
@@ -2463,8 +2466,10 @@
 			api('GET', `sessions?from=${from}&to=${to}`),
 		])
 
+		const addBtn = h('button', { type: 'button', class: 'imp-button', onclick: () => addTimeEditor(addBtn, null) }, '+ ', tr('Add tracked time'))
 		page.append(pageHeader('done',
 			[doneCount(done), ' · ', tr('tracked {time}', { time: duration(sessions.reduce((sum, x) => sum + overlapSeconds(x.start, x.end ?? nowTs(), from, to), 0), { short: true }) })],
+			addBtn,
 			h('div', { class: 'imp-pager' },
 				h('button', { class: 'imp-icon-btn', 'aria-label': tr('Previous week'), onclick: () => { state.doneWeek++; render() } }, '‹'),
 				h('span', { class: 'imp-done__week' }, state.doneWeek === 0 ? tr('This week') : tr('Week of {date}', { date: fmt.day.format(ws) })),
@@ -2472,9 +2477,49 @@
 				state.doneWeek > 0 ? h('button', { class: 'imp-link', onclick: () => { state.doneWeek = 0; render() } }, tr('This week')) : null)))
 
 		page.append(h('figure', { class: 'imp-figure' },
-			weekTimeline({ start: from, blocks: blocks.blocks, overlaps: blocks.overlaps, sessions, done }, true),
+			weekTimeline({ start: from, blocks: blocks.blocks, overlaps: blocks.overlaps, sessions, done, onAddTime: addTimeEditor }, true),
 			h('figcaption', null, timelineLegend(true))))
 		return page
+	}
+
+	/** Worked but forgot to press play: add the time afterwards. `preset` from a block: commitment, start, end */
+	function addTimeEditor(anchor, preset) {
+		const now = nowTs()
+		const last = Number(localStorageGet('addTimeCommitment', '')) || null
+		const cid = preset ? preset.commitmentId : (commitmentById(last) ? last : null)
+		const end = preset ? preset.end : now - (now % 300)
+		const start = preset ? preset.start : end - 3600
+		calPanel(anchor, () => {
+			const who = h('select', { 'aria-label': tr('Commitment'), autofocus: true },
+				h('option', { value: '', selected: cid === null }, tr('Unplanned')),
+				state.commitments.map((c) => h('option', { value: c.id, selected: c.id === cid }, c.name)))
+			const day = h('input', { type: 'date', required: true, max: dateValue(at(now)), value: dateValue(at(start)), 'aria-label': tr('Day') })
+			const from = h('input', { type: 'time', required: true, value: timeValue(start), 'aria-label': tr('From') })
+			const until = h('input', { type: 'time', required: true, value: timeValue(end), 'aria-label': tr('Until') })
+			const save = async (e) => {
+				e.preventDefault()
+				const s = fromInputs(day.value, from.value)
+				let en = fromInputs(day.value, until.value)
+				if (!Number.isFinite(s) || !Number.isFinite(en)) return
+				if (en <= s) en += 86400 // until after midnight
+				const commitmentId = who.value ? Number(who.value) : null
+				try { await api('POST', 'sessions', { commitmentId, start: s, end: en }) } catch (err) { return }
+				localStorageSet('addTimeCommitment', who.value)
+				closeCalPanel()
+				toast(tr('Tracked time added'))
+				await render()
+			}
+			return h('form', { class: 'imp-cvpanel__form', onsubmit: save },
+				h('h2', null, tr('Add tracked time')),
+				h('p', { class: 'imp-muted' }, tr('For time you worked without pressing play. It can\'t overlap time you tracked already.')),
+				h('label', { class: 'imp-cvpanel__field' }, h('span', null, tr('Commitment')), who),
+				h('label', { class: 'imp-cvpanel__field' }, h('span', null, tr('Day')), day),
+				h('div', { class: 'imp-cvpanel__field' }, h('span', null, tr('Time')), h('span', { class: 'imp-cvpanel__pair' }, from, h('span', { 'aria-hidden': 'true' }, '–'), until)),
+				h('div', { class: 'imp-cvpanel__actions' },
+					h('span', { class: 'imp-cvpanel__spacer' }),
+					h('button', { type: 'button', class: 'imp-button', onclick: () => closeCalPanel() }, tr('Cancel')),
+					h('button', { type: 'submit', class: 'imp-button imp-button--primary' }, tr('Add'))))
+		}, { label: tr('Add tracked time') })
 	}
 
 	// ---------------------------------------------------------------------------

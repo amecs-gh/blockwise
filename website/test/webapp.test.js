@@ -241,6 +241,22 @@ async function suite(pretty) {
 		assert.ok(plain.records.some((r) => r.type === 'task' && r.fields.title === 'Chapter 3'))
 		ok('backup: encrypted (nothing readable) or plain, after checking the passphrase')
 
+		// Worked without pressing play: the last hour, added on the Done page
+		await a.evaluate(() => { location.hash = '#done' })
+		await a.getByRole('button', { name: '+ Add tracked time' }).click()
+		const panel = a.getByRole('dialog', { name: 'Add tracked time' })
+		await panel.locator('select').selectOption({ label: 'Thesis' })
+		await panel.getByRole('button', { name: 'Add', exact: true }).click()
+		await a.getByText('Tracked time added').waitFor()
+		const added = await a.evaluate(() => window.trackerApp.api('GET', `sessions?from=${Math.floor(Date.now() / 1000) - 7200}&to=${Math.floor(Date.now() / 1000)}`))
+		assert.equal(added.length, 1)
+		assert.equal(added[0].end - added[0].start, 3600)
+		await a.getByRole('button', { name: '+ Add tracked time' }).click()
+		await a.getByRole('dialog', { name: 'Add tracked time' }).getByRole('button', { name: 'Add', exact: true }).click()
+		await a.getByText('This overlaps time you tracked already').waitFor()
+		await a.keyboard.press('Escape')
+		ok('done page: an hour you forgot to track is added, the same hour again is refused')
+
 		// Into a fresh browser: a wrong passphrase is refused, the right one brings everything back
 		const ctxR = await browser.newContext({ viewport: { width: 1280, height: 860 }, locale: 'en-US', acceptDownloads: true })
 		const r = await open(ctxR)
