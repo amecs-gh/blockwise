@@ -72,6 +72,7 @@ jobs:
         if: always()
         run: cat app/build/reports/lint-results-*.txt || true
       - name: Publish as the "latest" release
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
           VARIANT: ${{ steps.key.outputs.variant }}

@@ -28,6 +28,8 @@ jobs:
         run: node nextcloud/tests/markdown.test.js
       - name: Encrypted file sync
         run: node nextcloud/tests/filesync.test.js
+      - name: Backup export and import
+        run: node nextcloud/tests/backup.test.js
       - name: Built-in calendar
         run: TZ=Europe/Zurich node nextcloud/tests/blocks.test.js
       - name: Started earlier (moving the start)
