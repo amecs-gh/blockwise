@@ -1,0 +1,129 @@
+---
+import Layout from '../layouts/Layout.astro'
+import Mock from '../components/Mock.astro'
+import TaskColumns from '../components/TaskColumns.astro'
+import WeekCalendar from '../components/WeekCalendar.astro'
+import SyncDiagram from '../components/SyncDiagram.astro'
+import { type Lang, tr, href } from '../i18n'
+
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = tr(lang)
+const it = lang === 'it'
+const toc = [
+	{ id: 'start', label: { en: 'Getting started', it: 'Per iniziare' } },
+	{ id: 'week', label: { en: 'Planning a week in blocks', it: 'Pianificare una settimana a blocchi' } },
+	{ id: 'sync', label: { en: 'Syncing your devices', it: 'Sincronizzare i dispositivi' }, sub: [
+		{ id: 'sync-choose', label: { en: 'Which sync to choose', it: 'Quale sincronizzazione scegliere' } },
+		{ id: 'sync-drive', label: { en: 'Dropbox and Google Drive', it: 'Dropbox e Google Drive' } },
+		{ id: 'passphrase', label: { en: 'Encryption and the passphrase', it: 'Cifratura e passphrase' } },
+		{ id: 'sync-nextcloud', label: { en: 'Nextcloud', it: 'Nextcloud' } },
+	] },
+]
+const yes = t({ en: 'Yes', it: 'Sì' })
+const no = t({ en: 'No', it: 'No' })
+---
+<Layout lang={lang} page="guide/" title={t({ en: 'Guide', it: 'Guida' })} description={t({ en: 'Get started with Blockwise, plan a week in time blocks, and sync your Mac, phone and browser through Dropbox, Google Drive or Nextcloud with end-to-end encryption.', it: 'Inizia con Blockwise, pianifica una settimana a blocchi di tempo e sincronizza Mac, telefono e browser tramite Dropbox, Google Drive o Nextcloud con cifratura end-to-end.' })}>
+	<section class="page-hero wrap">
+		<span class="eyebrow">{t({ en: 'Guide', it: 'Guida' })}</span>
+		<h1>{t({ en: 'From first launch to a week that runs itself', it: 'Dal primo avvio a una settimana che va da sola' })}</h1>
+		<p>{t({ en: 'Five minutes to set up, one coffee to plan your week, and a few taps to bring your other devices along.', it: 'Cinque minuti per iniziare, un caffè per pianificare la settimana e qualche tocco per portare con te gli altri dispositivi.' })}</p>
+	</section>
+
+	<div class="wrap doc">
+		<nav class="toc" aria-labelledby="toc-h">
+			<h2 id="toc-h">{t({ en: 'On this page', it: 'In questa pagina' })}</h2>
+			<ol>
+				{toc.map((s) => (
+					<li><a href={'#' + s.id}>{t(s.label)}</a>
+						{s.sub && <ol>{s.sub.map((x) => <li><a href={'#' + x.id}>{t(x.label)}</a></li>)}</ol>}
+					</li>
+				))}
+			</ol>
+		</nav>
+
+		<div class="prose">
+			<section id="start" aria-labelledby="start-h">
+				<h2 id="start-h">{t({ en: 'Getting started', it: 'Per iniziare' })}</h2>
+				<p>{t({ en: 'Blockwise needs no account. Install it where you work, start on that device, and add a sync later if you want your other devices to join.', it: 'Blockwise non richiede un account. Installalo dove lavori, inizia su quel dispositivo e aggiungi una sincronizzazione in seguito se vuoi che si uniscano gli altri dispositivi.' })}</p>
+				<ol class="howto">
+					<li><strong>{t({ en: 'Install it', it: 'Installalo' })}</strong>{t({ en: 'Get the Mac or Android app, add it to your Nextcloud, or just open it in your browser. ', it: 'Scarica l’app per Mac o Android, aggiungila al tuo Nextcloud o aprila semplicemente nel browser. ' })}<a href={href(lang, 'download/')}>{t({ en: 'Downloads and install steps', it: 'Download e istruzioni' })}</a>.</li>
+					<li><strong>{t({ en: 'Choose where your data lives', it: 'Scegli dove stanno i tuoi dati' })}</strong>{t({ en: 'On the first screen, start on this device (“Start on this phone”, “Start in this browser”) or connect a sync right away. Starting locally is fine: when you connect a sync later, everything comes along.', it: 'Nella prima schermata, inizia su questo dispositivo (“Inizia su questo telefono”, “Inizia in questo browser”) o collega subito una sincronizzazione. Iniziare in locale va benissimo: quando colleghi una sincronizzazione in seguito, tutto viene con te.' })}</li>
+					<li><strong>{t({ en: 'Add your commitments', it: 'Aggiungi i tuoi impegni' })}</strong>{t({ en: 'Create one for each thing you give time to. Give it a name, a color, a calendar for its blocks and, if you like, a weekly goal in hours.', it: 'Creane uno per ogni cosa a cui dai tempo. Dagli un nome, un colore, un calendario per i suoi blocchi e, se vuoi, un obiettivo settimanale in ore.' })}</li>
+					<li><strong>{t({ en: 'Write down the tasks', it: 'Scrivi i task' })}</strong>{t({ en: 'Open Tasks and add them to each commitment’s column, most important first. Put the estimate at the end of the title: ', it: 'Apri Task e aggiungili alla colonna di ogni impegno, i più importanti per primi. Metti la stima alla fine del titolo: ' })}<code>{t({ en: 'Draft chapter 45m', it: 'Bozza capitolo 45m' })}</code>, <code>{t({ en: 'Grade quizzes 1h30m', it: 'Correggere i test 1h30m' })}</code>.</li>
+					<li><strong>{t({ en: 'Plan a few blocks', it: 'Pianifica qualche blocco' })}</strong>{t({ en: 'In Calendar, drag across the hours where you want to work on a commitment. That’s a block; the tasks fill it on their own.', it: 'In Calendario, trascina sulle ore in cui vuoi lavorare a un impegno. Quello è un blocco; i task lo riempiono da soli.' })}</li>
+					<li><strong>{t({ en: 'Press play', it: 'Premi play' })}</strong>{t({ en: 'When a block starts, open Now and tap the commitment’s ring. Check off subtasks as you go; stop when you’re done.', it: 'Quando inizia un blocco, apri Adesso e tocca l’anello dell’impegno. Spunta i sotto-task man mano; ferma il timer quando hai finito.' })}</li>
+				</ol>
+			</section>
+
+			<section id="week" aria-labelledby="week-h">
+				<h2 id="week-h">{t({ en: 'Planning a week in blocks', it: 'Pianificare una settimana a blocchi' })}</h2>
+				<p>{t({ en: 'Time blocking works when the blocks are planned before the week fills up with everyone else’s plans. A good moment is Friday afternoon or Monday morning; it takes about fifteen minutes.', it: 'I blocchi di tempo funzionano quando li pianifichi prima che la settimana si riempia dei programmi degli altri. Un buon momento è il venerdì pomeriggio o il lunedì mattina; ci vogliono circa quindici minuti.' })}</p>
+
+				<h3>{t({ en: '1. Decide how much time each commitment gets', it: '1. Decidi quanto tempo dare a ogni impegno' })}</h3>
+				<p>{t({ en: 'Set a weekly goal for the commitments that matter most — say 15 hours for a thesis. The goal is the ring around the commitment on the Now page; it fills as you track.', it: 'Imposta un obiettivo settimanale per gli impegni più importanti, per esempio 15 ore per una tesi. L’obiettivo è l’anello attorno all’impegno nella pagina Adesso; si riempie man mano che registri.' })}</p>
+
+				<h3>{t({ en: '2. Place the blocks', it: '2. Posiziona i blocchi' })}</h3>
+				<p>{t({ en: 'Open Calendar in the week view and drag out blocks until they add up to the goals. Put deep work where you’re sharpest, usually the morning. For anything regular, make the block repeat every weekday or every week, so next week is already half planned.', it: 'Apri Calendario nella vista settimana e trascina i blocchi finché raggiungono gli obiettivi. Metti il lavoro più impegnativo quando sei più lucido, di solito al mattino. Per le cose regolari, fai ripetere il blocco ogni giorno feriale o ogni settimana: così la settimana dopo è già pianificata a metà.' })}</p>
+				<Mock label={t({ en: 'A planned work week: two-hour Thesis blocks most mornings, Work in the middle of the day, Teaching on Wednesday and Friday, Running in between', it: 'Una settimana pianificata: blocchi di Tesi di due ore quasi ogni mattina, Lavoro a metà giornata, Didattica mercoledì e venerdì, Corsa nel mezzo' })}>
+					<WeekCalendar lang={lang} />
+				</Mock>
+
+				<h3>{t({ en: '3. Check that the tasks fit', it: '3. Controlla che i task ci stiano' })}</h3>
+				<p>{t({ en: 'Open Tasks. Each column shows which block every task lands in. If the tasks need more time than the blocks have, Blockwise says so: add a block, cut a task, or move the less important ones down the queue. A subtask without an estimate still counts, with a default you can change in Settings.', it: 'Apri Task. Ogni colonna mostra in quale blocco finisce ogni task. Se i task richiedono più tempo di quello nei blocchi, Blockwise te lo dice: aggiungi un blocco, togli un task o sposta in fondo alla coda quelli meno importanti. Un sotto-task senza stima conta comunque, con un valore predefinito che puoi cambiare nelle Impostazioni.' })}</p>
+				<Mock label={t({ en: 'Task columns showing tasks grouped under the blocks they fill, and a warning for tasks that don’t fit any block yet', it: 'Colonne dei task raggruppati sotto i blocchi che riempiono, e un avviso per i task che non stanno ancora in nessun blocco' })}>
+					<TaskColumns lang={lang} />
+				</Mock>
+
+				<h3>{t({ en: '4. During the week: one block at a time', it: '4. Durante la settimana: un blocco alla volta' })}</h3>
+				<p>{t({ en: 'Now shows only the current block and its tasks. Whatever you don’t finish stays at the top of the queue and moves to the next block, so nothing needs replanning. If a block starts without you, start the timer late and move its start back.', it: 'Adesso mostra solo il blocco in corso e i suoi task. Quello che non finisci resta in cima alla coda e passa al blocco successivo, quindi non c’è niente da ripianificare. Se un blocco inizia senza di te, avvia il timer in ritardo e sposta indietro l’inizio.' })}</p>
+
+				<h3>{t({ en: '5. Look back', it: '5. Guarda indietro' })}</h3>
+				<p>{t({ en: 'At the end of the week, Done shows what you planned, what you tracked and what you finished; Time shows the hours against your goals. Adjust next week’s blocks to the week you really had. Need the numbers elsewhere? Export them as CSV from Time.', it: 'A fine settimana, Fatto mostra cosa avevi pianificato, cosa hai registrato e cosa hai finito; Tempo mostra le ore rispetto agli obiettivi. Adatta i blocchi della settimana dopo a quella che hai avuto davvero. Ti servono i numeri altrove? Esportali in CSV da Tempo.' })}</p>
+			</section>
+
+			<section id="sync" aria-labelledby="sync-h">
+				<h2 id="sync-h">{t({ en: 'Syncing your devices', it: 'Sincronizzare i dispositivi' })}</h2>
+				<p>{t({ en: 'Blockwise has no server of its own. To use it on more than one device, it syncs through a service you already have: your Dropbox, your Google Drive or your Nextcloud. Each device keeps working offline and catches up when it can; if two devices change the same thing, the later change wins, field by field.', it: 'Blockwise non ha un server suo. Per usarlo su più dispositivi, sincronizza tramite un servizio che hai già: il tuo Dropbox, il tuo Google Drive o il tuo Nextcloud. Ogni dispositivo continua a funzionare offline e si aggiorna appena può; se due dispositivi cambiano la stessa cosa, vince la modifica più recente, campo per campo.' })}</p>
+
+				<h3 id="sync-choose">{t({ en: 'Which sync to choose', it: 'Quale sincronizzazione scegliere' })}</h3>
+				<div class="table">
+					<table>
+						<thead><tr><th scope="col"></th><th scope="col">Mac</th><th scope="col">Android</th><th scope="col">{t({ en: 'Browser', it: 'Browser' })}</th><th scope="col">{t({ en: 'Encryption', it: 'Cifratura' })}</th></tr></thead>
+						<tbody>
+							<tr><th scope="row">Dropbox</th><td class="yes">{yes}</td><td class="yes">{yes}</td><td class="yes">{yes}</td><td>{t({ en: 'End-to-end, with your passphrase', it: 'End-to-end, con la tua passphrase' })}</td></tr>
+							<tr><th scope="row">Google Drive</th><td class="yes">{yes}</td><td class="yes">{yes}</td><td class="no">{no}</td><td>{t({ en: 'End-to-end, with your passphrase', it: 'End-to-end, con la tua passphrase' })}</td></tr>
+							<tr><th scope="row">Nextcloud</th><td class="yes">{yes}</td><td class="yes">{yes}</td><td class="no">{t({ en: 'Use Blockwise inside Nextcloud', it: 'Usa Blockwise dentro Nextcloud' })}</td><td>{t({ en: 'Your own server', it: 'Il tuo server' })}</td></tr>
+						</tbody>
+					</table>
+				</div>
+				<p>{t({ en: 'All your devices use the same one. If you already run Nextcloud, use it: blocks become events in Nextcloud Calendar. Otherwise Dropbox works everywhere, including the browser.', it: 'Tutti i dispositivi usano la stessa. Se hai già Nextcloud, usalo: i blocchi diventano eventi in Calendario di Nextcloud. Altrimenti Dropbox funziona ovunque, anche nel browser.' })}</p>
+
+				<h3 id="sync-drive">{t({ en: 'Dropbox and Google Drive', it: 'Dropbox e Google Drive' })}</h3>
+				<ol class="howto">
+					<li><strong>{t({ en: 'On your first device, choose the drive', it: 'Sul primo dispositivo, scegli il drive' })}</strong>{t({ en: 'On the first screen choose Dropbox or Google Drive (or, if you started locally, connect it from the setup). Your browser opens the drive’s own sign-in page: Blockwise never sees your drive password.', it: 'Nella prima schermata scegli Dropbox o Google Drive (o, se hai iniziato in locale, collegalo dalla configurazione). Il browser apre la pagina di accesso del drive: Blockwise non vede mai la password del drive.' })}</li>
+					<li><strong>{t({ en: 'Choose a passphrase', it: 'Scegli una passphrase' })}</strong>{t({ en: 'At least 8 characters; longer is better. Type it twice. Write it down somewhere safe — see below.', it: 'Almeno 8 caratteri; più lunga è meglio. Scrivila due volte. Annotala in un posto sicuro: vedi sotto.' })}</li>
+					<li><strong>{t({ en: 'On each other device, connect the same drive', it: 'Su ogni altro dispositivo, collega lo stesso drive' })}</strong>{t({ en: 'Blockwise sees it’s already set up there and asks for “the passphrase you chose on your other device”. Enter it, and your data appears.', it: 'Blockwise vede che lì è già configurato e chiede “la passphrase che hai scelto sull’altro dispositivo”. Inseriscila e i tuoi dati compaiono.' })}</li>
+				</ol>
+				<p>{t({ en: 'Blockwise can only reach its own folder: an app folder in Dropbox, and a hidden app-data folder in Google Drive. It can’t see your other files.', it: 'Blockwise può raggiungere solo la sua cartella: una cartella dell’app in Dropbox e una cartella nascosta di dati dell’app in Google Drive. Non può vedere gli altri tuoi file.' })}</p>
+
+				<h3 id="passphrase">{t({ en: 'Encryption and the passphrase', it: 'Cifratura e passphrase' })}</h3>
+				<p>{t({ en: 'With a drive, every file is encrypted on your device before it’s uploaded, with a key made from your passphrase. The drive — and anyone who gets into your drive account — only sees scrambled files. The passphrase itself is never stored or sent anywhere.', it: 'Con un drive, ogni file viene cifrato sul tuo dispositivo prima del caricamento, con una chiave ricavata dalla passphrase. Il drive, e chiunque entri nel tuo account, vede solo file illeggibili. La passphrase non viene mai salvata né inviata.' })}</p>
+				<Mock label={t({ en: 'Mac, Android and the browser encrypt with AES-256-GCM before syncing; the drive holds only encrypted files in Blockwise’s own folder', it: 'Mac, Android e browser cifrano con AES-256-GCM prima di sincronizzare; il drive contiene solo file cifrati nella cartella di Blockwise' })}>
+					<SyncDiagram lang={lang} />
+				</Mock>
+				<div class="callout"><p><strong>{t({ en: 'Nobody can recover a forgotten passphrase', it: 'Nessuno può recuperare una passphrase dimenticata' })}</strong> — {t({ en: 'not even us, because we never have it. You need it to connect every new device, so keep it in a password manager or on paper.', it: 'nemmeno noi, perché non l’abbiamo mai. Ti serve per collegare ogni nuovo dispositivo, quindi conservala in un gestore di password o su carta.' })}</p></div>
+				<p>{t({ en: 'Encryption is on by default. You can choose to sync without it; then the drive can read your commitments, tasks, notes and tracked time. That choice is made once per sync folder: encryption can’t be turned on later for the same folder.', it: 'La cifratura è attiva per impostazione predefinita. Puoi scegliere di sincronizzare senza; allora il drive può leggere impegni, task, note e tempo registrato. La scelta vale per tutta la cartella di sincronizzazione: per la stessa cartella la cifratura non si può attivare in seguito.' })}</p>
+				<p><a class="link" href={href(lang, 'privacy/') + '#encryption'}>{t({ en: 'How the encryption works', it: 'Come funziona la cifratura' })}</a></p>
+
+				<h3 id="sync-nextcloud">Nextcloud</h3>
+				<ol class="howto">
+					<li><strong>{t({ en: 'Add Blockwise to your Nextcloud', it: 'Aggiungi Blockwise al tuo Nextcloud' })}</strong>{t({ en: 'Your server needs Nextcloud 32 to 35 with the Calendar app. ', it: 'Il server deve avere Nextcloud da 32 a 35 con l’app Calendario. ' })}<a href={href(lang, 'download/') + '#nextcloud'}>{t({ en: 'Install steps', it: 'Istruzioni' })}</a>.</li>
+					<li><strong>{t({ en: 'Log in from the Mac or the phone', it: 'Accedi dal Mac o dal telefono' })}</strong>{t({ en: 'Choose “Sync with Nextcloud”, enter your server’s address, then log in and tap “Grant access” on the Nextcloud page. The app gets its own password, which you can revoke in Nextcloud under Settings → Security.', it: 'Scegli “Sincronizza con Nextcloud”, inserisci l’indirizzo del server, poi accedi e tocca “Concedi accesso” nella pagina di Nextcloud. L’app riceve una sua password, che puoi revocare in Nextcloud da Impostazioni → Sicurezza.' })}</li>
+					<li><strong>{t({ en: 'On Android, bring the calendars', it: 'Su Android, porta i calendari' })}</strong>{t({ en: 'Blocks come from the phone’s calendars: sync your Nextcloud calendars to the phone with DAVx⁵.', it: 'I blocchi vengono dai calendari del telefono: sincronizza i calendari di Nextcloud sul telefono con DAVx⁵.' })}</li>
+				</ol>
+				<p>{t({ en: 'In the browser, use Blockwise inside your Nextcloud: a web page can’t reach your server from another site.', it: 'Nel browser, usa Blockwise dentro il tuo Nextcloud: una pagina web non può raggiungere il tuo server da un altro sito.' })}</p>
+			</section>
+		</div>
+	</div>
+</Layout>

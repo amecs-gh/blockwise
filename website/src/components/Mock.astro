@@ -1,0 +1,7 @@
+---
+// An illustration made of interface pieces: one description for screen
+// readers (the pieces inside are only a picture).
+interface Props { label: string; class?: string }
+const { label, class: cls } = Astro.props
+---
+<figure class:list={['ui', cls]} role="img" aria-label={label}><slot /></figure>

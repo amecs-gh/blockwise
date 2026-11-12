@@ -1,0 +1,18 @@
+---
+// A note on a commitment: Markdown shown formatted, with a checklist to tick.
+import { type Lang, tr } from '../i18n'
+import { byId } from '../data/sample'
+
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = tr(lang)
+const c = byId('thesis')
+---
+<div class:list={['ui-note', c.color]}>
+	<h4>{t({ en: 'Meeting with the supervisor', it: 'Incontro con la relatrice' })}</h4>
+	<p>{t({ en: 'Chapter 3 is on track. Keep the case study short and ', it: 'Il capitolo 3 procede bene. Caso di studio breve e ' })}<strong>{t({ en: 'move the survey data to the appendix', it: 'dati del sondaggio in appendice' })}</strong>.</p>
+	<div class="ui-sub is-done"><span class="ui-box"></span><span>{t({ en: 'Send the outline', it: 'Inviare la scaletta' })}</span></div>
+	<div class="ui-sub is-done"><span class="ui-box"></span><span>{t({ en: 'Book the lab for March', it: 'Prenotare il laboratorio per marzo' })}</span></div>
+	<div class="ui-sub"><span class="ui-box"></span><span>{t({ en: 'Ask about the defense date', it: 'Chiedere la data della discussione' })}</span></div>
+	<div class="ui-note__meta"><span class="ui-pill">{t(c.name)}</span><span class="ui-pill">Markdown</span><span class="ui-pill">2/3</span></div>
+</div>

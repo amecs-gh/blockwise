@@ -1,44 +1,93 @@
 # Blockwise website
 
-A static site in English (`/`) and Italian (`/it/`), in a calm Apple-like look,
-light and dark, plus Blockwise itself in the browser at `/app/`. No cookies,
-no scripts on the pages, nothing loaded from other sites: upload this folder
-as it is to any static host (Netlify, Cloudflare Pages, GitHub Pages, your own
-server).
+A static website built with [Astro](https://astro.build), in English (`/`) and
+Italian (`/it/`), in the app's own look (Poppins, the `--tl-*` colors, rounded
+cards, light and dark), plus Blockwise itself in the browser at `/app/`.
 
-## Editing
+No cookies, no tracking, no client scripts, nothing loaded from other sites
+(the fonts are the app's own Poppins files, served from the site).
 
-| File | What it is |
+## Pages
+
+Every page exists in both languages, at the same path (`/guide/`, `/it/guide/`).
+
+| Page | Source |
 |---|---|
-| `page.html` | The page, in English: **edit this one** |
-| `it.json` | The Italian text, by the `data-t` keys in `page.html` |
-| `site.json` | The site's address, and the title and description for search engines |
-| `style.css` | The look |
-| `logo.svg`, `img/` | Logo, icon, screenshots, and `og.png` (the preview image for links shared in chats and social media) |
-| `build.js` | Makes the pages and the browser app: `node build.js` |
-| `app/` | The browser app: `index.html`, `setup.html`, `web-native.js`, `web.css` (edit these); `lib/` and `providers.js` are written by `build.js` |
-| `_headers` | Security headers for the browser app, on hosts that read this file |
+| Home | `src/views/Home.astro` |
+| Features (blocks, tasks, tracking, Done and Time, notes) | `src/views/Features.astro` |
+| Guide (getting started, planning a week, syncing) | `src/views/Guide.astro` |
+| Privacy & security | `src/views/Privacy.astro` |
+| Download, FAQ and what's new | `src/views/Download.astro`, `src/data/changelog.ts` |
+| Not found | `src/pages/404.astro` |
 
-After a change, run `node build.js`. It writes `index.html`, `it/index.html`,
-`robots.txt`, (with an address) `sitemap.xml`, and the browser app's `app/lib/`
-(copied from `nextcloud/`, `android/` and `mac/`); don't edit those by hand.
-Run it again after changing the apps' interface, so the browser app has it too.
+`src/pages/*.astro` and `src/pages/it/*.astro` only pick the language. The text
+sits next to its translation in the views: `t({ en: '…', it: '…' })`.
+
+| Other files | What they are |
+|---|---|
+| `src/layouts/Layout.astro` | The head (search and link-preview tags, links between the languages), menu bar, footer |
+| `src/i18n.ts` | The languages, the menu, the download links |
+| `src/components/` | The illustrations: pieces of the interface (timer card, goal rings, task columns, calendar week, note, Done, Time, sync), drawn with the app's styles |
+| `src/styles/site.css`, `ui.css` | The look, and the interface pieces |
+| `public/` | Logo, icon, screenshots, `og.png` (the link preview image) |
+| `site.json` | The site's address, the title and description for search engines, the Dropbox app key |
+| `build.js` | Prepares the browser app (`app/lib/`, `app/providers.js`) and the fonts (`public/fonts/`) |
+| `integrations/blockwise.mjs` | Copies `app/` into the output; writes `_headers`, `robots.txt` and (with an address) `sitemap.xml` |
+| `app/` | The browser app (see below) |
+
+## Building
+
+Node 22.23.4 or later.
+
+```sh
+npm ci
+npm run dev      # http://localhost:4321, the browser app at /app/ too
+npm run build    # the site in dist/
+```
+
+`npm run build` runs `node build.js` and then Astro. Upload `dist/` to the host.
+Don't edit `app/lib/`, `app/providers.js` or `public/fonts/` by hand: they are
+copied from `nextcloud/`, `android/` and `mac/`. Build again after changing the
+apps' interface, so the browser app has it too.
+
+## Hosting
+
+**Netlify** or **Cloudflare Pages**: base (root) directory `website`, build
+command `npm ci && npm run build`, output directory `dist`, Node 22.23.4 or
+later (`netlify.toml` sets this for Netlify; on Cloudflare Pages set
+`NODE_VERSION`).
+
+Both read `dist/_headers`, written at build time:
+
+- **Every file:** no framing, no referrer, `nosniff`, no powerful features
+  (camera, microphone, location, payment, USB, …), cross-origin isolation of
+  windows and resources, HSTS.
+- **Every site page**, listed one by one: a strict Content-Security-Policy —
+  `default-src 'none'`, styles, images and fonts from the site only, no
+  scripts, no forms, can't be framed. (A pattern like `/*` would also cover
+  `/app/`, whose pages need to reach Dropbox.) The pages repeat the policy in a
+  `<meta>` tag, for hosts that ignore `_headers`.
+- **`/app/*`:** `frame-ancestors 'none'`; the app's pages set their own policy
+  (only Dropbox's API).
+- **`/_astro/*`:** cached for a year (the names have content hashes).
+
+The site expects to be served from the root of its address.
 
 ## Search engines
 
-Each page has its own language, title and description; links between the
-English and Italian pages (`hreflang`), so Google shows the right one; a
-preview image for links; and a description of the app for search results
-(schema.org `SoftwareApplication`).
+Each page has its own language, title and description, `hreflang` links to
+the other language, a link preview image and (home page) a schema.org
+`SoftwareApplication`.
 
 **Once you know the address**, put it in `site.json` (`"url":
-"https://blockwise.example"`) and run `node build.js`. That adds the canonical
-links, the full image addresses for link previews, and `sitemap.xml`. Then
-submit the sitemap in Google Search Console and Bing Webmaster Tools.
+"https://blockwise.example"`) and build again. That adds canonical links, full
+image addresses for link previews, and `sitemap.xml`. Then submit the sitemap
+in Google Search Console and Bing Webmaster Tools.
 
 ## Downloads
 
-The buttons link to the files that the GitHub workflows publish from `main`:
+The buttons link to the files that the GitHub workflows publish from `main`
+(see `DOWNLOADS` in `src/i18n.ts`):
 
 | App | Release | File |
 |---|---|---|
@@ -46,10 +95,8 @@ The buttons link to the files that the GitHub workflows publish from `main`:
 | Android | `latest` | `Blockwise.apk` |
 | Nextcloud | `nextcloud-latest` | `blockwise-nextcloud.tar.gz` |
 
-They work for visitors once the GitHub repository is public. The links use the
-repository's current name (`amecs-gh/tracker-android`); GitHub keeps them
-working after a rename, but you can search `page.html` for `github.com/amecs-gh`
-to update them.
+They work for visitors once the GitHub repository is public. Add an entry to
+`src/data/changelog.ts` when something visible changes.
 
 ## The browser app (`/app/`)
 
@@ -78,7 +125,7 @@ open the Blockwise app (the same one the Mac and Android apps use), add the
 redirect URI `https://<your site>/app/setup.html` under OAuth 2 → Redirect URIs,
 and allow PKCE ("Allow public clients"). Put the app key in `site.json`
 (`"providers": { "dropboxAppKey": "…" }`; it is public, there is no secret) and
-run `node build.js`. Without a key the browser app works in the browser only.
+build again. Without a key the browser app works in the browser only.
 
 Test: `node build.js && node test/webapp.test.js` (Playwright from `../mac`;
 a stand-in Dropbox).

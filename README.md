@@ -38,8 +38,9 @@ are built. The browser app also reuses the Android app's setup and bridge
 Ready-made builds come from GitHub Actions on every push to `main`: the
 releases **mac-latest** (`Blockwise-mac.dmg`), **latest** (`Blockwise.apk`) and
 **nextcloud-latest** (`blockwise-nextcloud.tar.gz`). The [`website/`](website)
-folder is a download page for them, in English and Italian, and serves the
-browser app at `/app/`.
+folder is the website (Astro, static): features, a guide, privacy and
+security, and downloads, in English and Italian; it also serves the browser
+app at `/app/`.
 
 
 **Nextcloud** (version 32 to 35): copy the `nextcloud` folder into your

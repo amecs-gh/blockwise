@@ -1,0 +1,15 @@
+---
+// Hosts serve this for addresses that don't exist (Netlify and Cloudflare Pages: 404.html).
+import Layout from '../layouts/Layout.astro'
+---
+<Layout lang="en" page="404" title="Page not found">
+	<section class="lost wrap">
+		<span class="eyebrow">404</span>
+		<h1>This block is empty.</h1>
+		<p>The page you’re looking for isn’t here. <span lang="it">Questa pagina non esiste.</span></p>
+		<div class="cta">
+			<a class="btn" href="/">Home</a>
+			<a class="btn btn--soft" href="/it/" lang="it">Home in italiano</a>
+		</div>
+	</section>
+</Layout>

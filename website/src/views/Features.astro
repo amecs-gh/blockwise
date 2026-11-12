@@ -1,0 +1,136 @@
+---
+import Layout from '../layouts/Layout.astro'
+import Mock from '../components/Mock.astro'
+import TimerCard from '../components/TimerCard.astro'
+import GoalRings from '../components/GoalRings.astro'
+import TaskColumns from '../components/TaskColumns.astro'
+import WeekCalendar from '../components/WeekCalendar.astro'
+import NoteCard from '../components/NoteCard.astro'
+import TimeCard from '../components/TimeCard.astro'
+import DoneCard from '../components/DoneCard.astro'
+import { type Lang, tr, href } from '../i18n'
+
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = tr(lang)
+const areas = [
+	{ id: 'blocks', label: { en: 'Commitments and blocks', it: 'Impegni e blocchi' } },
+	{ id: 'tasks', label: { en: 'Tasks', it: 'Task' } },
+	{ id: 'tracking', label: { en: 'Tracking', it: 'Registrazione' } },
+	{ id: 'done-time', label: { en: 'Done and Time', it: 'Fatto e Tempo' } },
+	{ id: 'notes', label: { en: 'Notes', it: 'Note' } },
+]
+---
+<Layout lang={lang} page="features/" title={t({ en: 'Features', it: 'Funzioni' })} description={t({ en: 'Commitments and blocks, task queues with estimates, a one-tap timer with Pomodoro, weekly goals, Done and Time with CSV export, and Markdown notes.', it: 'Impegni e blocchi, code di task con stime, un timer con un tocco e Pomodoro, obiettivi settimanali, Fatto e Tempo con esportazione CSV e note in Markdown.' })}>
+	<section class="page-hero wrap">
+		<span class="eyebrow">{t({ en: 'Features', it: 'Funzioni' })}</span>
+		<h1>{t({ en: 'Everything for focused weeks', it: 'Tutto per settimane concentrate' })}</h1>
+		<p>{t({ en: 'Blockwise ties three things together that usually live in three apps: the calendar where you plan, the list of what to do, and the timer that tells you where the time went.', it: 'Blockwise unisce tre cose che di solito vivono in tre app: il calendario dove pianifichi, l’elenco delle cose da fare e il timer che ti dice dov’è finito il tempo.' })}</p>
+		<nav class="cta cta--start" aria-label={t({ en: 'On this page', it: 'In questa pagina' })}>
+			{areas.map((a) => <a class="btn btn--soft btn--small" href={'#' + a.id}>{t(a.label)}</a>)}
+		</nav>
+	</section>
+
+	<div class="wrap">
+		<section id="blocks" class="feature">
+			<div>
+				<span class="eyebrow">{t({ en: 'Commitments and blocks', it: 'Impegni e blocchi' })}</span>
+				<h2>{t({ en: 'Give your commitments time before the week fills up', it: 'Dai tempo ai tuoi impegni prima che la settimana si riempia' })}</h2>
+				<p>{t({ en: 'A commitment is anything you want to give time to: a thesis, a job, a course you teach, running. Each has a color and its own calendar, and every event in that calendar is a block of time for it.', it: 'Un impegno è qualsiasi cosa a cui vuoi dare tempo: una tesi, un lavoro, un corso che insegni, la corsa. Ognuno ha un colore e il suo calendario, e ogni evento in quel calendario è un blocco di tempo per lui.' })}</p>
+				<ul class="ticks">
+					<li>{t({ en: 'Day, week and month views; drag to create, move or resize blocks', it: 'Viste giorno, settimana e mese; trascina per creare, spostare o allungare i blocchi' })}</li>
+					<li>{t({ en: 'Repeat a block every weekday or every week', it: 'Ripeti un blocco ogni giorno feriale o ogni settimana' })}</li>
+					<li>{t({ en: 'Click a block to see the tasks waiting in it', it: 'Clicca un blocco per vedere i task che lo aspettano' })}</li>
+					<li>{t({ en: 'The built-in calendar, Apple Calendar on the Mac, the phone’s calendars on Android, or Nextcloud Calendar', it: 'Il calendario integrato, Calendario di Apple sul Mac, i calendari del telefono su Android o Calendario di Nextcloud' })}</li>
+				</ul>
+			</div>
+			<Mock label={t({ en: 'A work week in the calendar with blocks for Thesis, Work, Teaching and Running; Tuesday’s Thesis block is running now', it: 'Una settimana lavorativa nel calendario con blocchi per Tesi, Lavoro, Didattica e Corsa; il blocco di Tesi di martedì è in corso' })}>
+				<WeekCalendar lang={lang} />
+			</Mock>
+		</section>
+
+		<section id="tasks" class="feature feature--flip">
+			<div>
+				<span class="eyebrow">{t({ en: 'Tasks', it: 'Task' })}</span>
+				<h2>{t({ en: 'A queue per commitment, with honest estimates', it: 'Una coda per impegno, con stime oneste' })}</h2>
+				<p>{t({ en: 'Tasks line up in order for each commitment, side by side in columns. Type an estimate right in the title — “Draft chapter 45m” — and Blockwise fills each block from the top of the queue until the estimates fill it.', it: 'I task si mettono in fila per ogni impegno, fianco a fianco in colonne. Scrivi la stima direttamente nel titolo, “Bozza capitolo 45m”, e Blockwise riempie ogni blocco dalla cima della coda finché le stime lo riempiono.' })}</p>
+				<ul class="ticks">
+					<li>{t({ en: 'Subtasks you check off in order, each with its own estimate', it: 'Sotto-task da spuntare in ordine, ognuno con la sua stima' })}</li>
+					<li>{t({ en: 'What you don’t finish moves on to the next block', it: 'Quello che non finisci passa al blocco successivo' })}</li>
+					<li>{t({ en: 'A warning when the tasks need more time than the blocks have', it: 'Un avviso quando i task richiedono più tempo di quello nei blocchi' })}</li>
+					<li>{t({ en: 'Drag tasks and subtasks to reorder them', it: 'Trascina task e sotto-task per riordinarli' })}</li>
+				</ul>
+			</div>
+			<Mock label={t({ en: 'Task columns for Thesis and Teaching: tasks with estimates grouped by the blocks they fill, and a warning that some tasks have no block yet', it: 'Colonne dei task per Tesi e Didattica: task con stime raggruppati per i blocchi che riempiono e un avviso che alcuni task non hanno ancora un blocco' })}>
+				<TaskColumns lang={lang} />
+			</Mock>
+		</section>
+
+		<section id="tracking" class="feature">
+			<div>
+				<span class="eyebrow">{t({ en: 'Tracking', it: 'Registrazione' })}</span>
+				<h2>{t({ en: 'Press play, and stay in the block', it: 'Premi play e resta nel blocco' })}</h2>
+				<p>{t({ en: 'Start the timer with one tap — on a commitment’s ring, on a block in the calendar, or from the Mac’s menu bar. Unplanned time can be tracked too. The timer card shows the block you’re in and how much of it is left.', it: 'Avvia il timer con un tocco: sull’anello di un impegno, su un blocco nel calendario o dalla barra dei menu del Mac. Puoi registrare anche il tempo non pianificato. Il timer mostra il blocco in cui sei e quanto ne resta.' })}</p>
+				<ul class="ticks">
+					<li>{t({ en: 'Started late? Move the start back to when you really began', it: 'Iniziato in ritardo? Sposta l’inizio a quando hai cominciato davvero' })}</li>
+					<li>{t({ en: 'Optional Pomodoro mode: work sessions, short breaks and a long break after a few sessions', it: 'Modalità Pomodoro facoltativa: sessioni di lavoro, pause brevi e una pausa lunga dopo alcune sessioni' })}</li>
+					<li>{t({ en: 'A reminder before a block ends', it: 'Un promemoria prima della fine di un blocco' })}</li>
+					<li>{t({ en: 'Weekly goals in hours, shown as rings on the Now page', it: 'Obiettivi settimanali in ore, mostrati come anelli nella pagina Adesso' })}</li>
+				</ul>
+			</div>
+			<Mock label={t({ en: 'The running timer in Thesis’s color with Pomodoro session 3 of 4, and the commitments as rings: Work has reached its goal, Running has no goal', it: 'Il timer in corso nel colore di Tesi con la sessione Pomodoro 3 di 4, e gli impegni come anelli: Lavoro ha raggiunto l’obiettivo, Corsa non ha un obiettivo' })}>
+				<TimerCard lang={lang} pomodoro />
+				<div class="ui-card"><GoalRings lang={lang} /></div>
+			</Mock>
+		</section>
+
+		<section id="done-time" class="feature feature--flip">
+			<div>
+				<span class="eyebrow">{t({ en: 'Done and Time', it: 'Fatto e Tempo' })}</span>
+				<h2>{t({ en: 'See the week you had, not the one you planned', it: 'Guarda la settimana che hai avuto, non quella che avevi pianificato' })}</h2>
+				<p>{t({ en: 'Done lays your week on a timeline: the blocks you planned, the time you tracked, and what you checked off. Time adds up the hours per commitment against your weekly goals.', it: 'Fatto mette la settimana su una timeline: i blocchi pianificati, il tempo registrato e ciò che hai spuntato. Tempo somma le ore per impegno rispetto agli obiettivi settimanali.' })}</p>
+				<ul class="ticks">
+					<li>{t({ en: 'Planned and tracked time side by side', it: 'Tempo pianificato e registrato fianco a fianco' })}</li>
+					<li>{t({ en: 'Ticked notes and checklists show up in Done too', it: 'Anche le note e le liste spuntate compaiono in Fatto' })}</li>
+					<li>{t({ en: 'CSV export with one row per week and commitment', it: 'Esportazione CSV con una riga per settimana e impegno' })}</li>
+				</ul>
+			</div>
+			<Mock label={t({ en: 'Done for Tuesday: planned blocks, tracked time and checked-off tasks on a timeline; and Time: this week’s hours per commitment against the weekly goals, with Export CSV', it: 'Fatto per martedì: blocchi pianificati, tempo registrato e task spuntati su una timeline; e Tempo: le ore della settimana per impegno rispetto agli obiettivi, con Esporta CSV' })}>
+				<DoneCard lang={lang} />
+				<TimeCard lang={lang} />
+			</Mock>
+		</section>
+
+		<section id="notes" class="feature">
+			<div>
+				<span class="eyebrow">{t({ en: 'Notes', it: 'Note' })}</span>
+				<h2>{t({ en: 'Notes that belong to what they’re about', it: 'Note che stanno con ciò di cui parlano' })}</h2>
+				<p>{t({ en: 'Each commitment has its notes, written in Markdown with a formatting bar for bold, lists and links. Checklists can be ticked right in the note.', it: 'Ogni impegno ha le sue note, scritte in Markdown con una barra per grassetto, elenchi e link. Le liste si spuntano direttamente nella nota.' })}</p>
+				<ul class="ticks">
+					<li>{t({ en: 'Notes as cards, in the commitment’s color', it: 'Note come schede, nel colore dell’impegno' })}</li>
+					<li>{t({ en: 'Tick a whole note off when it’s done', it: 'Spunta un’intera nota quando è fatta' })}</li>
+					<li>{t({ en: 'Shown as text only: a note can never run code', it: 'Mostrate solo come testo: una nota non può mai eseguire codice' })}</li>
+				</ul>
+			</div>
+			<Mock label={t({ en: 'A note for Thesis with formatted text and a checklist, two of three items ticked', it: 'Una nota per Tesi con testo formattato e una lista, due voci su tre spuntate' })}>
+				<NoteCard lang={lang} />
+			</Mock>
+		</section>
+	</div>
+
+	<section class="section">
+		<div class="wrap">
+			<div class="head head--center">
+				<h2>{t({ en: 'The same Blockwise everywhere', it: 'Lo stesso Blockwise ovunque' })}</h2>
+				<p>{t({ en: 'One interface on the Mac, on Android, in Nextcloud and in the browser, in English and Italian.', it: 'Un’unica interfaccia sul Mac, su Android, in Nextcloud e nel browser, in italiano e in inglese.' })}</p>
+			</div>
+			<div class="grid grid--4">
+				<div class="card"><h3>Mac</h3><p>{t({ en: 'A timer in the menu bar and notifications. Apple Calendar or the built-in calendar.', it: 'Un timer nella barra dei menu e notifiche. Calendario di Apple o il calendario integrato.' })}</p></div>
+				<div class="card"><h3>Android</h3><p>{t({ en: 'Material 3, works on its own with no account; reminders on the lock screen.', it: 'Material 3, funziona da solo senza account; promemoria sulla schermata di blocco.' })}</p></div>
+				<div class="card"><h3>Nextcloud</h3><p>{t({ en: 'Inside your Nextcloud, with blocks as events in Nextcloud Calendar.', it: 'Dentro il tuo Nextcloud, con i blocchi come eventi in Calendario di Nextcloud.' })}</p></div>
+				<div class="card"><h3>{t({ en: 'Browser', it: 'Browser' })}</h3><p>{t({ en: 'Nothing to install: your data stays in the browser, encrypted.', it: 'Niente da installare: i tuoi dati restano nel browser, cifrati.' })}</p></div>
+			</div>
+			<div class="cta"><a class="btn" href={href(lang, 'download/')}>{t({ en: 'Get Blockwise', it: 'Scarica Blockwise' })}</a></div>
+		</div>
+	</section>
+</Layout>

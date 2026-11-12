@@ -1,0 +1,106 @@
+---
+import Layout from '../layouts/Layout.astro'
+import Mock from '../components/Mock.astro'
+import SyncDiagram from '../components/SyncDiagram.astro'
+import { type Lang, tr, DOWNLOADS, REPO } from '../i18n'
+
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = tr(lang)
+const toc = [
+	{ id: 'short', label: { en: 'In short', it: 'In breve' } },
+	{ id: 'where', label: { en: 'Where your data lives', it: 'Dove stanno i tuoi dati' } },
+	{ id: 'encryption', label: { en: 'End-to-end encryption', it: 'Cifratura end-to-end' } },
+	{ id: 'no-server', label: { en: 'No Blockwise server', it: 'Nessun server di Blockwise' } },
+	{ id: 'website', label: { en: 'This website', it: 'Questo sito' } },
+	{ id: 'open', label: { en: 'Open source', it: 'Open source' } },
+	{ id: 'report', label: { en: 'Reporting a problem', it: 'Segnalare un problema' } },
+]
+---
+<Layout lang={lang} page="privacy/" title={t({ en: 'Privacy & security', it: 'Privacy e sicurezza' })} description={t({ en: 'Where Blockwise keeps your data on each platform, how the end-to-end encryption works, why there is no Blockwise server, and how to report a security problem.', it: 'Dove Blockwise conserva i tuoi dati su ogni piattaforma, come funziona la cifratura end-to-end, perché non esiste un server di Blockwise e come segnalare un problema di sicurezza.' })}>
+	<section class="page-hero wrap">
+		<span class="eyebrow">{t({ en: 'Privacy & security', it: 'Privacy e sicurezza' })}</span>
+		<h1>{t({ en: 'Your week is nobody else’s business', it: 'La tua settimana non riguarda nessun altro' })}</h1>
+		<p>{t({ en: 'Your plans, tasks and notes say a lot about you. Blockwise is built so that they stay with you: on your devices, on your own server, or encrypted in your own drive.', it: 'I tuoi piani, task e note dicono molto di te. Blockwise è fatto perché restino con te: sui tuoi dispositivi, sul tuo server o cifrati nel tuo drive.' })}</p>
+	</section>
+
+	<div class="wrap doc">
+		<nav class="toc" aria-labelledby="toc-h">
+			<h2 id="toc-h">{t({ en: 'On this page', it: 'In questa pagina' })}</h2>
+			<ol>{toc.map((s) => <li><a href={'#' + s.id}>{t(s.label)}</a></li>)}</ol>
+		</nav>
+
+		<div class="prose">
+			<section id="short" aria-labelledby="short-h">
+				<h2 id="short-h">{t({ en: 'In short', it: 'In breve' })}</h2>
+				<div class="grid grid--2">
+					<div class="card"><h3>{t({ en: 'No account with us', it: 'Nessun account da noi' })}</h3><p>{t({ en: 'There’s nothing to sign up for. We don’t know who uses Blockwise.', it: 'Non c’è niente a cui iscriversi. Non sappiamo chi usa Blockwise.' })}</p></div>
+					<div class="card"><h3>{t({ en: 'No tracking, no ads', it: 'Nessun tracciamento, nessuna pubblicità' })}</h3><p>{t({ en: 'No analytics in the apps or on this site, and no cookies here.', it: 'Nessuna analisi nelle app o su questo sito, e nessun cookie qui.' })}</p></div>
+					<div class="card"><h3>{t({ en: 'Encrypted on your devices', it: 'Cifrati sui tuoi dispositivi' })}</h3><p>{t({ en: 'Data on the Mac, the phone and in the browser is encrypted with a key the system keeps safe.', it: 'I dati su Mac, telefono e browser sono cifrati con una chiave custodita dal sistema.' })}</p></div>
+					<div class="card"><h3>{t({ en: 'End-to-end in your drive', it: 'End-to-end nel tuo drive' })}</h3><p>{t({ en: 'Dropbox and Google Drive only ever get files encrypted with your passphrase.', it: 'Dropbox e Google Drive ricevono solo file cifrati con la tua passphrase.' })}</p></div>
+				</div>
+			</section>
+
+			<section id="where" aria-labelledby="where-h">
+				<h2 id="where-h">{t({ en: 'Where your data lives', it: 'Dove stanno i tuoi dati' })}</h2>
+				<p>{t({ en: 'Each app keeps a full copy on its device and works offline. Where else your data goes is up to you.', it: 'Ogni app tiene una copia completa sul dispositivo e funziona offline. Dove altro vanno i tuoi dati lo decidi tu.' })}</p>
+				<div class="table">
+					<table>
+						<thead><tr><th scope="col"></th><th scope="col">{t({ en: 'On the device', it: 'Sul dispositivo' })}</th><th scope="col">{t({ en: 'Sync (your choice)', it: 'Sincronizzazione (a tua scelta)' })}</th></tr></thead>
+						<tbody>
+							<tr><th scope="row">Mac</th><td>{t({ en: 'Encrypted with a key in the macOS Keychain. Sign-in tokens and the sync key are kept the same way.', it: 'Cifrati con una chiave nel Portachiavi di macOS. Token di accesso e chiave di sincronizzazione sono conservati allo stesso modo.' })}</td><td>{t({ en: 'None, Nextcloud, or Dropbox / Google Drive end-to-end encrypted. Blocks come from Apple Calendar or the built-in calendar.', it: 'Nessuna, Nextcloud, oppure Dropbox / Google Drive cifrati end-to-end. I blocchi vengono da Calendario di Apple o dal calendario integrato.' })}</td></tr>
+							<tr><th scope="row">Android</th><td>{t({ en: 'Encrypted with a key in the Android Keystore. Excluded from backups; logging out removes Blockwise’s data from the phone.', it: 'Cifrati con una chiave nell’Android Keystore. Esclusi dai backup; uscendo dall’account i dati di Blockwise vengono rimossi dal telefono.' })}</td><td>{t({ en: 'None, Nextcloud, or Dropbox / Google Drive end-to-end encrypted.', it: 'Nessuna, Nextcloud, oppure Dropbox / Google Drive cifrati end-to-end.' })}</td></tr>
+							<tr><th scope="row">{t({ en: 'Browser', it: 'Browser' })}</th><td>{t({ en: 'In the browser’s storage (IndexedDB), encrypted with AES-GCM under a key the browser keeps non-extractable: scripts can use it but never read it out. Clearing the site’s data deletes it, so use Export my data (JSON) in the Account tab to keep a copy.', it: 'Nella memoria del browser (IndexedDB), cifrati con AES-GCM con una chiave che il browser rende non estraibile: gli script possono usarla ma mai leggerla. Cancellando i dati del sito vengono eliminati, quindi usa Esporta i miei dati (JSON) nella scheda Account per tenerne una copia.' })}</td><td>{t({ en: 'None, or Dropbox end-to-end encrypted.', it: 'Nessuna, oppure Dropbox cifrato end-to-end.' })}</td></tr>
+							<tr><th scope="row">Nextcloud</th><td>{t({ en: 'On your server, in your Nextcloud. Blocks are events in Nextcloud Calendar.', it: 'Sul tuo server, nel tuo Nextcloud. I blocchi sono eventi in Calendario di Nextcloud.' })}</td><td>{t({ en: 'Your Mac and phone sync with it directly.', it: 'Mac e telefono si sincronizzano direttamente con lui.' })}</td></tr>
+						</tbody>
+					</table>
+				</div>
+				<h3>{t({ en: 'With Nextcloud', it: 'Con Nextcloud' })}</h3>
+				<ul>
+					<li>{t({ en: 'Every request checks that the record belongs to the logged-in user: other users’ commitments, tasks, notes and calendars can’t be read, changed or linked to, through sync either.', it: 'Ogni richiesta controlla che il dato appartenga all’utente collegato: impegni, task, note e calendari di altri utenti non si possono leggere, modificare o collegare, nemmeno tramite la sincronizzazione.' })}</li>
+					<li>{t({ en: 'The Mac and Android apps log in with Nextcloud’s login flow and get their own app password, which you can revoke in Nextcloud. That password only reaches Blockwise’s sync, never your files.', it: 'Le app per Mac e Android accedono con il login di Nextcloud e ricevono una loro password per app, revocabile in Nextcloud. Quella password raggiunge solo la sincronizzazione di Blockwise, mai i tuoi file.' })}</li>
+					<li>{t({ en: 'Only https connections (or http to localhost and Tailscale names).', it: 'Solo connessioni https (o http verso localhost e nomi Tailscale).' })}</li>
+				</ul>
+			</section>
+
+			<section id="encryption" aria-labelledby="encryption-h">
+				<h2 id="encryption-h">{t({ en: 'End-to-end encryption', it: 'Cifratura end-to-end' })}</h2>
+				<p>{t({ en: 'When you sync through Dropbox or Google Drive, your devices encrypt everything before it leaves them. Only your devices, with your passphrase, can read it.', it: 'Quando sincronizzi tramite Dropbox o Google Drive, i tuoi dispositivi cifrano tutto prima che esca. Solo i tuoi dispositivi, con la tua passphrase, possono leggerlo.' })}</p>
+				<Mock label={t({ en: 'Mac, Android and the browser encrypt with AES-256-GCM before syncing; the drive holds only encrypted files in Blockwise’s own folder', it: 'Mac, Android e browser cifrano con AES-256-GCM prima di sincronizzare; il drive contiene solo file cifrati nella cartella di Blockwise' })}>
+					<SyncDiagram lang={lang} />
+				</Mock>
+				<ul>
+					<li><strong>AES-256-GCM</strong> {t({ en: 'for every file, with a key derived from your passphrase using PBKDF2-SHA256 with 600,000 rounds and a random salt.', it: 'per ogni file, con una chiave ricavata dalla passphrase con PBKDF2-SHA256, 600.000 iterazioni e un salt casuale.' })}</li>
+					<li>{t({ en: 'Each file is bound to its name: a changed, swapped or foreign file is refused, not loaded.', it: 'Ogni file è legato al suo nome: un file modificato, scambiato o estraneo viene rifiutato, non caricato.' })}</li>
+					<li>{t({ en: 'The passphrase is never stored or sent. Nobody can recover it if you forget it.', it: 'La passphrase non viene mai salvata né inviata. Nessuno può recuperarla se la dimentichi.' })}</li>
+					<li>{t({ en: 'Blockwise can only see its own folder: the Dropbox app folder, or Google Drive’s hidden app-data folder.', it: 'Blockwise vede solo la sua cartella: la cartella dell’app in Dropbox o la cartella nascosta dei dati dell’app in Google Drive.' })}</li>
+					<li>{t({ en: 'Drive sign-ins use OAuth with PKCE and a random state: no app secret, no token to copy and paste. Tokens never appear in addresses and are kept encrypted; the Mac revokes them when you disconnect.', it: 'L’accesso ai drive usa OAuth con PKCE e uno state casuale: nessun segreto dell’app, nessun token da copiare. I token non compaiono mai negli indirizzi e sono conservati cifrati; il Mac li revoca quando ti scolleghi.' })}</li>
+				</ul>
+				<p>{t({ en: 'You can choose to sync without encryption. Then the drive, and anyone who gets into your drive account, can read your commitments, tasks, notes and tracked time. It’s on by default for a reason.', it: 'Puoi scegliere di sincronizzare senza cifratura. Allora il drive, e chiunque entri nel tuo account, può leggere impegni, task, note e tempo registrato. È attiva per impostazione predefinita per un motivo.' })}</p>
+			</section>
+
+			<section id="no-server" aria-labelledby="no-server-h">
+				<h2 id="no-server-h">{t({ en: 'No Blockwise server', it: 'Nessun server di Blockwise' })}</h2>
+				<p>{t({ en: 'There is no Blockwise service in the middle. The apps talk only to what you connect them to: your Nextcloud, your Dropbox or your Google Drive. With no sync, they talk to nothing at all.', it: 'Non c’è nessun servizio di Blockwise nel mezzo. Le app parlano solo con ciò a cui le colleghi: il tuo Nextcloud, il tuo Dropbox o il tuo Google Drive. Senza sincronizzazione, non parlano con nessuno.' })}</p>
+				<p>{t({ en: 'Even Blockwise in the browser runs entirely in the page. Its pages may connect only to Dropbox’s API, can’t be framed by other sites, send no referrer, and aren’t indexed by search engines.', it: 'Anche Blockwise nel browser funziona interamente nella pagina. Le sue pagine possono collegarsi solo alle API di Dropbox, non possono essere incorporate da altri siti, non inviano il referrer e non vengono indicizzate dai motori di ricerca.' })}</p>
+				<p>{t({ en: 'Notes are shown as text only: Markdown is turned into a fixed set of elements, never inserted as HTML, and links only open http and https addresses.', it: 'Le note sono mostrate solo come testo: il Markdown diventa un insieme fisso di elementi, mai inserito come HTML, e i link aprono solo indirizzi http e https.' })}</p>
+			</section>
+
+			<section id="website" aria-labelledby="website-h">
+				<h2 id="website-h">{t({ en: 'This website', it: 'Questo sito' })}</h2>
+				<p>{t({ en: 'These pages are plain static files. They set no cookies, run no scripts, and load nothing from other sites — even the fonts are served from here. A strict Content-Security-Policy makes sure of it, and the pages can’t be framed or send your address to the sites they link to.', it: 'Queste pagine sono semplici file statici. Non impostano cookie, non eseguono script e non caricano nulla da altri siti: anche i font sono serviti da qui. Una Content-Security-Policy rigorosa lo garantisce, e le pagine non possono essere incorporate né inviare il tuo indirizzo ai siti a cui rimandano.' })}</p>
+			</section>
+
+			<section id="open" aria-labelledby="open-h">
+				<h2 id="open-h">{t({ en: 'Open source', it: 'Open source' })}</h2>
+				<p>{t({ en: 'All of Blockwise — the apps, the Nextcloud app and this website — is open source under the AGPL-3.0, so anyone can check what it does. ', it: 'Tutto Blockwise, le app, l’app per Nextcloud e questo sito, è open source con licenza AGPL-3.0, quindi chiunque può verificare cosa fa. ' })}<a href={REPO}>{t({ en: 'The source code is on GitHub', it: 'Il codice sorgente è su GitHub' })}</a>.</p>
+				<p>{t({ en: 'The downloads are built from that code by GitHub Actions on every change. Android release builds are signed with the maintainer’s key, which is kept only in GitHub’s secrets, never in the repository. The Mac app isn’t notarized by Apple yet.', it: 'I download vengono creati da quel codice con GitHub Actions a ogni modifica. Le versioni per Android sono firmate con la chiave del maintainer, conservata solo nei segreti di GitHub, mai nel repository. L’app per Mac non è ancora autenticata da Apple.' })}</p>
+			</section>
+
+			<section id="report" aria-labelledby="report-h">
+				<h2 id="report-h">{t({ en: 'Reporting a problem', it: 'Segnalare un problema' })}</h2>
+				<p>{t({ en: 'Found a security problem? Please don’t open a public issue. ', it: 'Hai trovato un problema di sicurezza? Per favore non aprire una segnalazione pubblica. ' })}<a href={DOWNLOADS.security}>{t({ en: 'Report it privately on GitHub', it: 'Segnalalo in privato su GitHub' })}</a>{t({ en: ' (Security → Report a vulnerability). You’ll get an answer within a week. Only the latest release gets fixes.', it: ' (Security → Report a vulnerability). Riceverai una risposta entro una settimana. Solo l’ultima versione riceve correzioni.' })}</p>
+			</section>
+		</div>
+	</div>
+</Layout>

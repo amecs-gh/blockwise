@@ -1,0 +1,35 @@
+---
+// A work week of blocks in the calendar, each in its commitment's color.
+// Rows are half hours from 8:00 (row 2) to 17:00.
+import { type Lang, tr } from '../i18n'
+import { byId } from '../data/sample'
+
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = tr(lang)
+const days = lang === 'it' ? ['Lun', 'Mar', 'Mer', 'Gio', 'Ven'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+const today = 1 // Tuesday
+// [day 1-5, start hour, hours, commitment, title?]
+const blocks: [number, number, number, string, { en: string; it: string }?][] = [
+	[1, 9, 2, 'thesis'], [1, 11.5, 3, 'work'], [1, 15, 1.5, 'running'],
+	[2, 9, 2, 'thesis', { en: 'Chapter 3', it: 'Capitolo 3' }], [2, 11.5, 4, 'work'],
+	[3, 8.5, 1, 'running'], [3, 10, 2, 'teaching', { en: 'Lecture', it: 'Lezione' }], [3, 13, 3, 'work'],
+	[4, 9, 2, 'thesis'], [4, 11.5, 2, 'work'], [4, 14, 2, 'thesis'],
+	[5, 9, 2.5, 'work'], [5, 13, 2, 'teaching'],
+]
+const time = (h: number) => `${Math.floor(h)}:${h % 1 ? '30' : '00'}`
+const row = (h: number) => 2 + Math.round((h - 8) * 2)
+---
+<div class="ui-week">
+	{days.map((d, i) => <span class:list={['ui-week__day', `col-${i + 1}`, { 'is-today': i === today }]}>{d}</span>)}
+	{[8, 10, 12, 14, 16].map((h) => <span class:list={['ui-week__hour', `row-${row(h)}`]}>{h}</span>)}
+	{blocks.map(([d, start, len, id, title]) => {
+		const c = byId(id)
+		return (
+			<span class:list={['ui-ev', c.color, `col-${d}`, `row-${row(start)}`, `span-${Math.round(len * 2)}`, { 'is-now': d === today + 1 && start === 9 }]}>
+				{title ? t(title) : t(c.name)}
+				<small>{time(start)}–{time(start + len)}</small>
+			</span>
+		)
+	})}
+</div>

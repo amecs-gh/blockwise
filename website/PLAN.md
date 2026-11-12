@@ -1,5 +1,10 @@
 # Website: move to a multipage Astro site
 
+**Status: done (2026-11-12).** The site is built with Astro; see `README.md`.
+Left for the owner: put the site's address in `site.json` once known, set up
+Netlify or Cloudflare Pages (base directory `website`), and add the redirect
+URI and app key for Dropbox in the browser app.
+
 Handoff for the next session. Read this first, then `website/README.md`, the
 root `README.md` and the app's interface (`nextcloud/js/tracker.js`,
 `nextcloud/css/tracker.css`).

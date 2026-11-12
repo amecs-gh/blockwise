@@ -1,0 +1,23 @@
+---
+// Time: this week's hours per commitment against its weekly goal (the mark),
+// with CSV export. Bars are scaled to the largest of hours and goals.
+import { type Lang, tr } from '../i18n'
+import { COMMITMENTS, hm, step } from '../data/sample'
+
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = tr(lang)
+const max = Math.max(...COMMITMENTS.map((c) => Math.max(c.goal, c.done)))
+---
+<div class="ui-card">
+	<div class="ui-h"><b>{t({ en: 'This week', it: 'Questa settimana' })}</b><span class="ui-export">↓ {t({ en: 'Export CSV', it: 'Esporta CSV' })}</span></div>
+	<ul class="ui-hours">
+		{COMMITMENTS.map((c) => (
+			<li class={c.color}>
+				<b>{t(c.name)}</b>
+				<span class:list={['ui-bar', `pct-${step(c.done / max)}`, c.goal ? `goal-${step(c.goal / max)}` : null]}><span></span>{c.goal ? <em></em> : null}</span>
+				<small>{c.goal ? `${hm(c.done)} / ${hm(c.goal)}` : hm(c.done)}</small>
+			</li>
+		))}
+	</ul>
+</div>

@@ -1,0 +1,23 @@
+---
+// Done: one day on a timeline, planned blocks above, tracked time below, and
+// the tasks checked off where they were finished.
+import { type Lang, tr } from '../i18n'
+
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = tr(lang)
+---
+<div class="ui-card">
+	<div class="ui-h"><b>{t({ en: 'Tuesday', it: 'Martedì' })}</b><span>8:00 – 18:00</span></div>
+	<div class="ui-lanes">
+		<div class="ui-lane"><span>{t({ en: 'Planned', it: 'Pianificato' })}</span>
+			<div class="ui-lane__track"><i class="ui-seg is-plan c-violet from-10 pct-20"></i><i class="ui-seg is-plan c-blue from-35 pct-40"></i><i class="ui-seg is-plan c-green from-80 pct-15"></i></div>
+		</div>
+		<div class="ui-lane"><span>{t({ en: 'Tracked', it: 'Registrato' })}</span>
+			<div class="ui-lane__track"><i class="ui-seg c-violet from-10 pct-25"></i><i class="ui-seg c-blue from-40 pct-35"></i><i class="ui-seg c-green from-80 pct-10"></i></div>
+		</div>
+		<div class="ui-lane"><span>{t({ en: 'Done', it: 'Fatto' })}</span>
+			<div class="ui-lane__track"><i class="ui-tickmark c-violet from-20"></i><i class="ui-tickmark c-violet from-30"></i><i class="ui-tickmark c-blue from-55"></i><i class="ui-tickmark c-blue from-70"></i></div>
+		</div>
+	</div>
+</div>

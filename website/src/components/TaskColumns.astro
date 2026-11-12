@@ -1,0 +1,60 @@
+---
+// Tasks as columns, one per commitment (.imp-tcol): the queue split into the
+// blocks it fills, subtasks with estimates, and a warning when the tasks need
+// more time than the blocks have.
+import { type Lang, tr } from '../i18n'
+import { byId } from '../data/sample'
+
+interface Props { lang: Lang; columns?: 1 | 2 }
+const { lang, columns = 2 } = Astro.props
+const t = tr(lang)
+const thesis = byId('thesis')
+const teaching = byId('teaching')
+---
+<div class="ui-tcols">
+	<div class:list={['ui-tcol', 'is-current', thesis.color]}>
+		<div class="ui-tcol__head">
+			<span class="ui-tcol__dot">{t(thesis.name).charAt(0)}</span>
+			<div><b>{t(thesis.name)}</b><span>{t({ en: '4 tasks · 5h 15m', it: '4 task · 5h 15m' })}</span></div>
+		</div>
+		<div class="ui-tcol__body">
+			<p class="ui-block">{t({ en: 'Today 9:00–11:00 · now', it: 'Oggi 9:00–11:00 · ora' })}</p>
+			<div class="ui-task">
+				<div class="ui-task__head"><b>{t({ en: 'Chapter 3', it: 'Capitolo 3' })}</b><span class="ui-chip">2h</span></div>
+				<div class="ui-bar pct-40"><span></span></div>
+				<div class="ui-sub is-done"><span class="ui-box"></span><span>{t({ en: 'Outline', it: 'Scaletta' })}</span><span class="ui-chip">15m</span></div>
+				<div class="ui-sub is-done"><span class="ui-box"></span><span>{t({ en: 'Read Ostrom 1990', it: 'Leggere Ostrom 1990' })}</span><span class="ui-chip">30m</span></div>
+				<div class="ui-sub"><span class="ui-box"></span><span>{t({ en: 'Draft', it: 'Bozza' })}</span><span class="ui-chip">45m</span></div>
+				<div class="ui-sub"><span class="ui-box"></span><span>{t({ en: 'Figures', it: 'Figure' })}</span><span class="ui-chip">30m</span></div>
+			</div>
+			<p class="ui-block">{t({ en: 'Thu 14:00–16:00', it: 'Gio 14:00–16:00' })}</p>
+			<div class="ui-task">
+				<div class="ui-task__head"><b>{t({ en: 'Email the supervisor', it: 'Email alla relatrice' })}</b><span class="ui-chip">15m</span></div>
+			</div>
+			<div class="ui-task">
+				<div class="ui-task__head"><b>{t({ en: 'Fix the references', it: 'Sistemare la bibliografia' })}</b><span class="ui-chip">1h</span></div>
+			</div>
+		</div>
+	</div>
+	{columns === 2 && (
+		<div class:list={['ui-tcol', teaching.color]}>
+			<div class="ui-tcol__head">
+				<span class="ui-tcol__dot">{t(teaching.name).charAt(0)}</span>
+				<div><b>{t(teaching.name)}</b><span>{t({ en: '3 tasks · 4h 30m', it: '3 task · 4h 30m' })}</span></div>
+			</div>
+			<div class="ui-tcol__body">
+				<p class="ui-block">{t({ en: 'Wed 10:00–12:00', it: 'Mer 10:00–12:00' })}</p>
+				<div class="ui-task">
+					<div class="ui-task__head"><b>{t({ en: 'Grade quizzes', it: 'Correggere i test' })}</b><span class="ui-chip">1h 30m</span></div>
+				</div>
+				<div class="ui-task">
+					<div class="ui-task__head"><b>{t({ en: 'Slides, week 6', it: 'Slide, settimana 6' })}</b><span class="ui-chip">30m</span></div>
+				</div>
+				<p class="ui-block is-warn">{t({ en: 'No block yet · 2h 30m over', it: 'Ancora nessun blocco · 2h 30m in più' })}</p>
+				<div class="ui-task">
+					<div class="ui-task__head"><b>{t({ en: 'Exam questions', it: 'Domande d’esame' })}</b><span class="ui-chip">2h 30m</span></div>
+				</div>
+			</div>
+		</div>
+	)}
+</div>

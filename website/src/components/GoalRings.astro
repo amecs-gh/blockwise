@@ -1,0 +1,38 @@
+---
+// The commitments as goal rings (tracker.js goalRings): a tile with the first
+// letter, the week's goal as a ring around it (dashed: no goal), play or stop.
+import { type Lang, tr } from '../i18n'
+import { COMMITMENTS, hm } from '../data/sample'
+
+interface Props { lang: Lang; running?: string }
+const { lang, running = 'thesis' } = Astro.props
+const t = tr(lang)
+const R = 27
+const C = 2 * Math.PI * R
+---
+<ul class="ui-rings">
+	{COMMITMENTS.map((c) => {
+		const frac = c.goal ? Math.min(1, c.done / c.goal) : 0
+		const name = t(c.name)
+		return (
+			<li class:list={['ui-ring', c.color, { 'is-running': c.id === running, 'is-reached': c.goal && c.done >= c.goal }]}>
+				<span class="ui-ring__dial">
+					<svg viewBox="0 0 60 60" aria-hidden="true">
+						{c.goal ? (
+							<>
+								<circle cx="30" cy="30" r={R} class="ui-ring__track" />
+								<circle cx="30" cy="30" r={R} class="ui-ring__fill" stroke-dasharray={`${(C * frac).toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 30 30)" />
+							</>
+						) : <circle cx="30" cy="30" r={R} class="ui-ring__none" />}
+					</svg>
+					<span class="ui-ring__tile">{name.charAt(0)}</span>
+					<span class="ui-ring__badge">
+						<svg viewBox="0 0 10 10" aria-hidden="true">{c.id === running ? <rect x="1.5" y="1.5" width="7" height="7" rx="1.5" /> : <path d="M2.5 1.2v7.6L9 5z" />}</svg>
+					</span>
+				</span>
+				<span class="ui-ring__name">{name}</span>
+				<span class="ui-ring__goal">{c.goal ? `${hm(c.done)} / ${hm(c.goal)}` : ''}</span>
+			</li>
+		)
+	})}
+</ul>

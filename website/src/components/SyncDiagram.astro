@@ -1,0 +1,25 @@
+---
+// End-to-end encrypted sync: your devices encrypt before anything leaves them;
+// the drive only ever holds encrypted files in Blockwise's own folder.
+import { type Lang, tr } from '../i18n'
+
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = tr(lang)
+---
+<div class="ui-sync">
+	<div class="ui-sync__devs">
+		<span class="ui-dev"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2" /><path d="M1 20h22" /></svg>Mac</span>
+		<span class="ui-dev"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" /><path d="M11 18h2" /></svg>Android</span>
+		<span class="ui-dev"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2.5" /><path d="M2 9h20" /></svg>{t({ en: 'Browser', it: 'Browser' })}</span>
+	</div>
+	<div class="ui-lock">
+		<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2.5" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
+		<span>AES-256-GCM</span>
+	</div>
+	<div class="ui-drive">
+		<b>{t({ en: 'Your Dropbox or Google Drive', it: 'Il tuo Dropbox o Google Drive' })}</b>
+		<span class="ui-muted">{t({ en: 'Blockwise’s folder only', it: 'Solo la cartella di Blockwise' })}</span>
+		{['9f3a 7be1 0c52 … c41e', '51be 9d07 e2a4 … 07d2', 'e08c 4f19 b3d6 … 9a6f'].map((x) => <div class="ui-file">{x}</div>)}
+	</div>
+</div>

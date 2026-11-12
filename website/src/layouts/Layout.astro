@@ -1,0 +1,103 @@
+---
+// Every page: the head (language, search and link-preview tags, links to the
+// other language), the menu bar and the footer. No scripts.
+import '../styles/site.css'
+import '../styles/ui.css'
+import { type Lang, type PageKey, LANGS, PAGES, href, site, tr, DOWNLOADS } from '../i18n'
+
+interface Props {
+	lang: Lang
+	page: PageKey | '404'
+	title?: string
+	description?: string
+	/** Structured data for search engines (home page only) */
+	ld?: object
+}
+const { lang, page, title, description, ld } = Astro.props
+const t = tr(lang)
+const base = site.url.replace(/\/+$/, '')
+const other: Lang = lang === 'en' ? 'it' : 'en'
+const key = page === '404' ? '' : page
+const fullTitle = title ? `${title} · Blockwise` : site.title[lang]
+const desc = description ?? site.description[lang]
+const abs = (p: string) => (base ? base + p : p)
+const og = abs('/img/og.png')
+---
+<!doctype html>
+<html lang={lang}>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+	<meta name="referrer" content="no-referrer">
+	<title>{fullTitle}</title>
+	<meta name="description" content={desc}>
+	{page === '404' ? <meta name="robots" content="noindex"> : <meta name="robots" content="index, follow">}
+	<meta name="theme-color" content="#f6f5fb" media="(prefers-color-scheme: light)">
+	<meta name="theme-color" content="#14121d" media="(prefers-color-scheme: dark)">
+	<meta name="color-scheme" content="light dark">
+	{page !== '404' && base && <link rel="canonical" href={abs(href(lang, key))}>}
+	{page !== '404' && LANGS.map((l) => <link rel="alternate" hreflang={l} href={abs(href(l, key))}>)}
+	{page !== '404' && <link rel="alternate" hreflang="x-default" href={abs(href('en', key))}>}
+	<link rel="icon" href="/logo.svg" type="image/svg+xml">
+	<link rel="apple-touch-icon" href="/img/icon-180.png">
+	<link rel="preload" href="/fonts/Poppins-Regular.woff" as="font" type="font/woff" crossorigin>
+	<link rel="preload" href="/fonts/Poppins-Bold.woff" as="font" type="font/woff" crossorigin>
+	<meta property="og:type" content="website">
+	<meta property="og:site_name" content="Blockwise">
+	<meta property="og:title" content={fullTitle}>
+	<meta property="og:description" content={desc}>
+	<meta property="og:locale" content={lang === 'it' ? 'it_IT' : 'en_US'}>
+	<meta property="og:locale:alternate" content={lang === 'it' ? 'en_US' : 'it_IT'}>
+	{base && <meta property="og:url" content={abs(href(lang, key))}>}
+	<meta property="og:image" content={og}>
+	<meta property="og:image:width" content="1200">
+	<meta property="og:image:height" content="630">
+	<meta property="og:image:alt" content={site.title[lang]}>
+	<meta name="twitter:card" content="summary_large_image">
+	{ld && <script type="application/ld+json" set:html={JSON.stringify(ld).replace(/</g, '\\u003c')} />}
+</head>
+<body>
+	<a class="skip" href="#main">{t({ en: 'Skip to content', it: 'Vai al contenuto' })}</a>
+	<header class="bar">
+		<div class="bar__in">
+			<a class="brand" href={href(lang, '')}><img src="/logo.svg" alt="" width="34" height="34">Blockwise</a>
+			<nav class="tabs" aria-label={t({ en: 'Site', it: 'Sito' })}>
+				{PAGES.filter((p) => p.key !== '' && p.key !== 'download/').map((p) => (
+					<a href={href(lang, p.key)} aria-current={p.key === page ? 'page' : undefined}>{t(p.label)}</a>
+				))}
+			</nav>
+			<div class="bar__end">
+				<a class="lang" href={href(other, key)} hreflang={other} lang={other} title={other === 'it' ? 'Italiano' : 'English'}>{other.toUpperCase()}</a>
+				<a class="btn btn--small" href={href(lang, 'download/')} aria-current={page === 'download/' ? 'page' : undefined}>{t({ en: 'Download', it: 'Scarica' })}</a>
+			</div>
+		</div>
+	</header>
+
+	<main id="main">
+		<slot />
+	</main>
+
+	<footer class="foot">
+		<div class="foot__in">
+			<div class="foot__brand">
+				<a class="brand" href={href(lang, '')}><img src="/logo.svg" alt="" width="28" height="28">Blockwise</a>
+				<p>{t({ en: 'Plan your week in blocks. Free and open source, with no accounts, no tracking and no ads.', it: 'Pianifica la settimana a blocchi. Gratis e open source, senza account, tracciamento o pubblicità.' })}</p>
+			</div>
+			<nav aria-label={t({ en: 'More', it: 'Altro' })}>
+				<h2>{t({ en: 'Blockwise', it: 'Blockwise' })}</h2>
+				{PAGES.map((p) => <a href={href(lang, p.key)}>{t(p.label)}</a>)}
+				<a href="/app/">{t({ en: 'Open in your browser', it: 'Apri nel browser' })}</a>
+			</nav>
+			<nav aria-label={t({ en: 'Project', it: 'Progetto' })}>
+				<h2>{t({ en: 'Project', it: 'Progetto' })}</h2>
+				<a href={DOWNLOADS.releases}>{t({ en: 'Releases on GitHub', it: 'Versioni su GitHub' })}</a>
+				<a href={DOWNLOADS.license}>{t({ en: 'License (AGPL-3.0)', it: 'Licenza (AGPL-3.0)' })}</a>
+				<a href={href(lang, 'download/') + '#changelog'}>{t({ en: 'What’s new', it: 'Novità' })}</a>
+				<a href={href(lang, 'privacy/') + '#report'}>{t({ en: 'Report a security problem', it: 'Segnala un problema di sicurezza' })}</a>
+			</nav>
+		</div>
+		<p class="foot__note">{t({ en: 'Started from TimeManager by Thomas Ebert. © 2026 Blockwise.', it: 'Nato da TimeManager di Thomas Ebert. © 2026 Blockwise.' })}</p>
+	</footer>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "blockwise-website",
+  "private": true,
+  "scripts": {
+    "dev": "node build.js && astro dev",
+    "build": "node build.js && astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "7.4.11"
+  }
+}

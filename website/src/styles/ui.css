@@ -1,0 +1,722 @@
+/*
+ * Pieces of the Blockwise interface, drawn the way the app draws them
+ * (nextcloud/css/tracker.css: .imp-timer, .imp-ring, .imp-tcol, …), for the
+ * illustrations. No inline styles (the pages' policy forbids them): sizes and
+ * positions come from the classes at the end.
+ */
+
+.ui {
+	color: var(--imp-text);
+	font-size: 15px;
+	line-height: 1.45;
+	user-select: none;
+}
+.ui-card {
+	padding: 22px 24px;
+	border-radius: 24px;
+	background: var(--tl-card);
+	box-shadow: var(--tl-shadow);
+}
+.ui-card + .ui-card,
+.ui-timer + .ui-card,
+.ui-card + .ui-timer {
+	margin-top: 16px;
+}
+.ui-muted {
+	color: var(--imp-muted);
+}
+.ui-h {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 12px;
+}
+.ui-h b {
+	font-size: 1.12em;
+	font-weight: 800;
+}
+.ui-h span {
+	color: var(--imp-muted);
+	font-size: 0.9em;
+	font-weight: 700;
+}
+
+/* --- the timer card: filled with the commitment's color, the block as a ring --- */
+
+.ui-timer {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 24px 28px;
+	border-radius: 28px;
+	background: var(--c);
+	color: #fff;
+	box-shadow: 0 14px 34px color-mix(in srgb, var(--c) 30%, transparent);
+}
+.ui-timer__text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+.ui-timer__label {
+	font-weight: 800;
+}
+.ui-timer__label span {
+	font-weight: 400;
+	opacity: 0.85;
+}
+.ui-timer__clock {
+	font-size: 3em;
+	font-weight: 800;
+	line-height: 1.05;
+	letter-spacing: -0.02em;
+}
+.ui-timer__since {
+	align-self: flex-start;
+	margin-top: 4px;
+	padding: 2px 10px;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.18);
+	font-size: 0.85em;
+	font-weight: 600;
+}
+.ui-timer__sub {
+	margin-top: 4px;
+	opacity: 0.85;
+}
+.ui-timer__side {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 10px;
+}
+.ui-timer__ring {
+	display: grid;
+	place-items: center;
+	width: 96px;
+	height: 96px;
+	border-radius: 50%;
+	background: conic-gradient(#fff 0 var(--pct), rgba(255, 255, 255, 0.25) var(--pct) 100%);
+	font-weight: 800;
+}
+.ui-timer__ring span {
+	display: grid;
+	place-items: center;
+	width: 76px;
+	height: 76px;
+	border-radius: 50%;
+	background: var(--c);
+	font-size: 0.95em;
+}
+.ui-timer__stop {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 44px;
+	padding: 0 22px;
+	border-radius: 16px;
+	background: #fff;
+	color: #24223a;
+	font-weight: 800;
+}
+.ui-timer__stop i {
+	width: 12px;
+	height: 12px;
+	border-radius: 3px;
+	background: currentColor;
+}
+.ui-pomo {
+	display: flex;
+	flex-basis: 100%;
+	align-items: center;
+	gap: 10px;
+	padding-top: 12px;
+	border-top: 1px solid rgba(255, 255, 255, 0.25);
+	font-size: 0.9em;
+	font-weight: 600;
+}
+.ui-pomo i {
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.3);
+}
+.ui-pomo i.on {
+	background: #fff;
+}
+
+/* --- goal rings: each commitment a tile, its weekly goal a ring around it ------ */
+
+.ui-rings {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 14px 10px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.ui-ring {
+	display: flex;
+	flex: 0 0 72px;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+}
+.ui-ring__dial {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: 62px;
+	height: 62px;
+}
+.ui-ring__dial svg {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	fill: none;
+}
+.ui-ring__track {
+	stroke: var(--tl-pill);
+	stroke-width: 4;
+}
+.ui-ring__fill {
+	stroke: var(--c);
+	stroke-width: 4;
+	stroke-linecap: round;
+}
+.ui-ring__none {
+	stroke: var(--imp-line);
+	stroke-width: 2;
+	stroke-dasharray: 4 5;
+}
+.ui-ring__tile {
+	display: grid;
+	place-items: center;
+	width: 40px;
+	height: 40px;
+	border-radius: 14px;
+	background: var(--c);
+	color: #fff;
+	font-size: 16px;
+	font-weight: 800;
+}
+.ui-ring__badge {
+	position: absolute;
+	right: -1px;
+	bottom: -1px;
+	display: grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	background: var(--tl-card);
+	color: var(--c);
+	box-shadow: 0 0 0 2px var(--tl-card), 0 2px 6px rgba(20, 16, 50, 0.18);
+}
+.ui-ring.is-running .ui-ring__badge {
+	background: var(--c);
+	color: #fff;
+}
+.ui-ring__badge svg {
+	position: static;
+	width: 10px;
+	height: 10px;
+	fill: currentColor;
+}
+.ui-ring__name {
+	max-width: 72px;
+	overflow: hidden;
+	font-size: 12px;
+	font-weight: 700;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.ui-ring__goal {
+	min-height: 15px;
+	color: var(--imp-muted);
+	font-size: 10.5px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+.ui-ring.is-reached .ui-ring__goal {
+	color: var(--imp-ok);
+}
+
+/* --- task columns: one per commitment, each task a soft card ------------------- */
+
+.ui-tcols {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 16px;
+	align-items: start;
+}
+.ui-tcol {
+	padding: 18px 0 10px;
+	border-radius: 24px;
+	background: var(--tl-card);
+	box-shadow: var(--tl-shadow);
+}
+.ui-tcol.is-current {
+	box-shadow: 0 0 0 2px color-mix(in srgb, var(--c) 45%, transparent), var(--tl-shadow);
+}
+.ui-tcol__head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 0 16px 12px;
+}
+.ui-tcol__dot {
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	width: 34px;
+	height: 34px;
+	border-radius: 12px;
+	background: var(--c);
+	color: #fff;
+	font-weight: 800;
+}
+.ui-tcol__head div {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-width: 0;
+}
+.ui-tcol__head b {
+	font-size: 1.08em;
+	font-weight: 800;
+}
+.ui-tcol__head div span {
+	color: var(--imp-muted);
+	font-size: 0.85em;
+	font-weight: 700;
+}
+.ui-tcol__body {
+	padding: 0 12px;
+}
+.ui-block {
+	margin: 4px 4px 8px;
+	color: var(--imp-muted);
+	font-size: 0.8em;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+}
+.ui-block.is-warn {
+	color: #c2410c;
+}
+.ui-task {
+	margin-bottom: 8px;
+	padding: 10px 12px;
+	border-radius: 18px;
+	background: var(--tl-page);
+}
+.ui-task__head {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.ui-task__head b {
+	flex: 1 1 auto;
+	font-weight: 800;
+}
+.ui-chip {
+	flex: 0 0 auto;
+	display: inline-grid;
+	place-items: center;
+	height: 24px;
+	padding: 0 10px;
+	border-radius: 999px;
+	background: var(--tl-card);
+	color: var(--imp-muted);
+	font-size: 0.82em;
+	font-weight: 700;
+}
+.ui-bar {
+	height: 5px;
+	margin: 8px 0 4px;
+	border-radius: 3px;
+	background: color-mix(in srgb, var(--c) 16%, transparent);
+}
+.ui-bar span {
+	display: block;
+	width: var(--pct);
+	height: 100%;
+	border-radius: 3px;
+	background: var(--c);
+}
+.ui-sub {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 3px 0;
+	font-size: 0.93em;
+}
+.ui-sub span:not(.ui-box):not(.ui-chip) {
+	flex: 1 1 auto;
+}
+.ui-sub.is-done span:not(.ui-box):not(.ui-chip) {
+	color: var(--imp-muted);
+	text-decoration: line-through;
+}
+.ui-box {
+	flex: 0 0 auto;
+	display: grid;
+	place-items: center;
+	width: 18px;
+	height: 18px;
+	border: 2px solid var(--imp-line);
+	border-radius: 6px;
+	background: var(--tl-card);
+}
+.is-done > .ui-box {
+	border-color: var(--c);
+	background: var(--c);
+}
+.is-done > .ui-box::after {
+	width: 4px;
+	height: 8px;
+	margin-top: -2px;
+	border: solid #fff;
+	border-width: 0 2px 2px 0;
+	transform: rotate(45deg);
+	content: "";
+}
+@media (max-width: 560px) {
+	.ui-tcols { grid-template-columns: minmax(0, 1fr); }
+	.ui-tcols > :nth-child(n + 2) { display: none; }
+}
+
+/* --- the week calendar: blocks in each commitment's color ----------------------- */
+
+.ui-week {
+	display: grid;
+	grid-template-columns: 34px repeat(5, minmax(0, 1fr));
+	grid-template-rows: auto repeat(18, 18px);
+	column-gap: 6px;
+	padding: 18px 18px 20px 10px;
+	border-radius: 24px;
+	background: var(--tl-card);
+	box-shadow: var(--tl-shadow);
+	font-size: 0.8em;
+}
+.ui-week__day {
+	grid-row: 1;
+	padding-bottom: 10px;
+	color: var(--imp-muted);
+	font-weight: 700;
+	text-align: center;
+}
+.ui-week__day.is-today {
+	color: var(--tl-accent);
+}
+.ui-week__hour {
+	grid-column: 1;
+	color: var(--imp-muted);
+	font-size: 0.9em;
+	text-align: right;
+	transform: translateY(-0.6em);
+}
+.ui-ev {
+	z-index: 1;
+	margin: 1px 0;
+	padding: 6px 8px;
+	overflow: hidden;
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--c) 16%, var(--tl-card));
+	box-shadow: inset 4px 0 0 var(--c);
+	color: var(--imp-text);
+	font-weight: 700;
+	line-height: 1.25;
+}
+.ui-ev small {
+	display: block;
+	color: var(--imp-muted);
+	font-weight: 600;
+}
+.ui-ev.is-now {
+	background: var(--c);
+	box-shadow: 0 6px 16px color-mix(in srgb, var(--c) 35%, transparent);
+	color: #fff;
+}
+.ui-ev.is-now small {
+	color: rgba(255, 255, 255, 0.85);
+}
+.ui-week__line {
+	grid-column: 2 / -1;
+	border-top: 1px solid var(--imp-line);
+}
+@media (max-width: 560px) {
+	.ui-ev small { display: none; }
+}
+
+/* --- notes: a card with a colored edge, Markdown and checklists ------------------ */
+
+.ui-note {
+	padding: 22px 24px;
+	border-radius: 22px;
+	background: var(--tl-card);
+	box-shadow: inset 6px 0 0 var(--c), var(--tl-shadow);
+}
+.ui-note h4 {
+	margin: 0 0 6px;
+	font-size: 1.15em;
+}
+.ui-note p {
+	color: var(--imp-muted);
+}
+.ui-note p + .ui-sub,
+.ui-note p + p {
+	margin-top: 8px;
+}
+.ui-note code {
+	font-size: 0.85em;
+}
+.ui-note__meta {
+	display: flex;
+	gap: 8px;
+	margin-top: 14px;
+}
+.ui-pill {
+	padding: 2px 10px;
+	border-radius: 999px;
+	background: var(--tl-pill);
+	color: var(--imp-muted);
+	font-size: 0.8em;
+	font-weight: 700;
+}
+
+/* --- Time: hours per commitment against the weekly goal ------------------------- */
+
+.ui-hours {
+	display: grid;
+	gap: 14px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.ui-hours li {
+	display: grid;
+	grid-template-columns: 7.5em minmax(0, 1fr) 6.5em;
+	gap: 12px;
+	align-items: center;
+}
+.ui-hours b {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	overflow: hidden;
+	font-weight: 700;
+	white-space: nowrap;
+}
+.ui-hours b::before {
+	flex: 0 0 auto;
+	width: 10px;
+	height: 10px;
+	border-radius: 4px;
+	background: var(--c);
+	content: "";
+}
+.ui-hours .ui-bar {
+	position: relative;
+	height: 10px;
+	margin: 0;
+	border-radius: 6px;
+}
+.ui-hours .ui-bar span {
+	border-radius: 6px;
+}
+.ui-hours .ui-bar em {
+	position: absolute;
+	top: -4px;
+	bottom: -4px;
+	left: var(--goal);
+	width: 2px;
+	border-radius: 1px;
+	background: var(--imp-text);
+	opacity: 0.5;
+}
+.ui-hours small {
+	color: var(--imp-muted);
+	font-size: 0.85em;
+	font-weight: 600;
+	text-align: right;
+	white-space: nowrap;
+}
+.ui-export {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 14px;
+	border-radius: 12px;
+	background: var(--tl-pill);
+	color: var(--imp-text);
+	font-size: 0.85em;
+	font-weight: 700;
+}
+
+/* --- Done: the week as lanes (planned, tracked, checked off) -------------------- */
+
+.ui-lanes {
+	display: grid;
+	gap: 10px;
+}
+.ui-lane {
+	display: grid;
+	grid-template-columns: 5.5em minmax(0, 1fr);
+	gap: 10px;
+	align-items: center;
+	font-size: 0.85em;
+}
+.ui-lane > span {
+	color: var(--imp-muted);
+	font-weight: 700;
+}
+.ui-lane__track {
+	position: relative;
+	height: 22px;
+	border-radius: 8px;
+	background: var(--tl-page);
+}
+.ui-seg {
+	position: absolute;
+	top: 3px;
+	bottom: 3px;
+	left: var(--from);
+	width: var(--pct);
+	border-radius: 6px;
+	background: var(--c);
+}
+.ui-seg.is-plan {
+	background: color-mix(in srgb, var(--c) 22%, transparent);
+	box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--c) 60%, transparent);
+}
+.ui-tickmark {
+	position: absolute;
+	top: 3px;
+	left: var(--from);
+	display: grid;
+	place-items: center;
+	width: 16px;
+	height: 16px;
+	border-radius: 5px;
+	background: var(--c);
+}
+.ui-tickmark::after {
+	width: 3px;
+	height: 7px;
+	margin-top: -2px;
+	border: solid #fff;
+	border-width: 0 2px 2px 0;
+	transform: rotate(45deg);
+	content: "";
+}
+
+/* --- sync: your devices, your drive ------------------------------------------- */
+
+.ui-sync {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+	gap: 14px;
+	align-items: center;
+}
+.ui-sync__devs {
+	display: grid;
+	gap: 10px;
+}
+.ui-dev {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px 14px;
+	border-radius: 16px;
+	background: var(--tl-card);
+	box-shadow: var(--tl-shadow);
+	font-weight: 700;
+}
+.ui-dev svg {
+	flex: 0 0 auto;
+	width: 22px;
+	height: 22px;
+	fill: none;
+	stroke: var(--tl-accent);
+	stroke-width: 2.2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+.ui-lock {
+	display: grid;
+	justify-items: center;
+	gap: 6px;
+	color: var(--imp-muted);
+	font-size: 0.8em;
+	font-weight: 700;
+	text-align: center;
+}
+.ui-lock svg {
+	width: 44px;
+	height: 44px;
+	padding: 10px;
+	border-radius: 14px;
+	background: var(--tl-accent);
+	fill: none;
+	stroke: #fff;
+	stroke-width: 2.2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+.ui-drive {
+	padding: 18px;
+	border-radius: 20px;
+	background: var(--tl-card);
+	box-shadow: var(--tl-shadow);
+}
+.ui-drive b {
+	display: block;
+	margin-bottom: 8px;
+}
+.ui-file {
+	margin-top: 6px;
+	padding: 6px 10px;
+	overflow: hidden;
+	border-radius: 10px;
+	background: var(--tl-page);
+	color: var(--imp-muted);
+	font: 600 0.78em/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+@media (max-width: 560px) {
+	.ui-sync { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* --- sizes and positions, in steps of 5% ------------------------------------- */
+
+.pct-0 { --pct: 0%; } .pct-5 { --pct: 5%; } .pct-10 { --pct: 10%; } .pct-15 { --pct: 15%; }
+.pct-20 { --pct: 20%; } .pct-25 { --pct: 25%; } .pct-30 { --pct: 30%; } .pct-35 { --pct: 35%; }
+.pct-40 { --pct: 40%; } .pct-45 { --pct: 45%; } .pct-50 { --pct: 50%; } .pct-55 { --pct: 55%; }
+.pct-60 { --pct: 60%; } .pct-65 { --pct: 65%; } .pct-70 { --pct: 70%; } .pct-75 { --pct: 75%; }
+.pct-80 { --pct: 80%; } .pct-85 { --pct: 85%; } .pct-90 { --pct: 90%; } .pct-95 { --pct: 95%; }
+.pct-100 { --pct: 100%; }
+.from-0 { --from: 0%; } .from-5 { --from: 5%; } .from-10 { --from: 10%; } .from-15 { --from: 15%; }
+.from-20 { --from: 20%; } .from-25 { --from: 25%; } .from-30 { --from: 30%; } .from-35 { --from: 35%; }
+.from-40 { --from: 40%; } .from-45 { --from: 45%; } .from-50 { --from: 50%; } .from-55 { --from: 55%; }
+.from-60 { --from: 60%; } .from-65 { --from: 65%; } .from-70 { --from: 70%; } .from-75 { --from: 75%; }
+.from-80 { --from: 80%; } .from-85 { --from: 85%; } .from-90 { --from: 90%; } .from-95 { --from: 95%; }
+.goal-50 { --goal: 50%; } .goal-55 { --goal: 55%; } .goal-60 { --goal: 60%; } .goal-65 { --goal: 65%; }
+.goal-70 { --goal: 70%; } .goal-75 { --goal: 75%; } .goal-80 { --goal: 80%; } .goal-85 { --goal: 85%; }
+.goal-90 { --goal: 90%; } .goal-95 { --goal: 95%; } .goal-100 { --goal: 100%; }
+/* the week calendar: day columns, and rows of half an hour from 8:00 */
+.col-1 { grid-column: 2; } .col-2 { grid-column: 3; } .col-3 { grid-column: 4; } .col-4 { grid-column: 5; } .col-5 { grid-column: 6; }
+.row-2 { grid-row-start: 2; } .row-3 { grid-row-start: 3; } .row-4 { grid-row-start: 4; } .row-5 { grid-row-start: 5; }
+.row-6 { grid-row-start: 6; } .row-7 { grid-row-start: 7; } .row-8 { grid-row-start: 8; } .row-9 { grid-row-start: 9; }
+.row-10 { grid-row-start: 10; } .row-11 { grid-row-start: 11; } .row-12 { grid-row-start: 12; } .row-13 { grid-row-start: 13; }
+.row-14 { grid-row-start: 14; } .row-15 { grid-row-start: 15; } .row-16 { grid-row-start: 16; } .row-17 { grid-row-start: 17; }
+.row-18 { grid-row-start: 18; } .row-19 { grid-row-start: 19; }
+.span-1 { grid-row-end: span 1; } .span-2 { grid-row-end: span 2; } .span-3 { grid-row-end: span 3; } .span-4 { grid-row-end: span 4; }
+.span-5 { grid-row-end: span 5; } .span-6 { grid-row-end: span 6; } .span-7 { grid-row-end: span 7; } .span-8 { grid-row-end: span 8; }

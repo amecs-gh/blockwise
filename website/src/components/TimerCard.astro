@@ -1,0 +1,29 @@
+---
+// The running timer, as on the Now page: filled with the commitment's color,
+// the time left in the block as a ring, and Stop. Optionally the Pomodoro row.
+import { type Lang, tr } from '../i18n'
+import { byId } from '../data/sample'
+
+interface Props { lang: Lang; pomodoro?: boolean }
+const { lang, pomodoro = false } = Astro.props
+const t = tr(lang)
+const c = byId('thesis')
+---
+<div class:list={['ui-timer', c.color]}>
+	<div class="ui-timer__text">
+		<span class="ui-timer__label">{t(c.name)}<span> · {t({ en: 'Chapter 3', it: 'Capitolo 3' })}</span></span>
+		<span class="ui-timer__clock">1:12:48</span>
+		<span class="ui-timer__since">{t({ en: 'since 9:02', it: 'dalle 9:02' })}</span>
+		<span class="ui-timer__sub">{t({ en: '48m left in this block', it: 'mancano 48m in questo blocco' })}</span>
+	</div>
+	<div class="ui-timer__side">
+		<div class="ui-timer__ring pct-60"><span>11:00</span></div>
+		<span class="ui-timer__stop"><i></i>{t({ en: 'Stop', it: 'Stop' })}</span>
+	</div>
+	{pomodoro && (
+		<div class="ui-pomo">
+			<i class="on"></i><i class="on"></i><i></i><i></i>
+			<span>{t({ en: 'Pomodoro: session 3 of 4, then a long break', it: 'Pomodoro: sessione 3 di 4, poi una pausa lunga' })}</span>
+		</div>
+	)}
+</div>

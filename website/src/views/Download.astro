@@ -1,0 +1,140 @@
+---
+import Layout from '../layouts/Layout.astro'
+import { type Lang, tr, href, DOWNLOADS } from '../i18n'
+import { CHANGELOG } from '../data/changelog'
+
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = tr(lang)
+const date = new Intl.DateTimeFormat(lang === 'it' ? 'it-IT' : 'en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })
+const faq = [
+	{
+		q: { en: 'Is Blockwise really free?', it: 'Blockwise è davvero gratis?' },
+		a: [{ en: 'Yes. It’s open source under the AGPL-3.0, with no ads, no subscription and no account. If you sync, you use your own Dropbox, Google Drive or Nextcloud.', it: 'Sì. È open source con licenza AGPL-3.0, senza pubblicità, abbonamenti o account. Se sincronizzi, usi il tuo Dropbox, Google Drive o Nextcloud.' }],
+	},
+	{
+		q: { en: 'Do I need an account or a server?', it: 'Mi serve un account o un server?' },
+		a: [{ en: 'No. The Mac and Android apps and the browser version work on their own. A sync is optional, and Nextcloud is needed only if you want to use Nextcloud.', it: 'No. Le app per Mac e Android e la versione nel browser funzionano da sole. La sincronizzazione è facoltativa, e Nextcloud serve solo se vuoi usare Nextcloud.' }],
+	},
+	{
+		q: { en: 'Can you see my data?', it: 'Potete vedere i miei dati?' },
+		a: [{ en: 'No. There’s no Blockwise server, so your data never reaches us. With Dropbox or Google Drive it’s encrypted on your device with your passphrase before it’s uploaded.', it: 'No. Non esiste un server di Blockwise, quindi i tuoi dati non arrivano mai a noi. Con Dropbox o Google Drive vengono cifrati sul tuo dispositivo con la tua passphrase prima del caricamento.' }],
+		link: { to: 'privacy/', label: { en: 'Privacy and security', it: 'Privacy e sicurezza' } },
+	},
+	{
+		q: { en: 'What if I forget my passphrase?', it: 'E se dimentico la passphrase?' },
+		a: [{ en: 'Nobody can recover it — not even us, because it’s never stored or sent anywhere. You need it to connect each new device, so keep it in a password manager or on paper.', it: 'Nessuno può recuperarla, nemmeno noi, perché non viene mai salvata né inviata. Ti serve per collegare ogni nuovo dispositivo, quindi conservala in un gestore di password o su carta.' }],
+	},
+	{
+		q: { en: 'Is there an iPhone, Windows or Linux app?', it: 'C’è un’app per iPhone, Windows o Linux?' },
+		a: [{ en: 'Not yet. Blockwise in the browser works in any up-to-date browser on those systems, and syncs with the Mac and Android apps through Dropbox. With Nextcloud, use Blockwise inside your Nextcloud.', it: 'Non ancora. Blockwise nel browser funziona in qualsiasi browser aggiornato su questi sistemi e sincronizza con le app per Mac e Android tramite Dropbox. Con Nextcloud, usa Blockwise dentro il tuo Nextcloud.' }],
+	},
+	{
+		q: { en: 'Why does my Mac say it can’t check the app?', it: 'Perché il Mac dice che non può verificare l’app?' },
+		a: [{ en: 'The Mac app isn’t notarized by Apple yet. The first time, open it, then go to System Settings → Privacy & Security and click Open Anyway. You only need to do this once.', it: 'L’app per Mac non è ancora autenticata da Apple. La prima volta aprila, poi vai in Impostazioni di Sistema → Privacy e sicurezza e clicca Apri comunque. Serve solo una volta.' }],
+	},
+	{
+		q: { en: 'Why can’t the browser version use Google Drive or Nextcloud?', it: 'Perché la versione nel browser non può usare Google Drive o Nextcloud?' },
+		a: [{ en: 'A web page can’t reach your Nextcloud server from another site; use Blockwise inside Nextcloud instead. Google Drive, without a server of ours, would need either an app secret in the page or a new sign-in every hour, so the browser offers Dropbox.', it: 'Una pagina web non può raggiungere il tuo server Nextcloud da un altro sito; usa invece Blockwise dentro Nextcloud. Google Drive, senza un nostro server, richiederebbe un segreto dell’app nella pagina o un nuovo accesso ogni ora, quindi il browser offre Dropbox.' }],
+	},
+	{
+		q: { en: 'What happens if I change the same thing on two devices?', it: 'Cosa succede se cambio la stessa cosa su due dispositivi?' },
+		a: [{ en: 'Each device works offline and syncs when it can. If two devices changed the same thing, the later change wins, field by field.', it: 'Ogni dispositivo funziona offline e sincronizza quando può. Se due dispositivi hanno cambiato la stessa cosa, vince la modifica più recente, campo per campo.' }],
+	},
+	{
+		q: { en: 'Can I get my data out?', it: 'Posso esportare i miei dati?' },
+		a: [{ en: 'Time exports your tracked hours as CSV, one row per week and commitment. In the browser, the Account tab has Export my data (JSON). With Nextcloud, everything is on your own server, and blocks are ordinary calendar events.', it: 'Tempo esporta le ore registrate in CSV, una riga per settimana e impegno. Nel browser, la scheda Account ha Esporta i miei dati (JSON). Con Nextcloud, tutto è sul tuo server e i blocchi sono normali eventi di calendario.' }],
+	},
+	{
+		q: { en: 'Which languages does it speak?', it: 'In quali lingue è disponibile?' },
+		a: [{ en: 'English and Italian.', it: 'Italiano e inglese.' }],
+	},
+]
+---
+<Layout lang={lang} page="download/" title={t({ en: 'Download', it: 'Scarica' })} description={t({ en: 'Download Blockwise for Mac and Android, add it to Nextcloud, or open it in your browser. Install steps, common questions and what’s new.', it: 'Scarica Blockwise per Mac e Android, aggiungilo a Nextcloud o aprilo nel browser. Istruzioni, domande frequenti e novità.' })}>
+	<section class="page-hero wrap">
+		<span class="eyebrow">{t({ en: 'Download', it: 'Scarica' })}</span>
+		<h1>{t({ en: 'Get Blockwise', it: 'Scarica Blockwise' })}</h1>
+		<p>{t({ en: 'Free and open source (AGPL-3.0), in English and Italian. The downloads are the latest builds, made by GitHub from the source code.', it: 'Gratis e open source (AGPL-3.0), in italiano e in inglese. I download sono le versioni più recenti, create da GitHub dal codice sorgente.' })}</p>
+	</section>
+
+	<section class="section section--tight">
+		<div class="wrap grid grid--4">
+			<article class="card dl" id="browser">
+				<svg class="dl__icon" viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="8" width="38" height="32" rx="4" /><path d="M5 17h38M11 12.5h.01M16 12.5h.01" /></svg>
+				<h2>{t({ en: 'Browser', it: 'Browser' })}</h2>
+				<p class="req">{t({ en: 'Any up-to-date browser · nothing to install', it: 'Qualsiasi browser aggiornato · niente da installare' })}</p>
+				<a class="btn btn--block" href="/app/">{t({ en: 'Open in your browser', it: 'Apri nel browser' })}</a>
+				<ol>
+					<li>{t({ en: 'Your data stays in your browser, encrypted. Nothing is sent anywhere.', it: 'I tuoi dati restano nel browser, cifrati. Nulla viene inviato altrove.' })}</li>
+					<li>{t({ en: 'To use it with your Mac and phone, connect Dropbox, end-to-end encrypted.', it: 'Per usarlo con Mac e telefono, collega Dropbox, cifrato end-to-end.' })}</li>
+				</ol>
+			</article>
+			<article class="card dl" id="mac">
+				<svg class="dl__icon" viewBox="0 0 48 48" aria-hidden="true"><rect x="8" y="10" width="32" height="21" rx="3" /><path d="M4 36h40l-3 4H7z" /></svg>
+				<h2>Mac</h2>
+				<p class="req">{t({ en: 'Apple silicon, macOS 13 or later', it: 'Mac con Apple silicon, macOS 13 o successivo' })}</p>
+				<a class="btn btn--block" href={DOWNLOADS.mac}>{t({ en: 'Download (.dmg)', it: 'Scarica (.dmg)' })}</a>
+				<ol>
+					<li>{t({ en: 'Open the .dmg and drag Blockwise onto Applications.', it: 'Apri il .dmg e trascina Blockwise su Applicazioni.' })}</li>
+					<li>{t({ en: 'The app isn’t notarized by Apple yet. The first time, open it, then go to System Settings → Privacy & Security and click Open Anyway.', it: 'L’app non è ancora autenticata da Apple. La prima volta aprila, poi vai in Impostazioni di Sistema → Privacy e sicurezza e clicca Apri comunque.' })}</li>
+				</ol>
+			</article>
+			<article class="card dl" id="android">
+				<svg class="dl__icon" viewBox="0 0 48 48" aria-hidden="true"><rect x="14" y="4" width="20" height="40" rx="4" /><path d="M21 39h6" /></svg>
+				<h2>Android</h2>
+				<p class="req">{t({ en: 'Android 8 or later · works on its own', it: 'Android 8 o successivo · funziona da solo' })}</p>
+				<a class="btn btn--block" href={DOWNLOADS.android}>{t({ en: 'Download (.apk)', it: 'Scarica (.apk)' })}</a>
+				<ol>
+					<li>{t({ en: 'Open Blockwise.apk on your phone; allow your browser to install apps if asked.', it: 'Apri Blockwise.apk sul telefono; se richiesto, consenti al browser di installare app.' })}</li>
+					<li>{t({ en: 'Start on the phone, no account needed. To sync with Nextcloud, blocks come from the phone’s calendars: sync your Nextcloud calendars with DAVx⁵.', it: 'Inizia sul telefono, senza account. Per sincronizzare con Nextcloud, i blocchi vengono dai calendari del telefono: sincronizza i calendari di Nextcloud con DAVx⁵.' })}</li>
+				</ol>
+			</article>
+			<article class="card dl" id="nextcloud">
+				<svg class="dl__icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M14 36a9 9 0 0 1-1-18 12 12 0 0 1 23 3 7.5 7.5 0 0 1-1 15z" /></svg>
+				<h2>Nextcloud</h2>
+				<p class="req">{t({ en: 'Nextcloud 32 to 35, with the Calendar app', it: 'Nextcloud da 32 a 35, con l’app Calendario' })}</p>
+				<a class="btn btn--block" href={DOWNLOADS.nextcloud}>{t({ en: 'Download (.tar.gz)', it: 'Scarica (.tar.gz)' })}</a>
+				<ol>
+					<li>{t({ en: 'Extract it into your server’s apps folder: it makes a folder called tracker.', it: 'Estrailo nella cartella apps del server: crea una cartella chiamata tracker.' })}</li>
+					<li>{t({ en: 'Enable Blockwise under Apps, or run ', it: 'Attiva Blockwise in App, oppure esegui ' })}<code>occ app:enable tracker</code></li>
+				</ol>
+			</article>
+		</div>
+		<p class="wrap section--tight"><a class="link" href={DOWNLOADS.releases}>{t({ en: 'All releases and the source code on GitHub', it: 'Tutte le versioni e il codice sorgente su GitHub' })}</a> · <a class="link" href={href(lang, 'guide/')}>{t({ en: 'Getting started', it: 'Per iniziare' })}</a></p>
+	</section>
+
+	<section class="section" id="faq" aria-labelledby="faq-h">
+		<div class="wrap--narrow">
+			<div class="head"><h2 id="faq-h">{t({ en: 'Common questions', it: 'Domande frequenti' })}</h2></div>
+			<div class="faq">
+				{faq.map((f) => (
+					<details>
+						<summary>{t(f.q)}</summary>
+						<div>
+							{f.a.map((p) => <p>{t(p)}</p>)}
+							{f.link && <p><a class="link" href={href(lang, f.link.to)}>{t(f.link.label)}</a></p>}
+						</div>
+					</details>
+				))}
+			</div>
+		</div>
+	</section>
+
+	<section class="section" id="changelog" aria-labelledby="log-h">
+		<div class="wrap--narrow">
+			<div class="head"><h2 id="log-h">{t({ en: 'What’s new', it: 'Novità' })}</h2><p>{t({ en: 'The downloads always have the latest of these.', it: 'I download hanno sempre l’ultima di queste.' })}</p></div>
+			<ol class="log">
+				{CHANGELOG.map((r) => (
+					<li>
+						<time datetime={r.date}>{date.format(new Date(r.date + 'T00:00:00Z'))}</time>
+						<div>
+							<h3>{t(r.title)}{r.version && <span class="tag">{r.version}</span>}</h3>
+							<ul>{r.items.map((i) => <li>{t(i)}</li>)}</ul>
+						</div>
+					</li>
+				))}
+			</ol>
+		</div>
+	</section>
+</Layout>

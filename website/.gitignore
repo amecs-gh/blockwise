@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.astro/
+# Written by build.js
+public/fonts/

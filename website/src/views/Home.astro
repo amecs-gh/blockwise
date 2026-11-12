@@ -1,0 +1,192 @@
+---
+import Layout from '../layouts/Layout.astro'
+import Mock from '../components/Mock.astro'
+import TimerCard from '../components/TimerCard.astro'
+import GoalRings from '../components/GoalRings.astro'
+import TaskColumns from '../components/TaskColumns.astro'
+import WeekCalendar from '../components/WeekCalendar.astro'
+import { type Lang, tr, href, site } from '../i18n'
+
+interface Props { lang: Lang }
+const { lang } = Astro.props
+const t = tr(lang)
+const f = (anchor: string) => href(lang, 'features/') + '#' + anchor
+const base = site.url.replace(/\/+$/, '')
+const ld = {
+	'@context': 'https://schema.org',
+	'@type': 'SoftwareApplication',
+	name: 'Blockwise',
+	applicationCategory: 'ProductivityApplication',
+	operatingSystem: 'macOS 13+, Android 8+, Nextcloud 32-35, web browser',
+	description: site.description[lang],
+	inLanguage: lang,
+	offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' },
+	license: 'https://www.gnu.org/licenses/agpl-3.0.html',
+	image: (base || '') + '/img/og.png',
+	...(base ? { url: base + href(lang, '') } : {}),
+}
+const nowLabel = t({ en: 'The Now page: the running timer for Thesis with 48 minutes left in the block, and the commitments as rings showing this week’s progress toward each goal', it: 'La pagina Adesso: il timer in corso per Tesi con 48 minuti rimasti nel blocco, e gli impegni come anelli con l’avanzamento verso l’obiettivo della settimana' })
+---
+<Layout lang={lang} page="" ld={ld}>
+	<section class="hero wrap">
+		<span class="eyebrow">{t({ en: 'Time blocking and time tracking, in one app', it: 'Blocchi di tempo e registrazione del tempo, in un’unica app' })}</span>
+		<h1>{t({ en: 'Plan your week in blocks.', it: 'Pianifica la settimana a blocchi.' })} <span>{t({ en: 'Get through it one block at a time.', it: 'Affrontala un blocco alla volta.' })}</span></h1>
+		<p class="lead">{t({ en: 'Give each commitment blocks of time in the calendar. Blockwise fills every block with the next tasks, tracks your time with one tap, and shows where your week really went.', it: 'Dai a ogni impegno blocchi di tempo nel calendario. Blockwise riempie ogni blocco con i prossimi task, registra il tempo con un tocco e ti mostra dove è finita davvero la settimana.' })}</p>
+		<div class="cta">
+			<a class="btn" href={href(lang, 'download/')}>{t({ en: 'Download for free', it: 'Scarica gratis' })}</a>
+			<a class="btn btn--soft" href="/app/">{t({ en: 'Open in your browser', it: 'Apri nel browser' })}</a>
+		</div>
+		<p class="note">{t({ en: 'Mac · Android · Nextcloud · browser — open source, no account needed', it: 'Mac · Android · Nextcloud · browser — open source, senza account' })}</p>
+		<figure class="stage">
+			<div class="window">
+				<span class="window__bar" aria-hidden="true"><i></i><i></i><i></i></span>
+				<picture>
+					<source srcset="/img/mac-now-dark.webp" media="(prefers-color-scheme: dark)">
+					<img src="/img/mac-now.webp" width="1600" height="1058" alt={t({ en: 'The Now page on the Mac: today’s blocks as a timeline, the running timer and the tasks for this block', it: 'La pagina Adesso sul Mac: i blocchi di oggi come una timeline, il timer in corso e i task di questo blocco' })} fetchpriority="high">
+				</picture>
+			</div>
+			<img class="phone" src="/img/android-now.webp" width="720" height="1561" alt={t({ en: 'Blockwise on an Android phone', it: 'Blockwise su un telefono Android' })} loading="lazy">
+		</figure>
+	</section>
+
+	<section class="section">
+		<div class="wrap">
+			<div class="head head--center">
+				<h2>{t({ en: 'How it works', it: 'Come funziona' })}</h2>
+				<p>{t({ en: 'Four ideas, and your week runs itself.', it: 'Quattro idee, e la settimana va avanti da sola.' })}</p>
+			</div>
+			<ol class="steps">
+				<li class="c-violet"><h3>{t({ en: 'Commitments', it: 'Impegni' })}</h3><p>{t({ en: 'What you give time to: Thesis, Work, Teaching. Each one gets its own color and its own calendar.', it: 'Ciò a cui dai tempo: Tesi, Lavoro, Didattica. Ognuno ha il suo colore e il suo calendario.' })}</p></li>
+				<li class="c-blue"><h3>{t({ en: 'Blocks', it: 'Blocchi' })}</h3><p>{t({ en: 'Every event in a commitment’s calendar is a block of time for it. Drag to plan them; repeat them every weekday or every week.', it: 'Ogni evento nel calendario di un impegno è un blocco di tempo per lui. Trascina per pianificarli; ripetili ogni giorno feriale o ogni settimana.' })}</p></li>
+				<li class="c-orange"><h3>{t({ en: 'Tasks fill the blocks', it: 'I task riempiono i blocchi' })}</h3><p>{t({ en: 'Tasks queue up per commitment, with estimates like “Draft 45m”. Each block takes tasks from the top until it’s full; what you don’t finish moves to the next block.', it: 'I task fanno la fila per ogni impegno, con stime come “Bozza 45m”. Ogni blocco prende i task dall’alto finché è pieno; quello che non finisci passa al blocco successivo.' })}</p></li>
+				<li class="c-green"><h3>{t({ en: 'Press play', it: 'Premi play' })}</h3><p>{t({ en: 'Track time with one tap. Forgot to start? Move the start back. Done and Time show your week as it really was.', it: 'Registra il tempo con un tocco. Ti sei dimenticato di avviarlo? Sposta indietro l’inizio. Fatto e Tempo mostrano la settimana com’è andata davvero.' })}</p></li>
+			</ol>
+		</div>
+	</section>
+
+	<section class="wrap">
+		<div class="feature">
+			<div>
+				<span class="eyebrow">{t({ en: 'Now', it: 'Adesso' })}</span>
+				<h2>{t({ en: 'One block, one timer, one thing to do next', it: 'Un blocco, un timer, una cosa da fare' })}</h2>
+				<p>{t({ en: 'The Now page shows the block you’re in and only its tasks. The timer takes the commitment’s color, and the ring shows how much of the block is left.', it: 'La pagina Adesso mostra il blocco in cui sei e solo i suoi task. Il timer prende il colore dell’impegno e l’anello mostra quanto resta del blocco.' })}</p>
+				<ul class="ticks">
+					<li>{t({ en: 'Weekly goals as rings around each commitment', it: 'Obiettivi settimanali come anelli attorno a ogni impegno' })}</li>
+					<li>{t({ en: 'Tap a ring to start or stop tracking', it: 'Tocca un anello per avviare o fermare la registrazione' })}</li>
+					<li>{t({ en: 'Pomodoro rounds and a reminder before a block ends', it: 'Cicli Pomodoro e un promemoria prima della fine di un blocco' })}</li>
+				</ul>
+				<p><a class="link" href={f('tracking')}>{t({ en: 'Tracking and goals', it: 'Registrazione e obiettivi' })}</a></p>
+			</div>
+			<Mock label={nowLabel}>
+				<TimerCard lang={lang} />
+				<div class="ui-card"><GoalRings lang={lang} /></div>
+			</Mock>
+		</div>
+
+		<div class="feature feature--flip">
+			<div>
+				<span class="eyebrow">{t({ en: 'Tasks', it: 'Task' })}</span>
+				<h2>{t({ en: 'A queue per commitment, poured into your blocks', it: 'Una coda per impegno, versata nei tuoi blocchi' })}</h2>
+				<p>{t({ en: 'Each commitment is a column. Put tasks in order, give them estimates, and Blockwise shows which block each one lands in — and warns you when there isn’t enough time.', it: 'Ogni impegno è una colonna. Metti i task in ordine, dai loro una stima e Blockwise mostra in quale blocco finisce ognuno, e ti avvisa quando il tempo non basta.' })}</p>
+				<p><a class="link" href={f('tasks')}>{t({ en: 'More about tasks', it: 'Di più sui task' })}</a></p>
+			</div>
+			<Mock label={t({ en: 'Task columns for Thesis and Teaching: tasks with estimates grouped by the blocks they fill, subtasks being checked off, and a warning that 2 hours 30 minutes of tasks have no block yet', it: 'Colonne dei task per Tesi e Didattica: task con stime raggruppati per i blocchi che riempiono, sotto-task spuntati e un avviso che 2 ore e 30 minuti di task non hanno ancora un blocco' })}>
+				<TaskColumns lang={lang} />
+			</Mock>
+		</div>
+
+		<div class="feature">
+			<div>
+				<span class="eyebrow">{t({ en: 'Calendar', it: 'Calendario' })}</span>
+				<h2>{t({ en: 'A calendar made for blocks', it: 'Un calendario fatto per i blocchi' })}</h2>
+				<p>{t({ en: 'Day, week and month. Drag to create, move or resize a block; click one to see the tasks waiting in it. Use the built-in calendar, Apple Calendar or your Nextcloud calendars.', it: 'Giorno, settimana e mese. Trascina per creare, spostare o allungare un blocco; cliccane uno per vedere i task che lo aspettano. Usa il calendario integrato, Calendario di Apple o i calendari di Nextcloud.' })}</p>
+				<p><a class="link" href={f('blocks')}>{t({ en: 'Commitments and blocks', it: 'Impegni e blocchi' })}</a></p>
+			</div>
+			<Mock label={t({ en: 'A work week in the calendar, Monday to Friday, with blocks for Thesis, Work, Teaching and Running in their colors', it: 'Una settimana lavorativa nel calendario, da lunedì a venerdì, con blocchi per Tesi, Lavoro, Didattica e Corsa nei loro colori' })}>
+				<WeekCalendar lang={lang} />
+			</Mock>
+		</div>
+	</section>
+
+	<section class="section">
+		<div class="wrap">
+			<div class="head head--center">
+				<h2>{t({ en: 'Calm in the light, calm in the dark', it: 'Calma di giorno, calma di notte' })}</h2>
+				<p>{t({ en: 'Blockwise follows your system, or you pick Light or Dark in Settings.', it: 'Blockwise segue il sistema, oppure scegli Chiaro o Scuro nelle Impostazioni.' })}</p>
+			</div>
+			<div class="duo">
+				<figure class="theme-light ui" role="img" aria-label={t({ en: 'The timer and goal rings in light mode', it: 'Il timer e gli anelli degli obiettivi in modalità chiara' })}>
+					<figcaption aria-hidden="true">{t({ en: 'Light', it: 'Chiaro' })}</figcaption>
+					<TimerCard lang={lang} pomodoro />
+					<div class="ui-card"><GoalRings lang={lang} /></div>
+				</figure>
+				<figure class="theme-dark ui" role="img" aria-label={t({ en: 'The timer and goal rings in dark mode', it: 'Il timer e gli anelli degli obiettivi in modalità scura' })}>
+					<figcaption aria-hidden="true">{t({ en: 'Dark', it: 'Scuro' })}</figcaption>
+					<TimerCard lang={lang} pomodoro />
+					<div class="ui-card"><GoalRings lang={lang} /></div>
+				</figure>
+			</div>
+		</div>
+	</section>
+
+	<section class="section">
+		<div class="wrap">
+			<div class="head">
+				<h2>{t({ en: 'Everything else for focused weeks', it: 'Tutto il resto per settimane concentrate' })}</h2>
+			</div>
+			<div class="grid grid--4">
+				<a class="tile c-orange" href={f('done-time')}>
+					<span class="tile__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg></span>
+					<h3>{t({ en: 'Done and Time', it: 'Fatto e Tempo' })}</h3>
+					<p>{t({ en: 'Your week on a timeline, hours per commitment against your goals, and CSV export.', it: 'La settimana su una timeline, le ore per impegno rispetto agli obiettivi ed esportazione CSV.' })}</p>
+					<span class="link">{t({ en: 'See it', it: 'Scopri' })}</span>
+				</a>
+				<a class="tile c-green" href={f('notes')}>
+					<span class="tile__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h10l4 4v14H5z" /><path d="M9 12l2 2 4-4" /></svg></span>
+					<h3>{t({ en: 'Notes', it: 'Note' })}</h3>
+					<p>{t({ en: 'Notes per commitment in Markdown, with checklists you can tick.', it: 'Note per ogni impegno in Markdown, con liste da spuntare.' })}</p>
+					<span class="link">{t({ en: 'See it', it: 'Scopri' })}</span>
+				</a>
+				<a class="tile c-blue" href={href(lang, 'guide/') + '#sync'}>
+					<span class="tile__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5" /></svg></span>
+					<h3>{t({ en: 'Sync your way', it: 'Sincronizza a modo tuo' })}</h3>
+					<p>{t({ en: 'Nextcloud, or Dropbox and Google Drive end-to-end encrypted — or no sync at all.', it: 'Nextcloud, oppure Dropbox e Google Drive cifrati end-to-end, o nessuna sincronizzazione.' })}</p>
+					<span class="link">{t({ en: 'How to sync', it: 'Come sincronizzare' })}</span>
+				</a>
+				<a class="tile c-violet" href={href(lang, 'guide/')}>
+					<span class="tile__icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2z" /><path d="M4 21V5" /></svg></span>
+					<h3>{t({ en: 'The guide', it: 'La guida' })}</h3>
+					<p>{t({ en: 'Get started in five minutes, then plan your first week in blocks.', it: 'Inizia in cinque minuti, poi pianifica la tua prima settimana a blocchi.' })}</p>
+					<span class="link">{t({ en: 'Read the guide', it: 'Leggi la guida' })}</span>
+				</a>
+			</div>
+		</div>
+	</section>
+
+	<section class="wrap">
+		<div class="band theme-dark">
+			<div class="head">
+				<span class="eyebrow">{t({ en: 'Privacy', it: 'Privacy' })}</span>
+				<h2>{t({ en: 'Your data stays yours', it: 'I tuoi dati restano tuoi' })}</h2>
+				<p>{t({ en: 'There is no Blockwise server and no account with us. No tracking, no ads. Blockwise works offline and syncs only where you choose.', it: 'Non esiste un server di Blockwise né un account da noi. Nessun tracciamento, nessuna pubblicità. Blockwise funziona offline e sincronizza solo dove scegli tu.' })}</p>
+			</div>
+			<div class="grid grid--3">
+				<div class="card"><h3>{t({ en: 'Only on your device', it: 'Solo sul tuo dispositivo' })}</h3><p>{t({ en: 'On the Mac, the phone or in your browser, encrypted, with no account. Connect a sync later and your data comes along.', it: 'Sul Mac, sul telefono o nel browser, cifrati, senza account. Puoi collegare una sincronizzazione in seguito e i tuoi dati vengono con te.' })}</p></div>
+				<div class="card"><h3>Dropbox · Google Drive</h3><p>{t({ en: 'End-to-end encrypted on your device with a passphrase only you know, before anything is uploaded.', it: 'Cifrati end-to-end sul tuo dispositivo con una passphrase che conosci solo tu, prima di qualsiasi caricamento.' })}</p></div>
+				<div class="card"><h3>Nextcloud</h3><p>{t({ en: 'On your own server. Blocks are events in Nextcloud Calendar.', it: 'Sul tuo server. I blocchi sono eventi in Calendario di Nextcloud.' })}</p></div>
+			</div>
+			<p class="section--tight"><a class="link" href={href(lang, 'privacy/')}>{t({ en: 'Privacy and security in detail', it: 'Privacy e sicurezza nel dettaglio' })}</a></p>
+		</div>
+	</section>
+
+	<section class="section hero">
+		<div class="wrap">
+			<div class="head head--center"><h2>{t({ en: 'Start your first week in blocks', it: 'Inizia la tua prima settimana a blocchi' })}</h2></div>
+			<p class="lead">{t({ en: 'Free and open source (AGPL-3.0). English and Italian.', it: 'Gratis e open source (AGPL-3.0). In italiano e in inglese.' })}</p>
+			<div class="cta">
+				<a class="btn" href={href(lang, 'download/')}>{t({ en: 'Download', it: 'Scarica' })}</a>
+				<a class="btn btn--soft" href="/app/">{t({ en: 'Open in your browser', it: 'Apri nel browser' })}</a>
+			</div>
+		</div>
+	</section>
+</Layout>
