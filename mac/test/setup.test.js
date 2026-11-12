@@ -85,6 +85,19 @@ const ok = (n) => console.log('  ✔', n)
 		assert.deepEqual(errors, [])
 		await page.close()
 	}
+	// A drive without its app key is not offered at all
+	for (const ready of [{ dropbox: true, gdrive: false }, { dropbox: false, gdrive: false }]) {
+		const page = await browser.newPage()
+		await page.addInitScript((r) => {
+			window.trackerApp = { getState: async () => ({ locale: 'en-US', providers: ['nextcloud', 'local', 'gdrive', 'dropbox'], providersReady: r }) }
+		}, ready)
+		await page.goto('file://' + path.join(__dirname, '..', 'renderer', 'setup.html'))
+		await page.waitForSelector('.u-choice')
+		const names = await page.locator('.u-choice strong').allTextContents()
+		assert.deepEqual(names, ['Nextcloud', 'This Mac only', ...(ready.dropbox ? ['Dropbox'] : [])])
+		await page.close()
+	}
+	ok('a drive without its app key is not shown')
 	await browser.close()
 	console.log('\nsetup screen tests passed')
 })().catch((e) => { console.error('✘', e); process.exit(1) })

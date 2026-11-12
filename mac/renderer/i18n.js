@@ -158,7 +158,7 @@
 		'Stop syncing with {drive}?': 'Smettere di sincronizzare con {drive}?',
 		'The app password is removed from Nextcloud.': 'La password dell\'app viene rimossa da Nextcloud.',
 		'Blockwise forgets the drive and your passphrase on this Mac. Your encrypted data on the drive stays.': 'Blockwise dimentica il drive e la passphrase su questo Mac. I dati cifrati sul drive restano.',
-		'"Switch" keeps your data on this Mac and takes it to the sync you choose next (Nextcloud, Dropbox, Google Drive or this Mac only).': '"Cambia" mantiene i dati su questo Mac e li porta alla sincronizzazione che sceglierai (Nextcloud, Dropbox, Google Drive o solo questo Mac).',
+		'"Switch" keeps your data on this Mac and takes it to the sync you choose next.': '"Cambia" mantiene i dati su questo Mac e li porta alla sincronizzazione che sceglierai.',
 		'Some changes on this Mac are not synced yet: "Switch" keeps them, "remove" loses them.': 'Alcune modifiche su questo Mac non sono ancora sincronizzate: "Cambia" le mantiene, "rimuovi" le perde.',
 		'Apple Calendar is not part of this build.': 'Calendario di Apple non è incluso in questa build.',
 		'Build the app with Xcode\'s command line tools installed (npm run build).': 'Crea l\'app con gli strumenti da riga di comando di Xcode installati (npm run build).',

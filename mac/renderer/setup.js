@@ -45,7 +45,7 @@
 		const box = $('step-choose')
 		box.textContent = ''
 		for (const p of providers) {
-			if (!CHOICES[p]) continue
+			if (!CHOICES[p] || ((p === 'gdrive' || p === 'dropbox') && !(ready && ready[p]))) continue
 			const b = document.createElement('button')
 			b.type = 'button'
 			b.className = 'u-choice'

@@ -588,7 +588,8 @@ function publicState() {
 		error: dashError || syncError,
 		now: Math.floor(Date.now() / 1000),
 		provider,
-		providers: ['nextcloud', 'local', 'gdrive', 'dropbox'],
+		// A drive is offered only once its app key is set (config/providers.json)
+		providers: ['nextcloud', 'local', ...['gdrive', 'dropbox'].filter((p) => providersReady()[p])],
 		providersReady: providersReady(),
 		server: config && config.server,
 		host: provider === 'nextcloud' ? new URL(config.server).host : provider ? t(PROVIDER_NAMES[provider]) : null,
@@ -713,7 +714,7 @@ async function confirmLogout() {
 		message: isNc ? t('Stop syncing with {host}?', { host: syncName() }) : t('Stop syncing with {drive}?', { drive: syncName() }),
 		detail: [
 			isNc ? t('The app password is removed from Nextcloud.') : t('Blockwise forgets the drive and your passphrase on this Mac. Your encrypted data on the drive stays.'),
-			t('"Switch" keeps your data on this Mac and takes it to the sync you choose next (Nextcloud, Dropbox, Google Drive or this Mac only).'),
+			t('"Switch" keeps your data on this Mac and takes it to the sync you choose next.'),
 			pending ? t('Some changes on this Mac are not synced yet: "Switch" keeps them, "remove" loses them.') : '',
 		].filter(Boolean).join('\n\n'),
 	})
