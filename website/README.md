@@ -4,8 +4,11 @@ A static website built with [Astro](https://astro.build), in English (`/`) and
 Italian (`/it/`), in the app's own look (Poppins, the `--tl-*` colors, rounded
 cards, light and dark), plus Blockwise itself in the browser at `/app/`.
 
-No cookies, no tracking, no client scripts, nothing loaded from other sites
-(the fonts are the app's own Poppins files, served from the site).
+No cookies, no tracking, nothing loaded from other sites (the fonts are the
+app's own Poppins files, served from the site). One small script of the site's
+own, `public/js/site.js`: the theme switch (automatic, light, dark; the choice
+is kept in the browser's localStorage) and the menu button on small screens.
+Without it the pages still work: the system's theme, the menu always open.
 
 ## Pages
 
@@ -29,6 +32,7 @@ sits next to its translation in the views: `t({ en: '…', it: '…' })`.
 | `src/i18n.ts` | The languages, the menu, the download links |
 | `src/components/` | The illustrations: pieces of the interface (timer card, goal rings, task columns, calendar week, note, Done, Time, sync), drawn with the app's styles |
 | `src/styles/site.css`, `ui.css` | The look, and the interface pieces |
+| `public/js/site.js` | The theme switch and the menu on small screens |
 | `public/` | Logo, icon, screenshots, `og.png` (the link preview image) |
 | `site.json` | The site's address, the title and description for search engines, the Dropbox app key |
 | `build.js` | Prepares the browser app (`app/lib/`, `app/providers.js`) and the fonts (`public/fonts/`) |
@@ -63,8 +67,8 @@ Both read `dist/_headers`, written at build time:
   (camera, microphone, location, payment, USB, …), cross-origin isolation of
   windows and resources, HSTS.
 - **Every site page**, listed one by one: a strict Content-Security-Policy —
-  `default-src 'none'`, styles, images and fonts from the site only, no
-  scripts, no forms, can't be framed. (A pattern like `/*` would also cover
+  `default-src 'none'`; scripts, styles, images and fonts from the site only
+  (no inline scripts), no forms, can't be framed. (A pattern like `/*` would also cover
   `/app/`, whose pages need to reach Dropbox.) The pages repeat the policy in a
   `<meta>` tag, for hosts that ignore `_headers`.
 - **`/app/*`:** `frame-ancestors 'none'`; the app's pages set their own policy

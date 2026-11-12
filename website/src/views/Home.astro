@@ -40,10 +40,8 @@ const nowLabel = t({ en: 'The Now page: the running timer for Thesis with 48 min
 		<figure class="stage">
 			<div class="window">
 				<span class="window__bar" aria-hidden="true"><i></i><i></i><i></i></span>
-				<picture>
-					<source srcset="/img/mac-now-dark.webp" media="(prefers-color-scheme: dark)">
-					<img src="/img/mac-now.webp" width="1600" height="1058" alt={t({ en: 'The Now page on the Mac: today’s blocks as a timeline, the running timer and the tasks for this block', it: 'La pagina Adesso sul Mac: i blocchi di oggi come una timeline, il timer in corso e i task di questo blocco' })} fetchpriority="high">
-				</picture>
+				<img class="shot--light" src="/img/mac-now.webp" width="1600" height="1058" alt={t({ en: 'The Now page on the Mac: today’s blocks as a timeline, the running timer and the tasks for this block', it: 'La pagina Adesso sul Mac: i blocchi di oggi come una timeline, il timer in corso e i task di questo blocco' })} loading="lazy" fetchpriority="high">
+				<img class="shot--dark" src="/img/mac-now-dark.webp" width="1600" height="1058" alt={t({ en: 'The Now page on the Mac: today’s blocks as a timeline, the running timer and the tasks for this block', it: 'La pagina Adesso sul Mac: i blocchi di oggi come una timeline, il timer in corso e i task di questo blocco' })} loading="lazy" fetchpriority="high">
 			</div>
 			<img class="phone" src="/img/android-now.webp" width="720" height="1561" alt={t({ en: 'Blockwise on an Android phone', it: 'Blockwise su un telefono Android' })} loading="lazy">
 		</figure>

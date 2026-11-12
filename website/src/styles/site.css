@@ -53,8 +53,9 @@
 	--radius: 24px;
 	color-scheme: light;
 }
+/* Dark: the system's choice, unless Light was picked; or Dark picked (js/site.js) */
 @media (prefers-color-scheme: dark) {
-	:root {
+	:root:not([data-theme="light"]) {
 		--tl-accent: #8b7cf6;
 		--tl-accent-soft: #2e2850;
 		--tl-accent-text: #cfc8ff;
@@ -70,6 +71,7 @@
 		color-scheme: dark;
 	}
 }
+:root[data-theme="dark"],
 .theme-dark {
 	--tl-accent: #8b7cf6;
 	--tl-accent-soft: #2e2850;
@@ -356,24 +358,70 @@ code, kbd {
 	align-items: center;
 	gap: 10px;
 }
-.lang {
+.tabs__lang {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: 4px;
+	box-shadow: inset 1px 0 0 var(--imp-line);
+	border-radius: 0 12px 12px 0 !important;
+}
+.tabs__lang svg,
+.icon-btn svg {
+	width: 18px;
+	height: 18px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+/* Round icon buttons in the bar: the theme switch and (small screens) the menu */
+.icon-btn {
 	display: grid;
 	place-items: center;
 	width: 42px;
 	height: 42px;
+	padding: 0;
+	border: none;
 	border-radius: 14px;
 	background: var(--tl-card);
-	color: var(--imp-text) !important;
-	font-size: 0.85rem;
-	font-weight: 800;
-	text-decoration: none;
+	color: var(--imp-text);
 	box-shadow: var(--tl-shadow);
+	cursor: pointer;
+	transition: color 0.15s, transform 0.15s;
 }
-.lang:hover {
-	color: var(--tl-accent) !important;
+.icon-btn[hidden] {
+	display: none;
+}
+.icon-btn:hover {
+	color: var(--tl-accent);
+	transform: translateY(-1px);
+}
+.icon-btn svg {
+	width: 20px;
+	height: 20px;
+}
+/* The theme switch shows the current choice */
+#theme svg { display: none; }
+:root:not([data-theme-choice]) #theme .i-auto,
+[data-theme-choice="auto"] #theme .i-auto,
+[data-theme-choice="light"] #theme .i-light,
+[data-theme-choice="dark"] #theme .i-dark { display: block; }
+.menu-btn,
+.menu-btn[hidden] {
+	display: none;
+}
+.menu-btn .m-close,
+.bar.is-open .menu-btn .m-open {
+	display: none;
+}
+.bar.is-open .menu-btn .m-close {
+	display: inline;
 }
 @media (max-width: 860px) {
 	.bar__end { margin-left: auto; }
+	/* Without the script: the menu stays open, as a row that scrolls sideways */
 	.tabs {
 		order: 3;
 		width: 100%;
@@ -382,7 +430,62 @@ code, kbd {
 		scrollbar-width: none;
 	}
 	.tabs a { flex: 1 0 auto; text-align: center; }
+	/* With it: a burger that opens the menu as a list */
+	.js .menu-btn:not([hidden]) { display: grid; }
+	.js .tabs { display: none; }
+	.js .bar.is-open .tabs {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin-top: 4px;
+		padding: 8px;
+		border-radius: 20px;
+		overflow: visible;
+	}
+	.js .bar.is-open .tabs a {
+		flex: none;
+		padding: 12px 14px;
+		text-align: left;
+		font-size: 1rem;
+	}
+	.js .bar.is-open .tabs__lang {
+		margin: 6px 0 0;
+		box-shadow: inset 0 1px 0 var(--imp-line);
+		border-radius: 0 0 12px 12px !important;
+	}
 }
+@media (max-width: 860px) {
+	.bar__in { gap: 10px; }
+	.bar__end { gap: 8px; }
+}
+@media (max-width: 420px) {
+	.bar__in { width: calc(100% - 24px); }
+	.bar__end { gap: 6px; }
+	.bar__end .btn--small { min-height: 40px; padding: 0 14px; font-size: 0.9rem; }
+	.icon-btn { width: 40px; height: 40px; border-radius: 13px; }
+	.brand { gap: 8px; font-size: 1.05rem; }
+	.brand img { width: 30px; height: 30px; }
+}
+/* The narrowest phones: the logo alone (the name stays for screen readers) */
+@media (max-width: 359px) {
+	.bar .brand__name {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+}
+
+/* Screenshots in both themes: only the one for the page's theme shows (and loads) */
+.shot--dark { display: none; }
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) .shot--light { display: none; }
+	:root:not([data-theme="light"]) .shot--dark { display: block; }
+}
+:root[data-theme="dark"] .shot--light { display: none; }
+:root[data-theme="dark"] .shot--dark { display: block; }
 
 /* --- hero ------------------------------------------------------------------ */
 
