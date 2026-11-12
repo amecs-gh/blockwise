@@ -365,5 +365,8 @@
 		openCalendar: (ts) => call('openCalendar', typeof ts === 'number' ? ts : null),
 		onChanged: (cb) => listeners.changed.push(cb),
 		account: () => call('account'),
+		// The phone's file picker (the web app, a page in a browser, downloads instead)
+		saveFile: window.__trackerWeb ? undefined : (name, text) => call('saveFile', name, text),
+		openFile: window.__trackerWeb ? undefined : () => call('openFile'),
 	}
 })()

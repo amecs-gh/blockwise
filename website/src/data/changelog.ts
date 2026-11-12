@@ -7,6 +7,17 @@ export type Release = { date: string; title: Text; version?: string; items: Text
 
 export const CHANGELOG: Release[] = [
 	{
+		date: '2026-11-12',
+		version: '0.7.0',
+		title: { en: 'Back up everything, and bring it anywhere', it: 'Backup di tutto, da portare ovunque' },
+		items: [
+			{ en: 'Settings → Your data: export everything to one file, encrypted with a passphrase if you like, and import it on any device; it is merged like a sync and never deletes anything.', it: 'Impostazioni → I tuoi dati: esporta tutto in un file, cifrato con una passphrase se vuoi, e importalo su qualsiasi dispositivo; viene unito come in una sincronizzazione e non elimina mai nulla.' },
+			{ en: 'Android: Export CSV works (it saved nothing before), and saving or opening a file uses the phone’s own file picker.', it: 'Android: Esporta CSV funziona (prima non salvava nulla), e salvare o aprire un file usa il selettore di file del telefono.' },
+			{ en: 'Mac: files are saved and opened with macOS’s own dialogs.', it: 'Mac: i file si salvano e si aprono con le finestre di macOS.' },
+			{ en: 'The Android app now has the same version number as the others.', it: 'L’app per Android ora ha lo stesso numero di versione delle altre.' },
+		],
+	},
+	{
 		date: '2026-11-11',
 		title: { en: 'Blockwise in the browser, and a new look', it: 'Blockwise nel browser e un nuovo aspetto' },
 		items: [

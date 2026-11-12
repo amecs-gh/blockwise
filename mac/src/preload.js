@@ -33,4 +33,6 @@ contextBridge.exposeInMainWorld('trackerApp', {
 	appearance: () => call('appearance'),
 	setAppearance: (mode) => call('setAppearance', mode),
 	onChanged: (cb) => ipcRenderer.on('changed', () => cb()),
+	saveFile: (name, text) => call('saveFile', name, text),
+	openFile: () => call('openFile'),
 })

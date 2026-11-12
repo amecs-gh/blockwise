@@ -14,7 +14,7 @@
 * Charts of what you did and how long you spent, per day, week and month
 
 Based on TimeManager by Thomas Ebert.]]></description>
-	<version>0.6.0</version>
+	<version>0.7.0</version>
 	<licence>agpl</licence>
 	<author>amecs-gh</author>
 	<namespace>Tracker</namespace>

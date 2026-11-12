@@ -326,13 +326,8 @@
 					el('button', { type: 'button', class: 'w-btn', onclick: close }, T('Cancel', 'Annulla')),
 					el('button', { type: 'button', class: 'w-btn w-btn--danger', onclick: fn }, label)))
 		}
-		const exportData = async () => {
-			const json = await get('db')
-			const blob = new Blob([json || '{}'], { type: 'application/json' })
-			const a = el('a', { href: URL.createObjectURL(blob), download: `blockwise-${new Date().toISOString().slice(0, 10)}.json` })
-			document.body.append(a); a.click(); a.remove()
-			setTimeout(() => URL.revokeObjectURL(a.href), 5000)
-		}
+		// Backups are made in Settings → Your data, the same file on every platform
+		const backup = () => { close(); location.hash = '#settings'; setTimeout(() => { const s = document.querySelector('.imp-backup'); if (s) s.scrollIntoView({ block: 'start' }) }, 300) }
 		const stopSync = async (keep) => {
 			const f = await folder().catch(() => null)
 			if (f) await f.revoke().catch(() => {})
@@ -345,11 +340,11 @@
 			el('p', { class: 'w-muted' }, name
 				? T(`Synced with ${name}. Your data is also kept in this browser.`, `Sincronizzato con ${name}. I tuoi dati restano anche in questo browser.`)
 				: available('dropbox')
-					? T('Nothing is synced. Clearing this site\'s data in the browser deletes it, so export it now and then, or set up a sync.', 'Niente è sincronizzato. Cancellare i dati di questo sito nel browser li elimina: esportali ogni tanto, o attiva una sincronizzazione.')
-					: T('Nothing is synced. Clearing this site\'s data in the browser deletes it, so export it now and then.', 'Niente è sincronizzato. Cancellare i dati di questo sito nel browser li elimina: esportali ogni tanto.')),
+					? T('Nothing is synced. Clearing this site\'s data in the browser deletes it, so make a backup now and then, or set up a sync.', 'Niente è sincronizzato. Cancellare i dati di questo sito nel browser li elimina: fai un backup ogni tanto, o attiva una sincronizzazione.')
+					: T('Nothing is synced. Clearing this site\'s data in the browser deletes it, so make a backup now and then.', 'Niente è sincronizzato. Cancellare i dati di questo sito nel browser li elimina: fai un backup ogni tanto.')),
 			el('div', { class: 'w-sheet__list' },
 				name || !available('dropbox') ? null : el('button', { type: 'button', class: 'w-btn w-btn--accent', onclick: () => go('setup.html#connect') }, T('Set up sync', 'Attiva la sincronizzazione')),
-				el('button', { type: 'button', class: 'w-btn', onclick: exportData }, T('Export my data (JSON)', 'Esporta i miei dati (JSON)')),
+				el('button', { type: 'button', class: 'w-btn', onclick: backup }, T('Back up or import your data', 'Backup o importazione dei dati')),
 				name ? el('button', { type: 'button', class: 'w-btn', onclick: () => confirmThen(T(`Stop syncing with ${name}? This browser forgets the drive and your passphrase; the encrypted data on the drive stays.`, `Interrompere la sincronizzazione con ${name}? Questo browser dimentica il drive e la passphrase; i dati cifrati sul drive restano.`), T('Stop, keep my data here', 'Interrompi, tieni i dati qui'), () => stopSync(true)) }, T('Stop syncing', 'Interrompi la sincronizzazione')) : null,
 				el('button', { type: 'button', class: 'w-btn w-btn--danger', onclick: () => confirmThen(name
 					? T(`Remove everything from this browser? It stays in ${name}.`, `Rimuovere tutto da questo browser? Resta su ${name}.`)

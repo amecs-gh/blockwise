@@ -2,6 +2,17 @@ plugins {
     id 'com.android.application'
 }
 
+// One version for every app: the Nextcloud app's (../nextcloud/appinfo/info.xml). 0.6.0 is code 600.
+def appVersion = { ->
+    def info = rootProject.file('../nextcloud/appinfo/info.xml')
+    def m = info.exists() ? (info.getText('UTF-8') =~ /<version>(\d+)\.(\d+)\.(\d+)<\/version>/) : null
+    if (m == null || !m.find()) {
+        return [name: '0.0.0', code: 1]
+    }
+    def (major, minor, patch) = [m.group(1) as int, m.group(2) as int, m.group(3) as int]
+    return [name: "${major}.${minor}.${patch}".toString(), code: major * 10000 + minor * 100 + patch]
+}()
+
 android {
     namespace 'app.tracker.android'
     compileSdk 36
@@ -10,8 +21,8 @@ android {
         applicationId 'app.tracker.nextcloud'
         minSdk 26
         targetSdk 36
-        versionCode 1
-        versionName '0.1.0'
+        versionCode appVersion.code
+        versionName appVersion.name
     }
 
     // Release builds are signed with your own key, given to the build as

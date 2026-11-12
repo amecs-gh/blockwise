@@ -1145,6 +1145,50 @@ html.m3-dark #tracker-app {
 	font-size: 1.2em;
 	font-weight: 800;
 }
+/* Settings → Your data: export and import a backup */
+.imp-backup h3 {
+	margin: 18px 0 4px;
+	font-size: 1em;
+	font-weight: 800;
+}
+.imp-backup__form,
+.imp-backup__pass {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-top: 10px;
+}
+.imp-backup__pass[hidden] {
+	display: none;
+}
+#tracker-app .imp-backup input[type="password"] {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 360px;
+	min-height: 40px;
+	margin: 0;
+	padding: 0 14px;
+	border: 1px solid var(--color-border-dark);
+	border-radius: var(--border-radius-element, 12px);
+	background: var(--tl-card);
+	color: var(--imp-text);
+	font: inherit;
+}
+#tracker-app .imp-backup input[type="password"]:focus {
+	border-color: var(--tl-accent);
+	outline: none;
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--tl-accent) 20%, transparent);
+}
+.imp-backup__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 10px;
+}
+#tracker-app .imp-backup .imp-button {
+	align-self: flex-start;
+	margin: 0;
+}
 .imp-settings__section > p {
 	max-width: 70ch;
 }

@@ -91,7 +91,8 @@ public final class Bridge {
     /** What only the app's window can do (dialogs, logins, permissions, other apps) */
     private static final java.util.Set<String> WINDOW_ONLY = new java.util.HashSet<>(java.util.Arrays.asList(
             "calendarAccess", "createEvent", "login", "cancelLogin", "openCalendar", "account", "useLocal", "connect",
-            "backToApp", "connectDrive", "cancelDrive", "saveDrive"));
+            "backToApp", "connectDrive", "cancelDrive", "saveDrive", "saveFile", "openFile"));
+    private static final int MAX_FILE = 64 * 1024 * 1024;
 
     private void dispatch(String id, String channel, JSONArray args) {
         if (activity == null && WINDOW_ONLY.contains(channel)) {
@@ -239,9 +240,72 @@ public final class Bridge {
                 activity.showAccount();
                 reply(id, data(null));
                 break;
+            case "saveFile": {
+                final String name = args.optString(0, "");
+                final String text = args.optString(1, "");
+                if (text.length() > MAX_FILE) {
+                    reply(id, error(i18n().t("Invalid request."), 0));
+                    break;
+                }
+                activity.pickDocument(true, name, uri -> {
+                    if (uri == null) {
+                        reply(id, data(false));
+                        return;
+                    }
+                    background(id, () -> {
+                        try (java.io.OutputStream out = ctx.getContentResolver().openOutputStream(uri, "wt")) {
+                            if (out == null) {
+                                throw new java.io.IOException("No file");
+                            }
+                            out.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                        }
+                        return true;
+                    });
+                });
+                break;
+            }
+            case "openFile":
+                activity.pickDocument(false, null, uri -> {
+                    if (uri == null) {
+                        reply(id, data(null));
+                        return;
+                    }
+                    background(id, () -> {
+                        try (java.io.InputStream in = ctx.getContentResolver().openInputStream(uri)) {
+                            if (in == null) {
+                                throw new java.io.IOException("No file");
+                            }
+                            java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+                            byte[] chunk = new byte[65536];
+                            for (int n; (n = in.read(chunk)) > 0; ) {
+                                buf.write(chunk, 0, n);
+                                if (buf.size() > MAX_FILE) {
+                                    throw new java.io.IOException("Too large");
+                                }
+                            }
+                            JSONObject file = new JSONObject();
+                            file.put("name", displayName(uri));
+                            file.put("text", buf.toString("UTF-8"));
+                            return file;
+                        }
+                    });
+                });
+                break;
             default:
                 reply(id, error(i18n().t("Invalid request."), 0));
         }
+    }
+
+    /** A picked document's file name, for the page to show */
+    private String displayName(android.net.Uri uri) {
+        try (android.database.Cursor c = ctx.getContentResolver().query(uri, new String[] {android.provider.OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (c != null && c.moveToFirst() && !c.isNull(0)) {
+                return c.getString(0);
+            }
+        } catch (RuntimeException ignored) {
+            // no name
+        }
+        return "";
     }
 
     interface Work {

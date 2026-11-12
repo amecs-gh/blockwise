@@ -19,6 +19,7 @@ const toc = [
 		{ id: 'passphrase', label: { en: 'Encryption and the passphrase', it: 'Cifratura e passphrase' } },
 		{ id: 'sync-nextcloud', label: { en: 'Nextcloud', it: 'Nextcloud' } },
 	] },
+	{ id: 'backup', label: { en: 'Backups and moving', it: 'Backup e trasferimenti' } },
 ]
 const yes = t({ en: 'Yes', it: 'Sì' })
 const no = t({ en: 'No', it: 'No' })
@@ -123,6 +124,16 @@ const no = t({ en: 'No', it: 'No' })
 					<li><strong>{t({ en: 'On Android, bring the calendars', it: 'Su Android, porta i calendari' })}</strong>{t({ en: 'Blocks come from the phone’s calendars: sync your Nextcloud calendars to the phone with DAVx⁵.', it: 'I blocchi vengono dai calendari del telefono: sincronizza i calendari di Nextcloud sul telefono con DAVx⁵.' })}</li>
 				</ol>
 				<p>{t({ en: 'In the browser, use Blockwise inside your Nextcloud: a web page can’t reach your server from another site.', it: 'Nel browser, usa Blockwise dentro il tuo Nextcloud: una pagina web non può raggiungere il tuo server da un altro sito.' })}</p>
+			</section>
+
+			<section id="backup" aria-labelledby="backup-h">
+				<h2 id="backup-h">{t({ en: 'Backups and moving', it: 'Backup e trasferimenti' })}</h2>
+				<p>{t({ en: 'In Settings → Your data, Export saves everything — commitments, tasks, notes, tracked time and settings — to one file. Keep it as a backup, or use it to bring your data to another device or another way of syncing.', it: 'In Impostazioni → I tuoi dati, Esporta salva tutto (impegni, task, note, tempo registrato e impostazioni) in un unico file. Tienilo come backup, oppure usalo per portare i tuoi dati su un altro dispositivo o su un altro modo di sincronizzare.' })}</p>
+				<ol class="howto">
+					<li><strong>{t({ en: 'Export', it: 'Esporta' })}</strong>{t({ en: 'Leave “Encrypt with a passphrase” on unless the file stays somewhere only you can reach. The file is useless without the passphrase, so write it down.', it: 'Lascia attivo “Cifra con una passphrase”, a meno che il file resti in un posto che solo tu puoi raggiungere. Senza la passphrase il file è inutilizzabile, quindi annotala.' })}</li>
+					<li><strong>{t({ en: 'Import', it: 'Importa' })}</strong>{t({ en: 'On the other device, choose Import a backup… and pick the file. Blockwise shows what is in it before anything changes.', it: 'Sull’altro dispositivo scegli Importa un backup… e seleziona il file. Blockwise mostra cosa contiene prima di cambiare qualsiasi cosa.' })}</li>
+				</ol>
+				<p>{t({ en: 'Importing adds to what is there: where something is in both, the later change wins, and nothing is ever deleted. With Nextcloud, blocks are events in your calendars, so they stay there and aren’t in the file; from the built-in calendar, they are.', it: 'Importare aggiunge a quello che c’è: dove una cosa è in entrambi vince la modifica più recente, e non viene mai eliminato nulla. Con Nextcloud i blocchi sono eventi nei tuoi calendari, quindi restano lì e non sono nel file; dal calendario integrato invece sì.' })}</p>
 			</section>
 		</div>
 	</div>

@@ -48,5 +48,9 @@ return [
 		// Sync for local-first apps (see Sync\SyncService)
 		['name' => 'api#syncPull', 'url' => '/api/sync', 'verb' => 'GET'],
 		['name' => 'api#syncPush', 'url' => '/api/sync', 'verb' => 'POST'],
+
+		// Backup: all your records as sync sends them, and back (js/tracker.js makes the file)
+		['name' => 'api#backup', 'url' => '/api/backup', 'verb' => 'GET'],
+		['name' => 'api#restore', 'url' => '/api/backup', 'verb' => 'POST'],
 	],
 ];

@@ -1046,6 +1046,23 @@ handle('connectDrive', setupOnly((provider) => connectDrive(String(provider || '
 handle('unlockDrive', setupOnly((passphrase, encrypt) => unlockDrive(typeof passphrase === 'string' ? passphrase : '', encrypt !== false)), 'setup.html')
 handle('useThisMac', setupOnly(() => useThisMac()), 'setup.html')
 handle('saveProviderKeys', setupOnly((provider, keys) => saveProviderKeys(String(provider || ''), keys)), 'setup.html')
+// Files you save or open from the main window (a backup, a CSV), with macOS's own dialogs
+const MAX_FILE = 64 * 1024 * 1024
+handle('saveFile', async (name, text) => {
+	if (typeof text !== 'string' || text.length > MAX_FILE) throw new Error('Invalid request.')
+	const file = path.basename(String(name || '')).replace(/[^\w .()-]+/g, '_').slice(0, 120) || 'Blockwise.json'
+	const r = await dialog.showSaveDialog(mainWin || undefined, { defaultPath: path.join(app.getPath('downloads'), file) })
+	if (r.canceled || !r.filePath) return false
+	await fs.promises.writeFile(r.filePath, text, { mode: 0o600 })
+	return true
+}, 'app.html')
+handle('openFile', async () => {
+	const r = await dialog.showOpenDialog(mainWin || undefined, { properties: ['openFile'], filters: [{ name: 'Blockwise', extensions: ['json'] }] })
+	const file = !r.canceled && r.filePaths && r.filePaths[0]
+	if (!file) return null
+	if ((await fs.promises.stat(file)).size > MAX_FILE) throw new Error('This file is too large.')
+	return { name: path.basename(file), text: await fs.promises.readFile(file, 'utf8') }
+}, 'app.html')
 handle('syncNow', () => syncNow())
 handle('menu', () => tray && tray.popUpContextMenu(contextMenu()))
 handle('refresh', () => refresh())

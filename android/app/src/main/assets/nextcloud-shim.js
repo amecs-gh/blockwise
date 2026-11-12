@@ -39,6 +39,9 @@
 		// The phone and the web app have an account sheet; the Mac app uses its menu bar menu
 		account: app.account ? () => app.account() : undefined,
 		phone: !!app.phone,
+		// Saving and opening files with the app's own dialogs (a browser downloads and picks instead)
+		saveFile: app.saveFile ? (name, text) => app.saveFile(name, text) : undefined,
+		openFile: app.openFile ? () => app.openFile() : undefined,
 	}
 	document.documentElement.lang = locale
 })()

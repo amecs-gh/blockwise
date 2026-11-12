@@ -43,6 +43,15 @@ privately. You'll get an answer within a week.
   outside, cookie encryption, integrity checks); its pages can only reach its
   own API.
 
+**Backups (all apps)**
+- Settings → Your data exports everything to one file. Encrypted (the
+  default), it is AES-256-GCM with a key derived from the passphrase you choose
+  for the file (PBKDF2-SHA256, 600,000 rounds, random salt); the passphrase is
+  never stored.
+- Importing merges like a sync, through the same checks as sync: per field the
+  later change wins, deleted stays deleted, and a backup can never delete
+  anything. On Nextcloud only your own records can be changed.
+
 ## Supported versions
 
 Only the latest release gets fixes.

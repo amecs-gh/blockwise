@@ -116,6 +116,39 @@ class ApiController extends Controller {
 		return $this->handle(fn () => $this->sync->push($this->uid(), is_array($records) ? $records : []));
 	}
 
+	/** Every record of yours, with its clocks: a backup. */
+	#[NoAdminRequired]
+	public function backup(): JSONResponse {
+		return $this->handle(function () {
+			$records = [];
+			$since = 0;
+			for ($page = 0; $page < 100000; $page++) {
+				$r = $this->sync->pull($this->uid(), $since);
+				foreach ($r['records'] as $rec) {
+					$key = $rec['type'] . ':' . $rec['id'];
+					if (empty($rec['deleted'])) {
+						$records[$key] = $rec;
+					} else {
+						unset($records[$key]);
+					}
+				}
+				if (!$r['more'] || $r['cursor'] <= $since) {
+					break;
+				}
+				$since = $r['cursor'];
+			}
+			return ['records' => array_values($records)];
+		});
+	}
+
+	/** Records from a backup, merged as a sync would. A backup never deletes anything. */
+	#[NoAdminRequired]
+	public function restore(): JSONResponse {
+		$records = $this->request->getParam('records');
+		$records = is_array($records) ? array_values(array_filter($records, fn ($r) => is_array($r) && empty($r['deleted']))) : [];
+		return $this->handle(fn () => $this->sync->push($this->uid(), $records));
+	}
+
 	#[NoAdminRequired]
 	public function updateSettings(): JSONResponse {
 		return $this->handle(fn () => $this->settings->set($this->uid(), $this->request->getParams()));

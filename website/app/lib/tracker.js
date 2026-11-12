@@ -132,6 +132,7 @@
 				return await desktop.api(method, path, body)
 			} catch (e) {
 				toast(e.message, true)
+				e.shown = true
 				throw e
 			}
 		}
@@ -149,7 +150,7 @@
 		if (!res.ok) {
 			const msg = (data && data.message && tr(data.message)) || tr('Something went wrong ({status})', { status: res.status })
 			toast(msg, true)
-			throw new Error(msg)
+			throw Object.assign(new Error(msg), { shown: true })
 		}
 		return data
 	}
@@ -2588,6 +2589,34 @@
 	const hoursNum = (sec) => (Math.round((sec / 3600) * 100) / 100).toFixed(2)
 
 	/** Downloads rows as a CSV file (opens a save dialog in the Mac app). */
+	/** Saves a file you asked for: the apps ask where (their own dialog), a browser downloads it. @return false if cancelled */
+	async function saveFile(name, text, type) {
+		if (desktop && desktop.saveFile) return desktop.saveFile(name, text)
+		const a = h('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name })
+		document.body.append(a)
+		a.click()
+		setTimeout(() => { URL.revokeObjectURL(a.href); a.remove() }, 1000)
+		return true
+	}
+
+	/** A file you pick: {name, text}, or null if cancelled. */
+	function openFile(accept) {
+		if (desktop && desktop.openFile) return desktop.openFile()
+		return new Promise((resolve, reject) => {
+			const input = h('input', { type: 'file', accept, hidden: true })
+			const done = (v) => { input.remove(); resolve(v) }
+			input.addEventListener('cancel', () => done(null))
+			input.addEventListener('change', () => {
+				const f = input.files && input.files[0]
+				if (!f) return done(null)
+				if (f.size > 64 * 1024 * 1024) { input.remove(); reject(new Error(tr('This file is too large.'))); return }
+				f.text().then((text) => done({ name: f.name, text }), (e) => { input.remove(); reject(e) })
+			})
+			document.body.append(input)
+			input.click()
+		})
+	}
+
 	function downloadCsv(filename, rows) {
 		const esc = (v) => {
 			let s = String(v)
@@ -2595,11 +2624,189 @@
 			if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = `'${s}`
 			return /[",;\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 		}
-		const blob = new Blob([rows.map((r) => r.map(esc).join(',')).join('\n') + '\n'], { type: 'text/csv;charset=utf-8' })
-		const a = h('a', { href: URL.createObjectURL(blob), download: filename })
-		document.body.append(a)
-		a.click()
-		setTimeout(() => { URL.revokeObjectURL(a.href); a.remove() }, 1000)
+		saveFile(filename, rows.map((r) => r.map(esc).join(',')).join('\n') + '\n', 'text/csv;charset=utf-8')
+			.catch((e) => { if (!e.shown) toast(e.message || tr('Something went wrong.'), true) })
+	}
+
+	// ---------------------------------------------------------------------------
+	// Backup: everything in one file, to keep or to bring to another device
+	// ---------------------------------------------------------------------------
+
+	/*
+	 * {"format": "blockwise-backup", "version": 1, "exported": "<ISO date>", "records": [...]}
+	 * Records are as sync sends them (type, id, fields, clock), so importing merges
+	 * like a sync: per field the later change wins, and nothing is deleted.
+	 * Encrypted: "records" is replaced by "encrypted": AES-256-GCM with a key from
+	 * your passphrase (PBKDF2-SHA-256, 600 000 rounds, random salt), as drive sync.
+	 */
+	const BACKUP = { format: 'blockwise-backup', version: 1, iterations: 600000, aad: 'blockwise-backup-1' }
+	const BACKUP_ORDER = { settings: 0, commitment: 1, task: 2, subtask: 3, note: 4, session: 5, block: 6 }
+	const b64 = (u8) => {
+		let s = ''
+		for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000))
+		return btoa(s)
+	}
+	const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0))
+
+	async function backupKey(passphrase, salt, iterations) {
+		const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase.normalize('NFC')), 'PBKDF2', false, ['deriveKey'])
+		return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
+	}
+
+	async function sealBackup(plain, passphrase) {
+		const salt = crypto.getRandomValues(new Uint8Array(16))
+		const iv = crypto.getRandomValues(new Uint8Array(12))
+		const key = await backupKey(passphrase, salt, BACKUP.iterations)
+		const data = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(BACKUP.aad) }, key, new TextEncoder().encode(JSON.stringify(plain.records))))
+		return { format: BACKUP.format, version: BACKUP.version, exported: plain.exported,
+			encrypted: { cipher: 'AES-256-GCM', kdf: 'PBKDF2-SHA-256', iterations: BACKUP.iterations, salt: b64(salt), iv: b64(iv), data: b64(data) } }
+	}
+
+	/** The records of an encrypted backup. Throws on a wrong passphrase (or a changed file). */
+	async function openBackup(file, passphrase) {
+		const e = file.encrypted
+		if (!e || e.cipher !== 'AES-256-GCM' || e.kdf !== 'PBKDF2-SHA-256' || !Number.isInteger(e.iterations) || e.iterations < 100000 || e.iterations > 10000000) throw new Error(tr('This is not a Blockwise backup.'))
+		const key = await backupKey(passphrase, unb64(e.salt), e.iterations)
+		let bytes
+		try {
+			bytes = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(e.iv), additionalData: new TextEncoder().encode(BACKUP.aad) }, key, unb64(e.data))
+		} catch (err) {
+			throw new Error(tr('Wrong passphrase, or the file was changed.'))
+		}
+		return JSON.parse(new TextDecoder().decode(bytes))
+	}
+
+	/** A backup file's contents: {encrypted, records?, exported}. Throws if it isn't one. */
+	function readBackup(text) {
+		let file = null
+		try { file = JSON.parse(text) } catch (e) { /* not JSON */ }
+		if (!file || typeof file !== 'object' || file.format !== BACKUP.format) throw new Error(tr('This is not a Blockwise backup.'))
+		if (file.version !== BACKUP.version) throw new Error(tr('This backup was made by a newer version of Blockwise. Update this one first.'))
+		if (!file.encrypted && !Array.isArray(file.records)) throw new Error(tr('This is not a Blockwise backup.'))
+		return file
+	}
+
+	const backupCounts = (records) => {
+		const n = {}
+		for (const r of records) if (r && typeof r === 'object' && typeof r.type === 'string') n[r.type] = (n[r.type] || 0) + 1
+		return n
+	}
+	const backupSummary = (n) => [
+		n.commitment && trn('%n commitment', '%n commitments', n.commitment),
+		n.task && trn('%n task', '%n tasks', n.task),
+		n.subtask && trn('%n subtask', '%n subtasks', n.subtask),
+		n.note && trn('%n note', '%n notes', n.note),
+		n.session && trn('%n tracked time', '%n tracked times', n.session),
+		n.block && trn('%n block', '%n blocks', n.block),
+	].filter(Boolean).join(', ')
+
+	/** Settings → Your data: export a backup (encrypted if you like), import one */
+	function backupSection() {
+		const sec = h('section', { class: 'imp-settings__section imp-backup' }, h('h2', null, tr('Your data')))
+		const show = (...nodes) => {
+			sec.replaceChildren(h('h2', null, tr('Your data')), ...nodes)
+			const first = sec.querySelector('input:not([type="checkbox"])')
+			if (first) first.focus()
+		}
+		const busy = async (btn, fn) => {
+			btn.disabled = true
+			try { await fn() } catch (e) { if (!e.shown) toast(e.message || tr('Something went wrong.'), true) } finally { btn.disabled = false }
+		}
+
+		const home = () => {
+			const encrypt = h('input', { type: 'checkbox', id: 'imp-backup-enc', checked: true })
+			const pass1 = h('input', { type: 'password', autocomplete: 'new-password', minlength: 8, 'aria-label': tr('Passphrase') , placeholder: tr('Passphrase') })
+			const pass2 = h('input', { type: 'password', autocomplete: 'new-password', minlength: 8, 'aria-label': tr('Passphrase again'), placeholder: tr('Passphrase again') })
+			const passes = h('div', { class: 'imp-backup__pass' }, pass1, pass2,
+				h('p', { class: 'imp-muted' }, tr('Nobody can open the file without it, not even you: write it down.')))
+			encrypt.addEventListener('change', () => { passes.hidden = !encrypt.checked })
+			const exportBtn = h('button', { type: 'submit', class: 'imp-button imp-button--primary' }, tr('Export'))
+			const form = h('form', {
+				class: 'imp-backup__form',
+				onsubmit: (e) => {
+					e.preventDefault()
+					busy(exportBtn, async () => {
+						if (encrypt.checked) {
+							if ([...pass1.value].length < 8) throw new Error(tr('The passphrase needs at least 8 characters.'))
+							if (pass1.value !== pass2.value) throw new Error(tr('The two passphrases are not the same.'))
+						}
+						const { records } = await api('GET', 'backup')
+						const plain = { format: BACKUP.format, version: BACKUP.version, exported: new Date().toISOString(), records }
+						const file = encrypt.checked ? await sealBackup(plain, pass1.value) : plain
+						const name = `Blockwise-${isoDay(new Date())}${encrypt.checked ? '-encrypted' : ''}.json`
+						if (await saveFile(name, JSON.stringify(file), 'application/json')) {
+							pass1.value = pass2.value = ''
+							toast(tr('Exported: {what}', { what: backupSummary(backupCounts(records)) || tr('nothing yet') }))
+						}
+					})
+				},
+			},
+			h('div', { class: 'imp-check' }, encrypt, h('label', { for: 'imp-backup-enc' }, tr('Encrypt with a passphrase'))),
+			passes, exportBtn)
+			const importBtn = h('button', { type: 'button', class: 'imp-button' }, tr('Import a backup…'))
+			importBtn.addEventListener('click', () => busy(importBtn, async () => {
+				const picked = await openFile('.json,application/json')
+				if (!picked) return
+				const file = readBackup(picked.text)
+				if (file.encrypted) askPassphrase(file, picked.name)
+				else confirmImport(file.records, picked.name)
+			}))
+			show(
+				h('p', { class: 'imp-muted' }, state.features.builtinCalendar
+					? tr('A file with your commitments, tasks, notes, tracked time, blocks and settings: to keep, or to bring to another device.')
+					: tr('A file with your commitments, tasks, notes, tracked time and settings: to keep, or to bring to another device. Blocks stay in your calendars.')),
+				form,
+				h('h3', null, tr('Import')),
+				h('p', { class: 'imp-muted' }, tr('Adds a backup to what is here. Where something is in both, the later change wins; nothing is deleted.')),
+				importBtn)
+		}
+
+		const askPassphrase = (file, name) => {
+			const pass = h('input', { type: 'password', autocomplete: 'current-password', 'aria-label': tr('Passphrase'), placeholder: tr('Passphrase') })
+			const openBtn = h('button', { type: 'submit', class: 'imp-button imp-button--primary' }, tr('Open'))
+			show(h('p', null, tr('{file} is encrypted. Enter the passphrase it was exported with.', { file: name })),
+				h('form', {
+					class: 'imp-backup__form',
+					onsubmit: (e) => {
+						e.preventDefault()
+						busy(openBtn, async () => confirmImport(await openBackup(file, pass.value), name))
+					},
+				}, pass, h('div', { class: 'imp-backup__actions' }, openBtn, h('button', { type: 'button', class: 'imp-button', onclick: home }, tr('Cancel')))))
+		}
+
+		const confirmImport = (records, name) => {
+			if (!Array.isArray(records)) throw new Error(tr('This is not a Blockwise backup.'))
+			const what = backupSummary(backupCounts(records))
+			if (!what) throw new Error(tr('This backup is empty.'))
+			const goBtn = h('button', { type: 'button', class: 'imp-button imp-button--primary' }, tr('Import'))
+			goBtn.addEventListener('click', () => busy(goBtn, async () => {
+				const sorted = records.filter((r) => r && typeof r === 'object' && !r.deleted)
+					.sort((a, b) => (BACKUP_ORDER[a.type] ?? 9) - (BACKUP_ORDER[b.type] ?? 9))
+				let applied = 0
+				let blocks = 0
+				const reasons = new Set()
+				for (let i = 0; i < sorted.length; i += 500) {
+					const r = await api('POST', 'backup', { records: sorted.slice(i, i + 500) })
+					applied += r.applied || 0
+					for (const x of r.rejected || []) {
+						if (x.reason === 'Unknown type') blocks++
+						else reasons.add(x.reason)
+					}
+				}
+				await refresh()
+				toast(tr('Imported {n} items.', { n: applied }))
+				const notes = []
+				if (blocks) notes.push(trn('%n block was not imported: here, blocks are events in your calendars.', '%n blocks were not imported: here, blocks are events in your calendars.', blocks))
+				if (reasons.size) notes.push(tr('Some items were not imported: {reasons}', { reasons: [...reasons].slice(0, 3).map((x) => tr(x)).join('; ') }))
+				if (notes.length) toast(notes.join(' '), true)
+			}))
+			show(h('p', null, tr('Import from {file}: {what}?', { file: name, what })),
+				h('p', { class: 'imp-muted' }, tr('Where something is in both, the later change wins; nothing is deleted.')),
+				h('div', { class: 'imp-backup__actions' }, goBtn, h('button', { type: 'button', class: 'imp-button', onclick: home }, tr('Cancel'))))
+		}
+
+		home()
+		return sec
 	}
 	const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
@@ -2931,7 +3138,7 @@
 		state.commitments.forEach((c) => list.append(commitmentRow(c)))
 		sec.append(list, newCommitmentForm())
 		// Two columns: commitments and calendar; appearance, timer and reminders
-		const left = h('div', { class: 'imp-settings__col' }, sec)
+		const left = h('div', { class: 'imp-settings__col' }, sec, backupSection())
 		const right = h('div', { class: 'imp-settings__col' })
 		page.append(left, right)
 		if (desktop && desktop.calendarMode) left.append(await calendarSourceSection())

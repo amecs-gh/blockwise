@@ -517,6 +517,9 @@
 		}
 
 		const routes = [
+			// Backup: every record as sync sends it, with its clocks (js/tracker.js makes the file)
+			['GET', /^backup$/, async () => ({ records: backupRecords() })],
+			['POST', /^backup$/, async (m, q, body) => restoreRecords(body.records)],
 			['GET', /^state$/, async () => {
 				await refreshCalendars()
 				const list = commitments()
@@ -1212,6 +1215,65 @@
 			} finally {
 				syncing = null
 			}
+		}
+
+		const backupRecords = () => {
+			const one = (type, id, r) => {
+				const fields = {}
+				const clock = {}
+				for (const k of FIELDS[type]) {
+					if (!(k in r.f)) continue
+					fields[k] = r.f[k] ?? null
+					if (r.c[k]) clock[k] = r.c[k]
+				}
+				return { type, id, fields, clock }
+			}
+			const out = Object.keys(db.settings.f).length ? [one('settings', 'settings', db.settings)] : []
+			for (const type of TYPES) {
+				for (const [u, r] of Object.entries(db.records[type])) if (complete(type, r)) out.push(one(type, u, r))
+			}
+			return out
+		}
+
+		/**
+		 * Records from a backup, merged as a sync would (per field the later change
+		 * wins, deleted stays deleted) and kept as changes to send, so the backup
+		 * reaches your other devices too. A backup never deletes anything.
+		 */
+		const restoreRecords = (records) => {
+			if (!Array.isArray(records)) throw new ApiError('Invalid backup')
+			if (records.length > 2000) throw new ApiError('Too many changes at once')
+			const order = { settings: 0, commitment: 1, task: 2, subtask: 3, note: 4, session: 5, block: 6 }
+			const limit = nowMs() + 86400000
+			const rejected = []
+			let applied = 0
+			let deleted = 0
+			const sorted = records.filter((r) => r && typeof r === 'object' && !r.deleted).sort((a, b) => (order[a.type] ?? 9) - (order[b.type] ?? 9))
+			for (const rec of sorted) {
+				const type = rec.type
+				const id = typeof rec.id === 'string' ? rec.id : ''
+				if (!(type in order)) { rejected.push({ id, reason: 'Unknown type' }); continue }
+				if (type === 'settings' ? id !== 'settings' : !UUID_RE.test(id)) { rejected.push({ id, reason: 'Invalid id' }); continue }
+				if (db.deleted[id]) { deleted++; continue }
+				// Only fields with a valid clock: the same ones a server would take
+				const fields = {}
+				const clock = {}
+				for (const [k, v] of Object.entries(rec.fields && typeof rec.fields === 'object' ? rec.fields : {})) {
+					const c = rec.clock && rec.clock[k]
+					if (typeof c === 'string' && CLOCK_RE.test(c) && parseClock(c)[0] <= limit) { fields[k] = v; clock[k] = c }
+				}
+				if (!Object.keys(fields).length) { rejected.push({ id, reason: 'Incomplete record' }); continue }
+				merge({ type, id, fields, clock })
+				const local = type === 'settings' ? db.settings : db.records[type][id]
+				if (!local) continue
+				const key = type + ':' + id
+				for (const k of Object.keys(fields)) {
+					if (local.c[k] === clock[k] && k in local.f) (db.dirty[key] || (db.dirty[key] = {}))[k] = true
+				}
+				applied++
+			}
+			changed()
+			return { applied, rejected, deleted }
 		}
 
 		/**

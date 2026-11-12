@@ -193,6 +193,55 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
         }
     }
 
+    // --- files the page saves or opens (a backup, a CSV) ------------------------------------
+
+    interface Picked {
+        /** @param uri null when cancelled */
+        void done(Uri uri);
+    }
+
+    private static final int REQ_SAVE = 3;
+    private static final int REQ_OPEN = 4;
+    private Picked picking;
+
+    /** Android's own document picker: where to save a new file, or a file to open (no storage permission needed). */
+    void pickDocument(boolean save, String name, Picked cb) {
+        if (picking != null) {
+            cb.done(null);
+            return;
+        }
+        Intent i = new Intent(save ? Intent.ACTION_CREATE_DOCUMENT : Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE);
+        if (save) {
+            String file = name == null ? "" : name.replaceAll("[^\\w .()-]+", "_");
+            i.setType(file.endsWith(".csv") ? "text/csv" : "application/json");
+            i.putExtra(Intent.EXTRA_TITLE, file.isEmpty() ? "Blockwise.json" : file);
+        } else {
+            i.setType("*/*");
+            i.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {"application/json", "application/octet-stream", "text/plain"});
+        }
+        try {
+            picking = cb;
+            startActivityForResult(i, save ? REQ_SAVE : REQ_OPEN);
+        } catch (ActivityNotFoundException e) {
+            picking = null;
+            cb.done(null);
+        }
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected void onActivityResult(int requestCode, int resultCode, Intent result) {
+        super.onActivityResult(requestCode, resultCode, result);
+        if (requestCode != REQ_SAVE && requestCode != REQ_OPEN) {
+            return;
+        }
+        Picked cb = picking;
+        picking = null;
+        if (cb != null) {
+            cb.done(resultCode == RESULT_OK && result != null ? result.getData() : null);
+        }
+    }
+
     // --- the WebView -------------------------------------------------------------------------
 
     void loadPage() {

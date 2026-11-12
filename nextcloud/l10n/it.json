@@ -498,7 +498,54 @@
 		"{time} still to come": "ancora {time} in arrivo",
 		"{time} still to come this week": "ancora {time} questa settimana",
 		"{time} tracked this week": "{time} registrate questa settimana",
-		"{used} of {time}": "{used} su {time}"
+		"{used} of {time}": "{used} su {time}",
+		"This file is too large.": "Questo file è troppo grande.",
+		"Something went wrong.": "Qualcosa è andato storto.",
+		"This is not a Blockwise backup.": "Questo non è un backup di Blockwise.",
+		"Wrong passphrase, or the file was changed.": "Passphrase errata, oppure il file è stato modificato.",
+		"This backup was made by a newer version of Blockwise. Update this one first.": "Questo backup è stato creato da una versione più recente di Blockwise. Aggiorna prima questa.",
+		"Your data": "I tuoi dati",
+		"Passphrase": "Passphrase",
+		"Passphrase again": "Ripeti la passphrase",
+		"Nobody can open the file without it, not even you: write it down.": "Senza di essa nessuno può aprire il file, nemmeno tu: annotala.",
+		"Export": "Esporta",
+		"The passphrase needs at least 8 characters.": "La passphrase deve avere almeno 8 caratteri.",
+		"The two passphrases are not the same.": "Le due passphrase sono diverse.",
+		"Exported: {what}": "Esportati: {what}",
+		"nothing yet": "ancora niente",
+		"Encrypt with a passphrase": "Cifra con una passphrase",
+		"Import a backup…": "Importa un backup…",
+		"A file with your commitments, tasks, notes, tracked time, blocks and settings: to keep, or to bring to another device.": "Un file con impegni, task, note, tempo registrato, blocchi e impostazioni: da conservare o da portare su un altro dispositivo.",
+		"A file with your commitments, tasks, notes, tracked time and settings: to keep, or to bring to another device. Blocks stay in your calendars.": "Un file con impegni, task, note, tempo registrato e impostazioni: da conservare o da portare su un altro dispositivo. I blocchi restano nei tuoi calendari.",
+		"Import": "Importa",
+		"Adds a backup to what is here. Where something is in both, the later change wins; nothing is deleted.": "Aggiunge un backup a quello che c'è qui. Dove una cosa è in entrambi, vince la modifica più recente; non viene eliminato nulla.",
+		"Open": "Apri",
+		"{file} is encrypted. Enter the passphrase it was exported with.": "{file} è cifrato. Inserisci la passphrase usata per esportarlo.",
+		"This backup is empty.": "Questo backup è vuoto.",
+		"Imported {n} items.": "Importati {n} elementi.",
+		"Some items were not imported: {reasons}": "Alcuni elementi non sono stati importati: {reasons}",
+		"Import from {file}: {what}?": "Importare da {file}: {what}?",
+		"Where something is in both, the later change wins; nothing is deleted.": "Dove una cosa è in entrambi, vince la modifica più recente; non viene eliminato nulla.",
+		"_%n commitment_::_%n commitments_": [
+			"%n impegno",
+			"%n impegni"
+		],
+		"_%n note_::_%n notes_": [
+			"%n nota",
+			"%n note"
+		],
+		"_%n tracked time_::_%n tracked times_": [
+			"%n tempo registrato",
+			"%n tempi registrati"
+		],
+		"_%n block_::_%n blocks_": [
+			"%n blocco",
+			"%n blocchi"
+		],
+		"_%n block was not imported: here, blocks are events in your calendars._::_%n blocks were not imported: here, blocks are events in your calendars._": [
+			"%n blocco non è stato importato: qui i blocchi sono eventi nei tuoi calendari.",
+			"%n blocchi non sono stati importati: qui i blocchi sono eventi nei tuoi calendari."
+		]
 	},
 	"pluralForm": "nplurals=2; plural=(n != 1);"
 }

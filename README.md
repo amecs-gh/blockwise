@@ -16,6 +16,9 @@ work through your tasks block by block, and see where your time goes.
   goals, with CSV export.
 - Works **offline** on your devices and syncs when it can. If two devices
   change the same thing, the later change wins, field by field.
+- **Backups**: Settings → Your data exports everything to one file (encrypted
+  with a passphrase if you like) and imports it on any of the apps, merged
+  like a sync.
 
 English and Italian.
 
@@ -77,6 +80,7 @@ kept in the repository's secrets (`ANDROID_KEYSTORE_B64`,
 ```sh
 node nextcloud/tests/markdown.test.js          # Markdown parser (no server needed)
 node nextcloud/tests/filesync.test.js          # encrypted drive sync (no server needed)
+node nextcloud/tests/backup.test.js            # backup export and import (no server needed)
 node mac/test/drives.test.js                   # Dropbox and Google Drive, stand-in servers
 cd android && ./gradlew :core:coreTest         # Android logic
 # With a Nextcloud test server on localhost:8080 (users admin and bob):
