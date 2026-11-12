@@ -30,7 +30,7 @@ export type PageKey = (typeof PAGES)[number]['key']
 export const href = (lang: Lang, key: string) => (lang === 'en' ? '/' : '/it/') + key
 
 /** The release files the GitHub workflows publish from main */
-export const REPO = 'https://github.com/amecs-gh/tracker-android'
+export const REPO = 'https://github.com/amecs-gh/blockwise'
 export const DOWNLOADS = {
 	mac: `${REPO}/releases/download/mac-latest/Blockwise-mac.dmg`,
 	android: `${REPO}/releases/download/latest/Blockwise.apk`,

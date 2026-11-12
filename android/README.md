@@ -26,7 +26,7 @@ You need the Android SDK once. Pick one of three ways:
 brew install --cask android-studio
 ```
 
-Open Android Studio, choose **Open**, and pick `~/Projects/tracker-android`. Let it
+Open Android Studio, choose **Open**, and pick `~/Projects/blockwise/android`. Let it
 finish "Gradle sync" (the first time it downloads the Android SDK, a few GB).
 Then either:
 
@@ -42,7 +42,7 @@ Then either:
 brew install --cask android-commandlinetools
 sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 export ANDROID_HOME="$(brew --prefix)/share/android-commandlinetools"
-cd ~/Projects/tracker-android
+cd ~/Projects/blockwise/android
 ./gradlew :core:coreTest assembleDebug
 adb install app/build/outputs/apk/debug/app-debug.apk   # phone connected with USB debugging
 ```

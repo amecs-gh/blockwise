@@ -1,4 +1,13 @@
-# Blockwise
+<p align="center">
+  <img src="website/public/logo.svg" width="96" height="96" alt="Blockwise logo: two stacked blocks">
+</p>
+
+<h1 align="center">Blockwise</h1>
+
+<p align="center">
+  <strong>Plan your week in blocks. Get through it one block at a time.</strong><br>
+  For Mac, Android, Nextcloud and the browser · open source (AGPL-3.0) · no account, end-to-end encrypted sync
+</p>
 
 Plan your commitments (Thesis, Work, Running…) as blocks in your calendar,
 work through your tasks block by block, and see where your time goes.

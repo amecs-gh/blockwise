@@ -12,6 +12,6 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = 'tracker-android'
+rootProject.name = 'blockwise-android'
 include ':core'
 include ':app'
