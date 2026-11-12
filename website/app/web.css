@@ -162,3 +162,34 @@ html.m3-dark body.desktop {
 		box-shadow: 0 10px 30px rgba(60, 50, 140, 0.08);
 	}
 }
+
+/* Buttons on the first-run page: a web page's hand and hover (the phone's setup
+ * styles only answer a press). Not while a button is busy (disabled). */
+body.setup.web :is(.u-primary, .u-secondary, .u-text) {
+	cursor: pointer;
+	transition: background-color 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease, transform 0.15s ease;
+}
+body.setup.web :is(.u-primary, .u-secondary, .u-text):disabled {
+	cursor: default;
+}
+@media (hover: hover) {
+	body.setup.web .u-primary:not(:disabled):hover {
+		filter: brightness(1.08);
+		box-shadow: 0 8px 20px color-mix(in srgb, var(--md-primary) 30%, transparent);
+		transform: translateY(-1px);
+	}
+	body.setup.web :is(.u-secondary, .u-text):not(:disabled):hover {
+		background: color-mix(in srgb, var(--md-primary) 8%, transparent);
+	}
+}
+body.setup.web :is(.u-primary, .u-secondary, .u-text):not(:disabled):active {
+	transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+	body.setup.web :is(.u-primary, .u-secondary, .u-text) {
+		transition: none;
+	}
+	body.setup.web .u-primary:not(:disabled):hover {
+		transform: none;
+	}
+}
