@@ -111,14 +111,18 @@
 		$('pass').focus()
 	}
 
+	// Each login attempt has a number: the answer of one you left (Cancel, Back) is ignored
+	let attempt = 0
 	$('step-nextcloud').addEventListener('submit', async (e) => {
 		e.preventDefault()
 		const server = $('server').value.trim()
 		try { localStorage.setItem('server', server) } catch (err) { /* private */ }
+		const mine = ++attempt
 		waiting(t('Log in and click "Grant access" in the window that opened.'))
 		try {
 			await app.login(server)
 		} catch (err) {
+			if (mine !== attempt) return
 			show('step-nextcloud')
 			error(err.message)
 			$('server').focus()
@@ -161,8 +165,8 @@
 	$('plain-back').addEventListener('click', () => passphrase(false))
 	$('plain-go').addEventListener('click', () => unlock('', false))
 
-	for (const b of document.querySelectorAll('.js-back')) b.addEventListener('click', () => { app.cancelLogin(); choose() })
-	$('cancel').addEventListener('click', () => { app.cancelLogin(); choose() })
+	for (const b of document.querySelectorAll('.js-back')) b.addEventListener('click', () => { attempt++; app.cancelLogin(); choose() })
+	$('cancel').addEventListener('click', () => { attempt++; app.cancelLogin(); choose() })
 
 	app.getState().then((s) => {
 		t = window.trackerI18n.make(s.locale)

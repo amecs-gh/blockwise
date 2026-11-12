@@ -864,10 +864,15 @@ function showSetup() {
 
 async function login(serverInput) {
 	const server = nc.normalizeServer(serverInput)
+	// One login at a time. An earlier one ends here, and its clean-up below only
+	// touches its own window and flow (it may finish after this one has started)
 	if (loginFlow) loginFlow.cancel()
-	loginFlow = await nc.startLoginFlow(server, apiFetch)
+	if (loginWin && !loginWin.isDestroyed()) loginWin.close()
+	const flow = await nc.startLoginFlow(server, apiFetch)
+	if (loginFlow && loginFlow !== flow) loginFlow.cancel() // another login started meanwhile: the newest wins
+	loginFlow = flow
 	loginOrigin = new URL(server).origin
-	loginWin = new BrowserWindow({
+	const win = new BrowserWindow({
 		width: 520,
 		height: 760,
 		parent: setupWin || undefined,
@@ -875,10 +880,13 @@ async function login(serverInput) {
 		// No preload: the Nextcloud page gets no access to the app
 		webPreferences: { partition: LOGIN_PARTITION, contextIsolation: true, sandbox: true, nodeIntegration: false },
 	})
-	loginWin.on('closed', () => { loginWin = null; if (loginFlow) loginFlow.cancel() })
-	loginWin.loadURL(loginFlow.loginUrl)
+	loginWin = win
+	win.on('closed', () => { if (loginWin === win) loginWin = null; flow.cancel() })
+	win.loadURL(flow.loginUrl)
+	win.show()
+	win.focus()
 	try {
-		const cred = await loginFlow.poll()
+		const cred = await flow.poll()
 		// Use the address you entered: the one Nextcloud reports can be an internal name
 		const sealed = await sealPassword(cred.appPassword)
 		config = { provider: 'nextcloud', server, loginName: cred.loginName, appPassword: sealed ? sealed.appPassword : '-', encrypted: !!sealed, format: sealed && sealed.format, notifications: true }
@@ -892,10 +900,12 @@ async function login(serverInput) {
 			})
 		}
 	} finally {
-		loginFlow = null
-		if (loginWin) loginWin.close()
-		// The browser login session isn't needed any more: only the app password is
-		await session.fromPartition(LOGIN_PARTITION).clearStorageData().catch(() => {})
+		if (!win.isDestroyed()) win.close()
+		if (loginFlow === flow) {
+			loginFlow = null
+			// The browser login session isn't needed any more: only the app password is
+			await session.fromPartition(LOGIN_PARTITION).clearStorageData().catch(() => {})
+		}
 	}
 	await finishSetup(`nextcloud:${server}\n${config.loginName}`)
 }
@@ -1037,7 +1047,7 @@ const setupOnly = (fn) => (...args) => {
 handle('login', setupOnly((server) => login(String(server || ''))), 'setup.html')
 handle('cancelLogin', () => {
 	if (loginFlow) loginFlow.cancel()
-	if (loginWin) loginWin.close()
+	if (loginWin && !loginWin.isDestroyed()) loginWin.close()
 	if (pendingDrive && pendingDrive.cancel) pendingDrive.cancel()
 	// Connected but no passphrase given: the token is not kept, so it is ended at the provider
 	if (pendingDrive && pendingDrive.store) pendingDrive.store.revoke().catch(() => {})
