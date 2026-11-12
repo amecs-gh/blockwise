@@ -105,6 +105,4 @@ a problem.
 
 ## License
 
-[AGPL-3.0-or-later](LICENSE). Blockwise started from
-[TimeManager](https://github.com/te-online/timemanager) by Thomas Ebert
-(AGPL-3.0); its clients and projects became commitments linked to calendars.
+[AGPL-3.0-or-later](LICENSE). © 2026 amecs-gh.

@@ -3,10 +3,6 @@
 Plan your commitments (Thesis, Work, …) in the Nextcloud calendar, work through
 tasks block by block, and see where your time goes. Items are called commitments (Italian: impegni).
 
-Started from [TimeManager](https://github.com/te-online/timemanager) by Thomas
-Ebert (AGPL-3.0); clients and projects are replaced by commitments linked to
-calendars.
-
 ## How it works
 
 - **Commitment = calendar.** Creating a commitment creates a calendar; you can

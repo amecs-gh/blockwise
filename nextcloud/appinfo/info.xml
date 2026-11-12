@@ -12,8 +12,7 @@
 * Play button to track time, optional Pomodoro mode, reminder before a block ends
 * Warning when blocks of different commitments overlap
 * Charts of what you did and how long you spent, per day, week and month
-
-Based on TimeManager by Thomas Ebert.]]></description>
+* Export and import everything, encrypted with a passphrase if you like]]></description>
 	<version>0.7.0</version>
 	<licence>agpl</licence>
 	<author>amecs-gh</author>
