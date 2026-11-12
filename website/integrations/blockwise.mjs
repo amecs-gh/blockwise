@@ -70,14 +70,18 @@ export default function blockwise({ url, locales }) {
 		hooks: {
 			// npm run dev: /app/ from website/app, as the build serves it
 			'astro:server:setup': ({ server }) => {
-				server.middlewares.use((req, res, next) => {
+				// First in line, once Astro has added its own (its trailing-slash check would turn /app/setup away)
+				const app = (req, res, next) => {
 					const p = decodeURIComponent(new URL(req.url, 'http://x').pathname)
 					if (!p.startsWith('/app/')) return next()
-					const f = path.join(APP, p.slice('/app/'.length), p.endsWith('/') ? 'index.html' : '')
+					let f = path.join(APP, p.slice('/app/'.length), p.endsWith('/') ? 'index.html' : '')
+					// /app/setup as well as /app/setup.html, as Cloudflare Pages and Netlify serve it
+					if (!path.extname(f) && fs.existsSync(f + '.html')) f += '.html'
 					if (!f.startsWith(APP + path.sep) || !fs.existsSync(f) || !fs.statSync(f).isFile()) return next()
 					res.setHeader('Content-Type', TYPES[path.extname(f)] || 'application/octet-stream')
 					fs.createReadStream(f).pipe(res)
-				})
+				}
+				server.httpServer?.once('listening', () => server.middlewares.stack.unshift({ route: '', handle: app }))
 			},
 			'astro:build:done': ({ dir, logger }) => {
 				const dist = fileURLToPath(dir)

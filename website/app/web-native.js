@@ -25,6 +25,10 @@
 	const D = () => window.BlockwiseDrives
 	const APP = new URL('./', location.href)
 	const REDIRECT = new URL('setup.html', APP).href
+	// Which page an address is. Hosts with "pretty URLs" (Cloudflare Pages, Netlify)
+	// serve setup.html at /app/setup and redirect setup.html there: both are the setup page.
+	const pageOf = (pathname) => (/\/setup(\.html)?$/.test(pathname) ? 'setup' : 'app')
+	const ON_SETUP = pageOf(location.pathname) === 'setup'
 	const NAME_RE = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,79}$/
 	const enc = new TextEncoder()
 	const dec = new TextDecoder()
@@ -185,13 +189,13 @@
 	/** To another page; to this one again: reloaded (the bridge reads the mode once) */
 	const go = (path) => {
 		const u = new URL(path, APP)
-		if (u.pathname === location.pathname) { history.replaceState(null, '', u.pathname + u.hash); location.reload() } else location.assign(u.href)
+		if (pageOf(u.pathname) === pageOf(location.pathname)) { history.replaceState(null, '', location.pathname + u.hash); location.reload() } else location.assign(u.href)
 		return new Promise(() => {})
 	}
 	const handlers = {
 		async state() {
 			const mode = (await plainGet('mode')) || null
-			const login = location.pathname.endsWith('setup.html') ? await finishLogin() : null
+			const login = ON_SETUP ? await finishLogin() : null
 			return {
 				platform: 'web',
 				locale: navigator.language || 'en',
@@ -359,7 +363,7 @@
 	}
 
 	// Before the first start: to the setup page
-	if (!location.pathname.endsWith('setup.html')) {
+	if (!ON_SETUP) {
 		plainGet('mode').then((m) => { if (!m) location.replace(new URL('setup.html', APP).href) }).catch(() => {})
 	}
 })()

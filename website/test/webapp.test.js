@@ -15,13 +15,20 @@ const SHOTS = path.join(__dirname, 'shots')
 fs.mkdirSync(SHOTS, { recursive: true })
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.json': 'application/json' }
 
-/** The website as a static host serves it */
-function serve() {
+/**
+ * The website as a static host serves it. pretty: as Cloudflare Pages and
+ * Netlify do ("pretty URLs"): /app/setup.html redirects to /app/setup, which
+ * serves setup.html.
+ */
+function serve(pretty) {
 	const server = http.createServer((req, res) => {
-		const p = decodeURIComponent(new URL(req.url, 'http://x').pathname)
+		const url = new URL(req.url, 'http://x')
+		const p = decodeURIComponent(url.pathname)
+		if (pretty && p.endsWith('.html')) { res.writeHead(308, { Location: p.replace(/(index)?\.html$/, '') + url.search }).end(); return }
 		let f = path.join(ROOT, p)
 		if (!f.startsWith(ROOT)) { res.writeHead(403).end(); return }
 		if (p.endsWith('/')) f = path.join(f, 'index.html')
+		else if (pretty && !path.extname(f)) f += '.html'
 		fs.readFile(f, (err, data) => {
 			if (err) { res.writeHead(404).end(); return }
 			res.writeHead(200, { 'Content-Type': TYPES[path.extname(f)] || 'application/octet-stream' })
@@ -126,8 +133,9 @@ function dropbox() {
 	return { handle, files, seen }
 }
 
-;(async () => {
-	const server = await serve()
+async function suite(pretty) {
+	console.log(pretty ? 'With pretty URLs (/app/setup.html → /app/setup):' : 'Plain static host:')
+	const server = await serve(pretty)
 	const base = `http://127.0.0.1:${server.address().port}/app/`
 	const browser = await chromium.launch()
 	const errors = []
@@ -142,7 +150,7 @@ function dropbox() {
 		const ctxA = await browser.newContext({ viewport: { width: 1280, height: 860 }, locale: 'en-US' })
 		const a = await open(ctxA)
 		await a.goto(base)
-		await a.waitForURL(/setup\.html$/)
+		await a.waitForURL(/\/setup(\.html)?$/)
 		await a.locator('#local').waitFor({ state: 'visible' })
 		assert.equal(await a.locator('#local').textContent(), 'Start in this browser')
 		assert.equal(await a.locator('#nextcloud').isHidden(), true, 'no Nextcloud in the browser')
@@ -310,4 +318,9 @@ function dropbox() {
 		await browser.close()
 		server.close()
 	}
+}
+
+;(async () => {
+	await suite(false)
+	await suite(true)
 })().catch((e) => { console.error(e); process.exit(1) })
