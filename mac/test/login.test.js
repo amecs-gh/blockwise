@@ -1,6 +1,7 @@
-// The Nextcloud login window: cancelling and logging in again at once must not
-// close the new window (the old login ends up to 2 s later and used to clean up
-// whatever window was open by then). Stand-in Nextcloud login flow, no server.
+// The Nextcloud login: the page opens in your default browser (not a window of
+// the app's own, which VPN and security apps can block); cancelling and logging
+// in again at once keeps the new login going (the old one ends up to 2 s later).
+// Stand-in Nextcloud login flow, no server.
 // node test/login.test.js
 const Module = require('node:module')
 const http = require('node:http')
@@ -39,42 +40,49 @@ const server = http.createServer((req, res) => {
 	})
 })
 
+const opened = () => T.log.filter((l) => l.startsWith('openExternal')).map((l) => l.split(' ').pop())
+const SETUP = { senderFrame: { url: EV.senderFrame.url } }
+
 ;(async () => {
 	await new Promise((r) => server.listen(0, '127.0.0.1', r))
 	const base = `http://127.0.0.1:${server.address().port}`
 	require('../src/main.js')
 	T.ready()
 	await sleep(300)
-	const loginWindows = () => T.BrowserWindow.all.filter((w) => w.opts && w.opts.title === new URL(base).host)
+	const windowsBefore = T.BrowserWindow.all.length
 
-	// First login: a window opens
+	// First login: the page opens in the browser, no window of the app's own
 	const first = T.handlers.login(EV, base)
 	await sleep(400)
-	assert.equal(loginWindows().length, 1)
-	const w1 = loginWindows()[0]
-	assert.ok(!w1.isDestroyed() && w1.isVisible(), 'the login window is open and shown')
-	ok('login: the window opens')
+	assert.deepEqual(opened(), [`${base}/login/v2/flow/tok1`])
+	assert.ok(!T.BrowserWindow.all.slice(windowsBefore).some((w) => w.opts && w.opts.title === new URL(base).host), 'no login window')
+	ok('login: Nextcloud\'s page opens in the default browser')
+
+	// "Open the login page again": the same page
+	await T.handlers.reopenLogin(SETUP)
+	assert.deepEqual(opened().slice(-1), [`${base}/login/v2/flow/tok1`])
+	ok('the login page can be opened again')
 
 	// Cancel, and log in again right away (before the first login notices)
 	await T.handlers.cancelLogin(EV)
-	assert.ok(w1.isDestroyed())
 	const second = T.handlers.login(EV, base)
 	await sleep(400)
-	const w2 = loginWindows()[1]
-	assert.ok(w2 && !w2.isDestroyed(), 'the second window opened')
+	assert.deepEqual(opened().slice(-1), [`${base}/login/v2/flow/tok2`])
 	const r1 = await first
 	assert.match(r1.error || '', /cancelled/i, 'the first login ends as cancelled')
 	await sleep(2600) // the first login's last check is over by now
-	assert.ok(!w2.isDestroyed(), 'the new window is still open')
-	ok('cancel and log in again at once: the new window stays open')
+	await T.handlers.reopenLogin(SETUP)
+	assert.deepEqual(opened().slice(-1), [`${base}/login/v2/flow/tok2`], 'the new login is still the current one')
+	ok('cancel and log in again at once: the new login keeps going')
 
-	// The second login still works
+	// The second login finishes once access is granted
 	granted.add('tok2')
-	for (let i = 0; i < 40 && !w2.isDestroyed(); i++) await sleep(100)
-	assert.ok(w2.isDestroyed(), 'closed once access was granted')
+	const r2 = await Promise.race([second, sleep(6000).then(() => ({ timeout: true }))])
+	assert.ok(!r2.timeout, 'the login finished')
 	assert.ok(T.log.some((l) => l.includes('fetch tracker-api') && l.includes('/login/v2/poll')))
-	await Promise.race([second, sleep(3000)])
-	ok('access granted: the second login finishes and closes its window')
+	const st = await T.handlers.state(EV)
+	assert.equal(st.data.provider, 'nextcloud')
+	ok('access granted in the browser: logged in')
 
 	server.close()
 	console.log('\nlogin tests passed')

@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('trackerApp', {
 	open: (view, hash) => call('open', view, hash),
 	login: (server) => call('login', server),
 	cancelLogin: () => call('cancelLogin'),
+	reopenLogin: () => call('reopenLogin'),
 	connectDrive: (provider) => call('connectDrive', provider),
 	unlockDrive: (passphrase, encrypt = true) => call('unlockDrive', passphrase, encrypt !== false),
 	useThisMac: () => call('useThisMac'),

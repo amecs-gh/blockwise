@@ -56,9 +56,7 @@ let popover = null
 let popoverHiddenAt = 0
 let mainWin = null
 let setupWin = null
-let loginWin = null
 let loginFlow = null
-let loginOrigin = null
 let dash = null // last /api/dashboard, plus weekTracked
 let dashError = null
 let refreshTimer = null
@@ -864,27 +862,16 @@ function showSetup() {
 
 async function login(serverInput) {
 	const server = nc.normalizeServer(serverInput)
-	// One login at a time. An earlier one ends here, and its clean-up below only
-	// touches its own window and flow (it may finish after this one has started)
+	// One login at a time. An earlier one ends here; its clean-up below only
+	// touches its own flow (it may finish after this one has started)
 	if (loginFlow) loginFlow.cancel()
-	if (loginWin && !loginWin.isDestroyed()) loginWin.close()
 	const flow = await nc.startLoginFlow(server, apiFetch)
 	if (loginFlow && loginFlow !== flow) loginFlow.cancel() // another login started meanwhile: the newest wins
 	loginFlow = flow
-	loginOrigin = new URL(server).origin
-	const win = new BrowserWindow({
-		width: 520,
-		height: 760,
-		parent: setupWin || undefined,
-		title: new URL(server).host,
-		// No preload: the Nextcloud page gets no access to the app
-		webPreferences: { partition: LOGIN_PARTITION, contextIsolation: true, sandbox: true, nodeIntegration: false },
-	})
-	loginWin = win
-	win.on('closed', () => { if (loginWin === win) loginWin = null; flow.cancel() })
-	win.loadURL(flow.loginUrl)
-	win.show()
-	win.focus()
+	// In your default browser, where your password manager and sign-in are; a
+	// window of the app's own can be blocked (VPN and security apps). The app
+	// waits here for Nextcloud's answer and never sees the password.
+	openLink(flow.loginUrl)
 	try {
 		const cred = await flow.poll()
 		// Use the address you entered: the one Nextcloud reports can be an internal name
@@ -900,13 +887,10 @@ async function login(serverInput) {
 			})
 		}
 	} finally {
-		if (!win.isDestroyed()) win.close()
-		if (loginFlow === flow) {
-			loginFlow = null
-			// The browser login session isn't needed any more: only the app password is
-			await session.fromPartition(LOGIN_PARTITION).clearStorageData().catch(() => {})
-		}
+		if (loginFlow === flow) loginFlow = null
 	}
+	// Back from the browser
+	if (app.focus) app.focus({ steal: true })
 	await finishSetup(`nextcloud:${server}\n${config.loginName}`)
 }
 
@@ -1045,9 +1029,10 @@ const setupOnly = (fn) => (...args) => {
 	return fn(...args)
 }
 handle('login', setupOnly((server) => login(String(server || ''))), 'setup.html')
+// The Nextcloud login page again, in your browser (you closed the tab)
+handle('reopenLogin', () => { if (loginFlow) openLink(loginFlow.loginUrl) }, 'setup.html')
 handle('cancelLogin', () => {
 	if (loginFlow) loginFlow.cancel()
-	if (loginWin && !loginWin.isDestroyed()) loginWin.close()
 	if (pendingDrive && pendingDrive.cancel) pendingDrive.cancel()
 	// Connected but no passphrase given: the token is not kept, so it is ended at the provider
 	if (pendingDrive && pendingDrive.store) pendingDrive.store.revoke().catch(() => {})
@@ -1111,13 +1096,6 @@ app.on('web-contents-created', (_e, contents) => {
 	contents.setWindowOpenHandler(({ url }) => { openLink(url); return { action: 'deny' } })
 	contents.on('will-attach-webview', (e) => e.preventDefault())
 	contents.on('will-navigate', (e, url) => {
-		const isLogin = loginWin && !loginWin.isDestroyed() && contents === loginWin.webContents
-		if (isLogin) {
-			// The login page may go through a sign-in provider: https only, or your
-			// own server's address (plain http is allowed only for local/Tailscale ones)
-			if (!/^https:\/\//i.test(url) && !(loginOrigin && url.startsWith(loginOrigin + '/'))) e.preventDefault()
-			return
-		}
 		// The app's own pages never navigate away
 		if (!url.startsWith(RENDERER_URL)) { e.preventDefault(); openLink(url) }
 	})

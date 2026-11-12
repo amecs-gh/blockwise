@@ -28,9 +28,10 @@
 		const first = $('step-choose').querySelector('button')
 		if (first) first.focus()
 	}
-	function waiting(text) {
+	function waiting(text, { reopen = false } = {}) {
 		error(null)
 		$('waiting-text').textContent = text
+		$('reopen').hidden = !reopen
 		show('waiting')
 	}
 
@@ -118,7 +119,7 @@
 		const server = $('server').value.trim()
 		try { localStorage.setItem('server', server) } catch (err) { /* private */ }
 		const mine = ++attempt
-		waiting(t('Log in and click "Grant access" in the window that opened.'))
+		waiting(t('Log in in your browser and click "Grant access". Blockwise continues here on its own.'), { reopen: true })
 		try {
 			await app.login(server)
 		} catch (err) {
@@ -167,6 +168,7 @@
 
 	for (const b of document.querySelectorAll('.js-back')) b.addEventListener('click', () => { attempt++; app.cancelLogin(); choose() })
 	$('cancel').addEventListener('click', () => { attempt++; app.cancelLogin(); choose() })
+	$('reopen').addEventListener('click', () => { if (app.reopenLogin) app.reopenLogin() })
 
 	app.getState().then((s) => {
 		t = window.trackerI18n.make(s.locale)
@@ -175,6 +177,7 @@
 		$('server').placeholder = t('e.g. cloud.example.com or your Tailscale name')
 		$('submit').textContent = t('Log in')
 		$('cancel').textContent = t('Cancel')
+		$('reopen').textContent = t('Open the login page again')
 		for (const b of document.querySelectorAll('.js-back')) b.textContent = t('Back')
 		try { $('server').value = localStorage.getItem('server') || '' } catch (e) { /* none */ }
 		ready = s.providersReady || {}
