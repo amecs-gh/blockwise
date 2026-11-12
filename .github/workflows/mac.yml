@@ -3,9 +3,9 @@
 # published as the "mac-latest" release (Blockwise-mac.dmg), the file the
 # website links to. Not notarized: see mac/README.md.
 #
-# Dropbox and Google Drive appear in the app when these repository variables
-# are set (Settings → Secrets and variables → Actions → Variables; they are app
-# ids, not secrets): DROPBOX_APP_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.
+# Dropbox and Google Drive appear in the app when these are set as repository
+# variables or secrets (Settings → Secrets and variables → Actions): DROPBOX_APP_KEY,
+# GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET. They are app ids, not secrets.
 name: Mac
 on:
   push:
@@ -30,9 +30,9 @@ jobs:
         run: npm test
       - name: App keys for Dropbox and Google Drive
         env:
-          DROPBOX_APP_KEY: ${{ vars.DROPBOX_APP_KEY }}
-          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
-          GOOGLE_CLIENT_SECRET: ${{ vars.GOOGLE_CLIENT_SECRET }}
+          DROPBOX_APP_KEY: ${{ vars.DROPBOX_APP_KEY || secrets.DROPBOX_APP_KEY }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID || secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ vars.GOOGLE_CLIENT_SECRET || secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           node -e 'const e=process.env; require("fs").writeFileSync("config/providers.json", JSON.stringify({dropboxAppKey: e.DROPBOX_APP_KEY||"", googleClientId: e.GOOGLE_CLIENT_ID||"", googleClientSecret: e.GOOGLE_CLIENT_SECRET||""}))'
       - name: Build
