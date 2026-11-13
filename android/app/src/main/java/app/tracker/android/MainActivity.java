@@ -82,6 +82,7 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
         configure(web);
         web.addJavascriptInterface(new Bridge(this), "TrackerAndroid");
         setContentView(frame);
+        holdSplash(frame);
         if (Build.VERSION.SDK_INT >= 33) {
             backCallback = this::goBack;
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, backCallback);
@@ -315,6 +316,13 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
             }
 
             @Override
+            public void onPageCommitVisible(WebView view, String url) {
+                // The page's own splash is painted: Android's may go
+                pagePainted = true;
+                view.invalidate();
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 if (url != null && url.startsWith(ASSETS)) {
                     applyTheme();
@@ -383,6 +391,31 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
      * Android 11+: the page draws under the bars (edge to edge) and gets their
      * sizes as CSS variables; only the keyboard pushes the page up.
      */
+    private volatile boolean pagePainted;
+
+    /**
+     * Android 12+ shows a splash screen with the launcher icon until the first frame.
+     * Keep it until the page has painted its own splash (the same icon, same place, then
+     * animated), so it hands over without a blank screen; at most 1.5 s.
+     */
+    private void holdSplash(View content) {
+        if (Build.VERSION.SDK_INT < 31) {
+            return;
+        }
+        final long until = android.os.SystemClock.uptimeMillis() + 1500;
+        content.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                if (pagePainted || android.os.SystemClock.uptimeMillis() > until) {
+                    content.getViewTreeObserver().removeOnPreDrawListener(this);
+                    return true;
+                }
+                content.postInvalidateDelayed(16);
+                return false;
+            }
+        });
+    }
+
     private void watchInsets(View v) {
         v.setOnApplyWindowInsetsListener((view, insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {

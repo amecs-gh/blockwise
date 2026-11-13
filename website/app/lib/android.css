@@ -1586,3 +1586,104 @@ body.android .imp-pcal .imp-pcal--prev {
 body.android .imp-cvpanel--sheet:focus {
 	outline: none;
 }
+
+/* --- Startup splash (app.html): Android's splash screen hands over to this one --- */
+.splash {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: grid;
+	place-items: center;
+	background: #f6f5fb;
+	transition: opacity 0.28s ease-out, visibility 0s linear 0.28s;
+}
+@media (prefers-color-scheme: dark) {
+	.splash {
+		background: #14121d;
+	}
+}
+html.m3-dark .splash {
+	background: #14121d;
+}
+.splash__icon {
+	grid-area: 1 / 1;
+	width: 240px;
+	height: 240px;
+	transition: transform 0.28s ease-out;
+}
+/* The two blocks: a soft, staggered lift, like blocks being stacked into a day */
+.splash__top,
+.splash__bottom {
+	transform-box: fill-box;
+	transform-origin: 50% 100%;
+	animation: splash-lift 1.4s cubic-bezier(0.45, 0, 0.25, 1) 0.25s infinite;
+}
+.splash__bottom {
+	animation-name: splash-slide;
+	animation-delay: 0.45s;
+}
+@keyframes splash-lift {
+	0%, 60%, 100% { transform: none; }
+	25% { transform: translateY(-9px) scaleX(0.94); }
+	42% { transform: translateY(1px) scaleY(0.96); }
+}
+@keyframes splash-slide {
+	0%, 60%, 100% { transform: none; }
+	25% { transform: translateX(7px); }
+	42% { transform: translateX(-1px); }
+}
+/* Below the icon, only if it takes a while (a first sync with a slow server) */
+.splash__dots {
+	grid-area: 1 / 1;
+	display: flex;
+	gap: 8px;
+	margin-top: 220px;
+	opacity: 0;
+	animation: splash-show 0.4s ease-out 1.2s forwards;
+}
+.splash__dots span {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: #6c5ce7;
+	animation: splash-dot 1.2s ease-in-out infinite;
+}
+.splash__dots span:nth-child(2) { animation-delay: 0.15s; }
+.splash__dots span:nth-child(3) { animation-delay: 0.3s; }
+@media (prefers-color-scheme: dark) {
+	.splash__dots span {
+		background: #8b7cf6;
+	}
+}
+html.m3-dark .splash__dots span {
+	background: #8b7cf6;
+}
+@keyframes splash-show {
+	to { opacity: 1; }
+}
+@keyframes splash-dot {
+	0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
+	40% { opacity: 1; transform: none; }
+}
+/* Ready: the icon grows a little and everything fades into the app */
+.splash.is-done {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+.splash.is-done .splash__icon {
+	transform: scale(1.12);
+}
+@media (prefers-reduced-motion: reduce) {
+	.splash__top,
+	.splash__bottom,
+	.splash__dots span {
+		animation: none;
+	}
+	.splash__dots {
+		animation-duration: 0s;
+	}
+	.splash.is-done .splash__icon {
+		transform: none;
+	}
+}

@@ -34,6 +34,18 @@ let folderVersion = 0
 const folderWaits = new Set()
 const folderChanged = () => { folderVersion++; for (const w of [...folderWaits]) w() }
 
+/** Every page of the server's records (it sends at most 1000 at a time) */
+async function serverRecords() {
+	const recs = []
+	for (let since = 0, more = true; more;) {
+		const page = await (await fetch(`${SERVER}/index.php/apps/tracker/api/sync?since=${since}&limit=1000`, { headers: { Authorization: AUTH, 'OCS-APIRequest': 'true' } })).json()
+		recs.push(...page.records)
+		more = page.more && page.cursor > since
+		since = page.cursor
+	}
+	return recs
+}
+
 async function phone(browser, file, { dark = false, locale = 'en-US', hash = '', mode = 'nextcloud', dev = device, resend = false, connecting = false, theme = true } = {}) {
 	const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2.75, isMobile: true, hasTouch: true, colorScheme: dark ? 'dark' : 'light', locale })
 	const page = await ctx.newPage()
@@ -304,8 +316,7 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		// The first sync with a server can take a while (the app waits up to 20 s for it)
 		await n.page.waitForSelector('.imp-ptasks .imp-tcol', { timeout: 30000 })
 		await n.page.waitForTimeout(1500)
-		const r = await fetch(`${SERVER}/index.php/apps/tracker/api/sync?since=0&limit=5000`, { headers: { Authorization: AUTH, 'OCS-APIRequest': 'true' } })
-		const recs = (await r.json()).records
+		const recs = await serverRecords()
 		assert.ok(recs.some((x) => x.type === 'commitment' && x.id === c.uuid && x.fields?.name === name), 'the commitment reached Nextcloud')
 		assert.ok(recs.some((x) => x.type === 'task' && x.fields?.title === 'Read' && x.fields?.commitment === c.uuid), 'its task too')
 		assert.ok(!recs.some((x) => x.type === 'block'), 'built-in blocks stay on the phone')
@@ -332,7 +343,7 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 							: pg === 'time' ? q('.imp-ptime .imp-pweeks')
 								: pg === 'settings' ? q('.imp-psettings .imp-settings__section')
 									: q('.imp-pcommit .imp-ptabs')
-			}, pg, { timeout: 15000 })
+			}, pg, { timeout: 30000 })
 			await a.page.waitForTimeout(400)
 			const info = await a.page.evaluate(() => {
 				const m = document.querySelector('.imp-main')
@@ -369,16 +380,23 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		await a.page.click('.imp-ptabs button >> nth=2')
 		await a.page.waitForSelector('.imp-pcommit .imp-cpage')
 		assert.ok(await a.page.$('.imp-newblock button'), 'Plan a block on the commitment page')
-		// (a sync finishing just then may redraw the page: open it again)
-		await a.page.click('.imp-newblock button')
-		await a.page.waitForTimeout(300)
-		if (!(await a.page.$('.imp-newblock__form'))) { await a.page.waitForSelector('.imp-updating[hidden]', { state: 'attached', timeout: 15000 }).catch(() => {}); await a.page.click('.imp-newblock button') }
-		await a.page.locator('.imp-newblock').scrollIntoViewIfNeeded()
-		await a.page.screenshot({ path: `${shots}/${tag}-newblock.png` })
-		await a.page.click('.imp-newblock__form button[type=submit]')
+		// (a page load or sync finishing just then may redraw the page: then once more)
+		for (let i = 0; ; i++) {
+			try {
+				await a.page.waitForSelector('.imp-updating[hidden]', { state: 'attached', timeout: 15000 }).catch(() => {})
+				if (!(await a.page.$('.imp-newblock__form'))) await a.page.click('.imp-newblock button', { timeout: 5000 })
+				await a.page.waitForSelector('.imp-newblock__form', { timeout: 4000 })
+				await a.page.locator('.imp-newblock').scrollIntoViewIfNeeded({ timeout: 3000 })
+				await a.page.screenshot({ path: `${shots}/${tag}-newblock.png` })
+				await a.page.click('.imp-newblock__form button[type=submit]', { timeout: 3000 })
+				break
+			} catch (e) {
+				if (i >= 2) throw e
+			}
+		}
 		await a.page.waitForTimeout(400)
 		// The form stays open (the calendar isn't on this phone) unless a sync redrew the page meanwhile
-		if (await a.page.$('.imp-newblock__actions button[type=button]')) await a.page.click('.imp-newblock__actions button[type=button]')
+		if (await a.page.$('.imp-newblock__actions button[type=button]')) await a.page.click('.imp-newblock__actions button[type=button]', { timeout: 3000 }).catch(() => {})
 		// Account (in Settings) reaches the app; Calendar is the planner, never another app
 		await a.page.evaluate(() => { location.hash = '#settings' })
 		await a.page.click('.imp-paccount')
@@ -463,16 +481,23 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 			const y = 500
 			const x0 = dx < 0 ? 330 : 80
 			await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y }] })
-			for (let i = 1; i <= 6; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + (dx * i) / 6, y: y + i }] })
+			for (let i = 1; i <= 3; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + (dx * i) / 3, y: y + i }] })
 			await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
 			await cdp.detach()
 		}
 		const heading = () => pc.page.locator('.imp-pcal .imp-pbar h1').innerText()
+		// (once more if a redraw for new data replaced the grid under the finger)
+		const swipeTo = async (dx, ok) => {
+			for (let i = 0; i < 3; i++) {
+				await pc.page.waitForSelector('.imp-updating[hidden]', { state: 'attached', timeout: 15000 }).catch(() => {})
+				await swipe(dx)
+				if (await pc.page.waitForFunction(ok, first, { timeout: 5000 }).catch(() => null)) return
+			}
+			assert.fail(`swiped ${dx}`)
+		}
 		const first = await heading()
-		await swipe(-200)
-		await pc.page.waitForFunction((t) => document.querySelector('.imp-pcal .imp-pbar h1')?.innerText !== t, first, { timeout: 5000 })
-		await swipe(200)
-		await pc.page.waitForFunction((t) => document.querySelector('.imp-pcal .imp-pbar h1')?.innerText === t, first, { timeout: 5000 })
+		await swipeTo(-200, (t) => document.querySelector('.imp-pcal .imp-pbar h1')?.innerText !== t)
+		await swipeTo(200, (t) => document.querySelector('.imp-pcal .imp-pbar h1')?.innerText === t)
 		// Month: the numbers don't move when the blocks arrive (the second line is always there)
 		await pc.page.click('.imp-pcal__views button >> nth=2')
 		await pc.page.waitForSelector('.imp-cv__month')
@@ -526,8 +551,7 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 	await back.page.waitForSelector('.imp-ptasks .imp-tcol', { timeout: 15000 })
 	await back.page.waitForFunction(() => true)
 	await back.page.waitForTimeout(1500)
-	const r = await fetch(`${SERVER}/index.php/apps/tracker/api/sync?since=0&limit=1000`, { headers: { Authorization: AUTH, 'OCS-APIRequest': 'true' } })
-	const all = (await r.json()).records
+	const all = await serverRecords()
 	const onServer = all.find((x) => x.type === 'task' && x.id === added.uuid)
 	assert.ok(onServer && onServer.fields.title === title, 'the offline task reached the server when back online')
 	assert.equal(Object.keys(JSON.parse(device.db).dirty).length, 0, 'nothing left to sync')

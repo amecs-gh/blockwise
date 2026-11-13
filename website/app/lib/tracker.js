@@ -3889,6 +3889,15 @@
 		}
 		// The phone: no keyboard until you tap a field (it would cover the sheet)
 		if (PHONE) el.tabIndex = -1
+		// The tap that opened the sheet ends with a click where the sheet now is: not on its buttons
+		// (a real tap on the sheet starts with a finger down on it)
+		const opened = performance.now()
+		let ghost = true
+		el.addEventListener('pointerdown', () => { ghost = false }, true)
+		el.addEventListener('click', (e) => {
+			if (ghost && performance.now() - opened < 600) { e.preventDefault(); e.stopPropagation() }
+			ghost = false
+		}, true)
 		fill().then(() => setTimeout(() => (PHONE ? el.querySelector('[autofocus]') || el : el.querySelector('[autofocus]') || el.querySelector('input, button'))?.focus({ preventScroll: PHONE }), 0))
 		return el
 	}
@@ -4612,14 +4621,23 @@
 		const root = document.getElementById('tracker-app')
 		if (!root) return
 		routeFromHash()
-		root.replaceChildren(h('div', { class: 'imp-loading' }, tr('Loading…')))
+		// The apps show a splash screen while this loads (no "Loading…" in a corner)
+		const splash = document.getElementById('splash')
+		const ready = () => {
+			if (!splash) return
+			splash.classList.add('is-done')
+			setTimeout(() => splash.remove(), 400)
+		}
+		if (!splash) root.replaceChildren(h('div', { class: 'imp-loading' }, tr('Loading…')))
 		try {
 			await loadState()
 		} catch (e) {
 			root.replaceChildren(h('p', { class: 'imp-empty' }, tr('Could not load your commitments. Reload to try again.')))
+			ready()
 			return
 		}
 		await render()
+		ready()
 		window.addEventListener('hashchange', () => { routeFromHash(); state.offset = 0; render() })
 		if (desktop && desktop.onChanged) {
 			// Not while something is being typed or a form, editor or menu is open (it would be lost):

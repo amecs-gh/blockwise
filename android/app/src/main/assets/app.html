@@ -9,6 +9,17 @@
 	<link rel="stylesheet" href="android.css">
 </head>
 <body class="android">
+	<!-- Startup: the launcher icon exactly where Android's own splash screen leaves it, then it moves until the app is ready -->
+	<div id="splash" class="splash" role="status" aria-label="Blockwise">
+		<svg class="splash__icon" viewBox="0 0 108 108" width="240" height="240" aria-hidden="true">
+			<circle cx="54" cy="54" r="36" fill="#1E2A44"></circle>
+			<g transform="translate(20.01 21) scale(0.66)">
+				<path class="splash__top" fill="#FFFFFF" d="M33 19 H54 A14 14 0 0 1 68 33 A14 14 0 0 1 54 47 H33 A4 4 0 0 1 29 43 V23 A4 4 0 0 1 33 19 Z"></path>
+				<path class="splash__bottom" fill="#F4A62A" d="M33 52 H59.5 A14.5 14.5 0 0 1 74 66.5 A14.5 14.5 0 0 1 59.5 81 H33 A4 4 0 0 1 29 77 V56 A4 4 0 0 1 33 52 Z"></path>
+			</g>
+		</svg>
+		<div class="splash__dots" aria-hidden="true"><span></span><span></span><span></span></div>
+	</div>
 	<div id="tracker-app" class="tracker"></div>
 	<div id="toast" class="toast" role="status" hidden></div>
 	<script src="web/l10n.js"></script>
