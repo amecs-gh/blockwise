@@ -145,6 +145,26 @@ public final class CoreTest {
         eq(Alerts.pomodoroPhase(T0, s, T0 + 115 * 60).kind, Alerts.Kind.LONG, "long break");
         eq(Alerts.pomodoroPhase(T0, s, T0).longAt, T0 + 115 * 60, "long break time");
 
+        // --- the notification's bar ---
+        Alerts.Bar inBlock = Alerts.bar(dash(false, 1L, true), T0);
+        eq(inBlock.start, T0 - 3600, "bar: the block's start");
+        eq(inBlock.end, T0 + 3600, "bar: the block's end");
+        eq(inBlock.now, T0, "bar: now");
+        eq(inBlock.marks.length, 0, "bar: a block has no parts");
+        eq(Alerts.bar(dash(false, 1L, false), T0), null, "bar: none outside a block");
+        eq(Alerts.bar(dash(false, null, false), T0), null, "bar: none for unplanned time");
+        Alerts.Bar pomo = Alerts.bar(dash(true, 1L, true), T0 + 31 * 60);
+        eq(pomo.start, T0, "bar: Pomodoro from the start");
+        eq(pomo.end, T0 + 115 * 60, "bar: to the long break");
+        eq(pomo.marks.length, 3, "bar: a part per round");
+        eq(pomo.marks[0], T0 + 30 * 60, "bar: first round ends after focus and break");
+        eq(Alerts.bar(dash(false, 1L, true), T0 + 2 * 3600), null, "bar: none once the block is over");
+        Dash onBreak = new Dash();
+        onBreak.longBreakUntil = T0 + 600;
+        Alerts.Bar brk = Alerts.bar(onBreak, T0);
+        eq(brk.start, T0 + 600 - 15 * 60, "bar: the long break from its start");
+        eq(brk.end, T0 + 600, "bar: to its end");
+
         // --- block-end reminder: once at 15 min left ---
         Set<String> seen = new HashSet<>();
         eq(Alerts.check(dash(false, 1L, true), T0 + 3600 - 20 * 60, seen, en).notifications.size(), 0, "no reminder at 20 min");

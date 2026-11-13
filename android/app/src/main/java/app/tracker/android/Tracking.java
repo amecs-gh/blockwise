@@ -45,6 +45,8 @@ final class Tracking {
     static final String ACTION_CHECK = "app.tracker.android.CHECK";
     /** The timer's notification was swiped away while tracking: it comes back */
     static final String ACTION_DISMISSED = "app.tracker.android.DISMISSED";
+    /** Once a minute while the screen is on: the notification's bar moves on */
+    static final String ACTION_BAR = "app.tracker.android.BAR";
 
     /** One background thread for all background work, so changes stay in order. */
     static final ExecutorService IO = Executors.newSingleThreadExecutor();
@@ -261,6 +263,7 @@ final class Tracking {
         serverEvents = new ArrayList<>();
         c.getSystemService(NotificationManager.class).cancelAll();
         schedule(c, null);
+        scheduleBar(c, false);
     }
 
     // --- what the notification shows -----------------------------------------------------------
@@ -460,6 +463,7 @@ final class Tracking {
         Alerts.Status st = Alerts.status(d, now, t);
         if (st == null || !canNotify(c)) {
             nm.cancel(ID_TIMER);
+            scheduleBar(c, false);
             return;
         }
         ensureChannels(c);
@@ -504,7 +508,64 @@ final class Tracking {
             b.setDeleteIntent(broadcast(c, ACTION_DISMISSED, 3));
             promote(b);
         }
+        Alerts.Bar bar = Alerts.bar(d, now);
+        if (bar != null) {
+            progress(b, bar, color);
+        }
         nm.notify(ID_TIMER, b.build());
+        scheduleBar(c, bar != null);
+    }
+
+    /**
+     * The bar under the timer, in the commitment's color: the block up to now, or
+     * the Pomodoro cycle with a part per round. Android 16 draws it as Android's
+     * progress style (parts, the position as a dot); before, a plain bar.
+     */
+    private static void progress(Notification.Builder b, Alerts.Bar bar, int color) {
+        int total = (int) Math.max(1, (bar.end - bar.start) / 60);
+        int at = (int) Math.max(0, Math.min(total, (bar.now - bar.start) / 60));
+        if (Build.VERSION.SDK_INT >= 36) {
+            List<Notification.ProgressStyle.Segment> parts = new ArrayList<>();
+            long from = bar.start;
+            int used = 0;
+            for (int i = 0; i <= bar.marks.length; i++) {
+                long to = i < bar.marks.length ? bar.marks[i] : bar.end;
+                int len = i < bar.marks.length ? (int) Math.max(1, (to - from) / 60) : Math.max(1, total - used);
+                parts.add(new Notification.ProgressStyle.Segment(len).setColor(color));
+                used += len;
+                from = to;
+            }
+            b.setStyle(new Notification.ProgressStyle()
+                    .setStyledByProgress(true)
+                    .setProgressSegments(parts)
+                    .setProgress(Math.min(at, used)));
+        } else {
+            b.setProgress(total, at, false);
+        }
+    }
+
+    /**
+     * Moves the bar on once a minute, only while the phone is awake (a plain alarm:
+     * it never wakes the phone; while it sleeps nobody looks at the bar anyway).
+     */
+    private static void scheduleBar(Context c, boolean on) {
+        AlarmManager am = c.getSystemService(AlarmManager.class);
+        PendingIntent pi = broadcast(c, ACTION_BAR, 4);
+        if (!on) {
+            am.cancel(pi);
+            return;
+        }
+        am.set(AlarmManager.RTC, System.currentTimeMillis() + 60_000L, pi);
+    }
+
+    /** The notification again with the bar moved on (from what is shown: no reading, no server) */
+    static void moveBar(Context c) {
+        Dash d = last;
+        if (d == null) {
+            scheduleBar(c, false);
+            return;
+        }
+        showTimer(c.getApplicationContext(), d);
     }
 
     /**

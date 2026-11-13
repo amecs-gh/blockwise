@@ -188,6 +188,57 @@ public final class Alerts {
         }
     }
 
+    /** What the notification's bar shows: a span of time, how far along it is, and where it divides */
+    public static final class Bar {
+        public final long start;
+        public final long end;
+        public final long now;
+        /** Inside the span, ascending: the ends of the Pomodoro rounds (empty for a block) */
+        public final long[] marks;
+
+        Bar(long start, long end, long now, long[] marks) {
+            this.start = start;
+            this.end = end;
+            this.now = Math.max(start, Math.min(end, now));
+            this.marks = marks;
+        }
+    }
+
+    /**
+     * The bar under the timer: with Pomodoro, the cycle up to the long break, a
+     * part per round; else the block you track in; in the long break, the break.
+     * Null when there is nothing to measure (tracking outside a block).
+     */
+    public static Bar bar(Dash d, long now) {
+        if (d == null) {
+            return null;
+        }
+        Dash.Running r = d.running;
+        if (r != null && r.pomodoro) {
+            long f = d.settings.focusMinutes * 60L;
+            long sb = d.settings.shortBreakMinutes * 60L;
+            int n = Math.max(1, d.settings.sessionsBeforeLongBreak);
+            if (f <= 0) {
+                return null;
+            }
+            long longAt = r.start + n * f + (n - 1) * sb;
+            long[] marks = new long[n - 1];
+            for (int i = 1; i < n; i++) {
+                marks[i - 1] = r.start + i * (f + sb);
+            }
+            return new Bar(r.start, longAt, now, marks);
+        }
+        if (r != null) {
+            Dash.Block b = runningBlock(d, now);
+            return b == null || b.end <= b.start ? null : new Bar(b.start, b.end, now, new long[0]);
+        }
+        if (d.longBreakUntil != null && d.longBreakUntil > now) {
+            long from = d.longBreakUntil - Math.max(1, d.settings.longBreakMinutes) * 60L;
+            return new Bar(from, d.longBreakUntil, now, new long[0]);
+        }
+        return null;
+    }
+
     public static Status status(Dash d, long now, I18n t) {
         if (d == null) {
             return null;

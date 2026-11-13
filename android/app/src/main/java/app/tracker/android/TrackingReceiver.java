@@ -15,6 +15,9 @@ public final class TrackingReceiver extends BroadcastReceiver {
         } else if (Tracking.ACTION_DISMISSED.equals(action)) {
             // Shown again from what the phone knows (no server request): only if a timer still runs
             Tracking.refresh(context, pending::finish, false);
+        } else if (Tracking.ACTION_BAR.equals(action)) {
+            Tracking.moveBar(context);
+            pending.finish();
         } else if (Tracking.ACTION_CHECK.equals(action)) {
             Tracking.refresh(context, pending::finish);
         } else {
