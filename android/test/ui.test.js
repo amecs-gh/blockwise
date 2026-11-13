@@ -369,7 +369,10 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		await a.page.click('.imp-ptabs button >> nth=2')
 		await a.page.waitForSelector('.imp-pcommit .imp-cpage')
 		assert.ok(await a.page.$('.imp-newblock button'), 'Plan a block on the commitment page')
+		// (a sync finishing just then may redraw the page: open it again)
 		await a.page.click('.imp-newblock button')
+		await a.page.waitForTimeout(300)
+		if (!(await a.page.$('.imp-newblock__form'))) { await a.page.waitForSelector('.imp-updating[hidden]', { state: 'attached', timeout: 15000 }).catch(() => {}); await a.page.click('.imp-newblock button') }
 		await a.page.locator('.imp-newblock').scrollIntoViewIfNeeded()
 		await a.page.screenshot({ path: `${shots}/${tag}-newblock.png` })
 		await a.page.click('.imp-newblock__form button[type=submit]')
@@ -454,10 +457,48 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		assert.match(await pc.page.locator('.imp-cv__busy').first().innerText(), /Dentist/)
 		await pc.page.evaluate(() => document.querySelector('.imp-cv__busy').scrollIntoView({ block: 'center' }))
 		await pc.page.screenshot({ path: `${shots}/calendar-busy.png` })
+		// A sideways swipe: the next three days, then back
+		const swipe = async (dx) => {
+			const cdp = await pc.page.context().newCDPSession(pc.page)
+			const y = 500
+			const x0 = dx < 0 ? 330 : 80
+			await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y }] })
+			for (let i = 1; i <= 6; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + (dx * i) / 6, y: y + i }] })
+			await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+			await cdp.detach()
+		}
+		const heading = () => pc.page.locator('.imp-pcal .imp-pbar h1').innerText()
+		const first = await heading()
+		await swipe(-200)
+		await pc.page.waitForFunction((t) => document.querySelector('.imp-pcal .imp-pbar h1')?.innerText !== t, first, { timeout: 5000 })
+		await swipe(200)
+		await pc.page.waitForFunction((t) => document.querySelector('.imp-pcal .imp-pbar h1')?.innerText === t, first, { timeout: 5000 })
+		// Month: the numbers don't move when the blocks arrive (the second line is always there)
+		await pc.page.click('.imp-pcal__views button >> nth=2')
+		await pc.page.waitForSelector('.imp-cv__month')
+		const tops = await pc.page.evaluate(() => new Promise((res) => {
+			const seen = new Set(); const t0 = performance.now()
+			document.querySelector('.imp-pbar button[aria-label="Next"]').click()
+			const f = () => { const n = document.querySelectorAll('.imp-cv__mnum')[14]; if (n) seen.add(Math.round(n.getBoundingClientRect().top)); if (performance.now() - t0 < 3000) requestAnimationFrame(f); else res([...seen]) }
+			f()
+		}))
+		assert.equal(tops.length, 1, `month numbers stay put (${tops})`)
+		await pc.page.click('.imp-pcal__views button >> nth=1')
+		// Planning a block: no keyboard at first; with the keyboard (a shorter page), the sheet stays above it
+		await pc.page.click('.imp-pcal__fab')
+		await pc.page.waitForSelector('.imp-cvpanel--sheet input[type=time]')
+		assert.ok(!(await pc.page.evaluate(() => /INPUT|TEXTAREA/.test(document.activeElement.tagName) && document.activeElement.type === 'text')), 'no text field focused when the sheet opens')
+		await pc.page.setViewportSize({ width: 393, height: 480 })
+		await pc.page.focus('.imp-cvpanel--sheet input[type=text]')
+		await pc.page.waitForTimeout(300)
+		const sheet = await pc.page.evaluate(() => { const r = document.querySelector('.imp-cvpanel--sheet').getBoundingClientRect(); const f = document.activeElement.getBoundingClientRect(); return { bottom: r.bottom, top: r.top, field: f.bottom, h: innerHeight } })
+		assert.ok(sheet.bottom <= sheet.h + 1 && sheet.top >= 0 && sheet.field <= sheet.h, `the sheet fits above the keyboard (${JSON.stringify(sheet)})`)
+		await pc.page.screenshot({ path: `${shots}/newblock-keyboard.png` })
+		await pc.page.setViewportSize({ width: 393, height: 852 })
 		assert.deepEqual(pc.errors, [], 'no console errors')
 		await pc.ctx.close()
 		Object.assign(device, { phoneCals: null, phoneEvents: [], busyEvents: [] })
-		console.log('  ✔ blocks in the phone\'s calendars: the planner moves and deletes them; other calendars as busy time')
+		console.log('  ✔ blocks in the phone\'s calendars: the planner moves and deletes them; other calendars as busy time; swipes; month holds still; the sheet above the keyboard')
 	}
 
 	console.log('offline')
@@ -501,4 +542,4 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 
 	await browser.close()
 	console.log('✔ android ui ok')
-})().catch((e) => { console.error('✘', e.message); process.exit(1) })
+})().catch((e) => { console.error('✘', e.message, (e.stack || '').split('\n').find((l) => l.includes('ui.test.js'))); process.exit(1) })

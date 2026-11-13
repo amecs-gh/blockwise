@@ -1559,3 +1559,30 @@ body.android .imp-pbusy__none {
 	margin: 0 18px 6px;
 	font-size: 12px;
 }
+
+/* Planner: a sideways swipe changes the days; they slide in from that side */
+body.android .imp-pcal .imp-cv__grid,
+body.android .imp-pcal .imp-cv__month {
+	touch-action: pan-y;
+}
+body.android .imp-pcal .imp-pcal--next {
+	animation: imp-pcal-in-next 0.18s ease-out;
+}
+body.android .imp-pcal .imp-pcal--prev {
+	animation: imp-pcal-in-prev 0.18s ease-out;
+}
+@keyframes imp-pcal-in-next {
+	from { transform: translateX(28px); opacity: 0.4; }
+}
+@keyframes imp-pcal-in-prev {
+	from { transform: translateX(-28px); opacity: 0.4; }
+}
+@media (prefers-reduced-motion: reduce) {
+	body.android .imp-pcal .imp-pcal--next,
+	body.android .imp-pcal .imp-pcal--prev {
+		animation: none;
+	}
+}
+body.android .imp-cvpanel--sheet:focus {
+	outline: none;
+}

@@ -3476,6 +3476,7 @@
 		hour: new Intl.DateTimeFormat(locale, { hour: 'numeric' }),
 	}
 	let calBusy = false // a drag or a panel open: no automatic re-render
+	let calTouching = false // a finger on the planner (maybe a swipe): no re-render under it
 	/** Repeats follow this device's local time (across DST) */
 	const userTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined } catch (e) { return undefined } }
 
@@ -3487,6 +3488,30 @@
 		const first = startOfWeek(startOfMonth(d))
 		return Array.from({ length: 42 }, (_, i) => addDays(first, i))
 	}
+	/** Phone: a sideways swipe on the planner goes to the next or previous days (or month) */
+	function calSwipe(el) {
+		let s = null
+		el.addEventListener('pointerdown', (e) => {
+			s = e.pointerType === 'mouse' || !e.isPrimary ? null : { x: e.clientX, y: e.clientY, id: e.pointerId, t: Date.now(), drag: false }
+			calTouching = !!s
+		}, true)
+		el.addEventListener('pointermove', (e) => { if (s && calBusy) s.drag = true }, true)
+		el.addEventListener('pointerup', (e) => {
+			if (!s || s.id !== e.pointerId) return
+			calTouching = false
+			const dx = e.clientX - s.x
+			const dy = e.clientY - s.y
+			// Not while a block is held or moved: then the finger carries the block
+			const swipe = !s.drag && !calBusy && Math.abs(dx) > 56 && Math.abs(dx) > 2 * Math.abs(dy) && Date.now() - s.t < 900
+			s = null
+			if (!swipe) return
+			e.stopPropagation()
+			state.calSlide = dx < 0 ? 1 : -1
+			calMove(dx < 0 ? 1 : -1)
+		}, true)
+		el.addEventListener('pointercancel', () => { s = null; calTouching = false }, true)
+	}
+
 	function calMove(n) {
 		const d = new Date(state.calDate)
 		if (state.calView === 'day') d.setDate(d.getDate() + n)
@@ -3826,6 +3851,11 @@
 		if (done) done()
 		if (back && document.contains(back)) back.focus()
 	}
+	// The keyboard opened (the page got shorter): the field you're typing in stays in view in the sheet
+	if (PHONE) window.addEventListener('resize', () => {
+		const f = document.activeElement
+		if (calPanelEl && f && calPanelEl.contains(f) && f !== calPanelEl) setTimeout(() => f.scrollIntoView({ block: 'nearest' }), 50)
+	})
 	function calPanel(anchor, build, { label, onClose } = {}) {
 		closeCalPanel()
 		closeMenu()
@@ -3857,7 +3887,9 @@
 			place()
 			if (focused) document.getElementById(focused)?.focus()
 		}
-		fill().then(() => setTimeout(() => (el.querySelector('[autofocus]') || el.querySelector('input, button'))?.focus(), 0))
+		// The phone: no keyboard until you tap a field (it would cover the sheet)
+		if (PHONE) el.tabIndex = -1
+		fill().then(() => setTimeout(() => (PHONE ? el.querySelector('[autofocus]') || el : el.querySelector('[autofocus]') || el.querySelector('input, button'))?.focus({ preventScroll: PHONE }), 0))
 		return el
 	}
 	// A tap on the phone sends a mousedown after the touch: not a click outside the panel it just opened
@@ -3977,7 +4009,7 @@
 		const lastUsed = Number(localStorageGet('calCommitment', '')) || null
 		const cid = b.commitmentId || (commitmentById(lastUsed) ? lastUsed : state.commitments[0].id)
 		calPanel(anchor, () => {
-			const title = h('input', { type: 'text', value: b.title || '', placeholder: (commitmentById(cid) || {}).name || '', maxlength: '255', 'aria-label': tr('Title'), autofocus: true })
+			const title = h('input', { type: 'text', value: b.title || '', placeholder: (commitmentById(cid) || {}).name || '', maxlength: '255', 'aria-label': tr('Title'), autofocus: !PHONE })
 			const who = h('select', { 'aria-label': tr('Commitment'), onchange: () => { title.placeholder = (commitmentById(Number(who.value)) || {}).name || '' } },
 				state.commitments.map((c) => h('option', { value: c.id, selected: c.id === cid }, c.name)))
 			const day = h('input', { type: 'date', required: true, value: dateValue(at(b.start)), 'aria-label': tr('Day') })
@@ -4458,13 +4490,18 @@
 				: short.formatRange ? short.formatRange(days[0], days[2]) : `${short.format(days[0])} – ${short.format(days[2])}`
 		const planned = blocks.reduce((sum, b) => sum + Math.max(0, Math.min(b.end, to) - Math.max(b.start, from)), 0)
 		const isToday = days.some((x) => sameDay(x, new Date()))
-		page.append(phoneBar(title, planned ? tr('{hours} planned', { hours: fmtMin(Math.round(planned / 60)) }) : null,
+		// Always a second line: the grid mustn't jump when the blocks arrive
+		page.append(phoneBar(title, planned ? tr('{hours} planned', { hours: fmtMin(Math.round(planned / 60)) }) : tr('Nothing planned yet.'),
 			h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('Previous'), title: tr('Previous'), onclick: () => calMove(-1) }, chevron(-1)),
 			h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('Next'), title: tr('Next'), onclick: () => calMove(1) }, chevron(1)),
 			isToday && state.calView !== 'month' ? null : h('button', { type: 'button', class: 'imp-button imp-pcal__today', onclick: () => { state.calDate = startOfDay(new Date()); state.calScroll = null; render() } }, tr('Today'))))
 		const seg = (v, label) => h('button', { type: 'button', role: 'tab', 'aria-selected': state.calView === v ? 'true' : 'false', onclick: () => calSetView(v) }, label)
 		page.append(h('div', { class: 'imp-pcal__views', role: 'tablist', 'aria-label': tr('View') }, seg('day', tr('Day')), seg('3days', tr('3 days')), seg('month', tr('Month'))))
-		page.append(state.calView === 'month' ? monthGrid(days, blocks) : timeGrid(days, blocks, busy))
+		const view = state.calView === 'month' ? monthGrid(days, blocks) : timeGrid(days, blocks, busy)
+		// After a swipe, the new days slide in from that side
+		if (state.calSlide) { view.classList.add(state.calSlide > 0 ? 'imp-pcal--next' : 'imp-pcal--prev'); state.calSlide = 0 }
+		calSwipe(view)
+		page.append(view)
 		page.append(h('button', {
 			type: 'button',
 			class: 'imp-pcal__fab',
@@ -4605,7 +4642,7 @@
 		setInterval(tick, 1000)
 		// Keep blocks and the queue current
 		setInterval(() => {
-			if ((state.route === 'now' || (state.route === 'calendar' && !calBusy)) && document.visibilityState === 'visible' && !document.activeElement?.matches('input, textarea, select')) render()
+			if ((state.route === 'now' || (state.route === 'calendar' && !calBusy && !calTouching)) && document.visibilityState === 'visible' && !document.activeElement?.matches('input, textarea, select')) render()
 		}, 60000)
 		document.addEventListener('visibilitychange', () => {
 			if (document.visibilityState === 'visible' && state.route === 'now') render()

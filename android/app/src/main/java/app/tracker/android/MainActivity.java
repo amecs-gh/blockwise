@@ -72,10 +72,16 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
         edgeToEdge(this);
         web = new WebView(this);
         web.setBackgroundColor(getColor(R.color.page));
-        watchInsets(web);
+        // The keyboard makes the frame smaller, so the page's viewport ends above it
+        // (a WebView's own padding doesn't: its sheets and bars would stay under the keyboard)
+        android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
+        frame.setBackgroundColor(getColor(R.color.page));
+        frame.addView(web, new android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
+        watchInsets(frame);
         configure(web);
         web.addJavascriptInterface(new Bridge(this), "TrackerAndroid");
-        setContentView(web);
+        setContentView(frame);
         if (Build.VERSION.SDK_INT >= 33) {
             backCallback = this::goBack;
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, backCallback);
