@@ -70,6 +70,7 @@ public final class I18n {
             {"Cancelled.", "Annullato."},
             {"Remove", "Rimuovi"},
             {"Cancel", "Annulla"},
+            {"Open your calendar with", "Apri il calendario con"},
             {"Close", "Chiudi"},
             {"Log out of {host}? The app password is removed from Nextcloud.", "Uscire da {host}? La password dell'app viene rimossa da Nextcloud."},
             {"Log in again", "Accedi di nuovo"},

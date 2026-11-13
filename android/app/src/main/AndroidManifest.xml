@@ -4,8 +4,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Timer and reminder notifications (asked at first start on Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Android 16: the running timer as a chip in the status bar (a "live update") -->
-    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <!-- Reminders on the minute; without it they can come a few minutes late -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- Keep reminders after a restart while you track time -->

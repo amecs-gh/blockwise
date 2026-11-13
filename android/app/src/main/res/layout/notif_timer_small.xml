@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The timer's notification, folded: the timer card from Now in one row (Android allows 48dp) -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="48dp">
+
+    <ImageView
+        android:id="@+id/card"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:scaleType="fitXY"
+        android:src="@drawable/notif_card" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="14dp"
+        android:paddingEnd="7dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:singleLine="true"
+                android:textSize="11sp" />
+
+            <Chronometer
+                android:id="@+id/clock"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-black"
+                android:includeFontPadding="false"
+                android:textSize="19sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/stop"
+            android:layout_width="wrap_content"
+            android:layout_height="34dp"
+            android:background="@drawable/notif_pill"
+            android:drawablePadding="6dp"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:textColor="#FF24223A"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+</FrameLayout>

@@ -90,7 +90,7 @@ public final class Bridge {
 
     /** What only the app's window can do (dialogs, logins, permissions, other apps) */
     private static final java.util.Set<String> WINDOW_ONLY = new java.util.HashSet<>(java.util.Arrays.asList(
-            "calendarAccess", "createEvent", "login", "cancelLogin", "openCalendar", "account", "useLocal", "connect",
+            "calendarAccess", "createEvent", "login", "cancelLogin", "openCalendar", "calendarApp", "chooseCalendarApp", "account", "useLocal", "connect",
             "backToApp", "connectDrive", "cancelDrive", "saveDrive", "saveFile", "openFile"));
     private static final int MAX_FILE = 64 * 1024 * 1024;
 
@@ -235,6 +235,12 @@ public final class Bridge {
             case "openCalendar":
                 activity.openCalendar(args.isNull(0) ? null : args.optLong(0));
                 reply(id, data(null));
+                break;
+            case "calendarApp":
+                reply(id, data(activity.calendarAppName()));
+                break;
+            case "chooseCalendarApp":
+                activity.chooseCalendarApp(null, () -> reply(id, data(activity.calendarAppName())));
                 break;
             case "account":
                 activity.showAccount();

@@ -398,6 +398,9 @@
 		backToApp: () => call('backToApp'),
 		cancelLogin: () => call('cancelLogin'),
 		openCalendar: (ts) => call('openCalendar', typeof ts === 'number' ? ts : null),
+		/** The calendar app Blockwise opens (chosen once), and choosing another */
+		calendarApp: () => call('calendarApp'),
+		chooseCalendarApp: () => call('chooseCalendarApp'),
 		onChanged: (cb) => listeners.changed.push(cb),
 		/** Waiting for Nextcloud (calendars, blocks): the page shows placeholders */
 		loading: () => asking > 0,

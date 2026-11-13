@@ -35,6 +35,8 @@
 	window.trackerBridge = {
 		api: (method, path, body) => app.api(method, path, body),
 		openCalendar: (ts) => app.openCalendar(ts),
+		calendarApp: app.calendarApp ? () => app.calendarApp() : undefined,
+		chooseCalendarApp: app.chooseCalendarApp ? () => app.chooseCalendarApp() : undefined,
 		onChanged: (cb) => app.onChanged(cb),
 		// Waiting for Nextcloud: placeholders where its answer goes
 		loading: app.loading ? () => app.loading() : undefined,

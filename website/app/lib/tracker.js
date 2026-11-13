@@ -4467,6 +4467,14 @@
 			icon(ICON_ME, 22),
 			h('span', null, h('strong', null, tr('Account and sync')), h('span', { class: 'imp-muted' }, tr('Where your data is, sync, export'))),
 			chevron(1)))
+		// Blocks in the phone's calendars: the calendar app the Calendar tab opens (chosen once)
+		if (!calendarShown() && desktop.calendarApp) {
+			const name = await desktop.calendarApp().catch(() => null)
+			page.append(h('button', { type: 'button', class: 'imp-paccount', onclick: async () => { await desktop.chooseCalendarApp(); render() } },
+				icon(ICON_CAL, 22),
+				h('span', null, h('strong', null, tr('Calendar app')), h('span', { class: 'imp-muted' }, name || tr('Asked the first time you open it'))),
+				chevron(1)))
+		}
 		page.append(await pageSettings())
 		return page
 	}

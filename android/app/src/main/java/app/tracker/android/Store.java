@@ -137,6 +137,19 @@ final class Store {
         }
     }
 
+    /** The calendar app Blockwise opens ("package/activity"), chosen once; null: not chosen */
+    static String calendarApp(Context c) {
+        return prefs(c).getString("calendarApp", null);
+    }
+
+    static void setCalendarApp(Context c, String app) {
+        if (app == null) {
+            prefs(c).edit().remove("calendarApp").apply();
+        } else {
+            prefs(c).edit().putString("calendarApp", app).apply();
+        }
+    }
+
     /** Start (or go back to) "on this phone only", keeping the data on the phone. */
     static synchronized void useLocal(Context c) {
         Vault.claim(c, Vault.LOCAL);

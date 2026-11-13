@@ -8,6 +8,7 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Insets;
@@ -27,6 +28,8 @@ import android.webkit.WebViewClient;
 import android.widget.Toast;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
+
+import java.util.List;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -439,14 +442,113 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
         return o;
     }
 
+    /**
+     * Opens your calendar app on a day. With several calendar apps (Proton Calendar,
+     * Google Calendar ...) and none set as Android's default, Android would ask every
+     * time: Blockwise asks once, remembers it, and opens that one directly
+     * (Settings → Calendar app changes it).
+     */
     void openCalendar(Long ts) {
         long ms = ts == null ? System.currentTimeMillis() : ts * 1000;
-        Uri uri = Uri.parse("content://com.android.calendar/time/" + ms);
+        final Intent view = new Intent(Intent.ACTION_VIEW, Uri.parse("content://com.android.calendar/time/" + ms));
+        List<ResolveInfo> apps = calendarApps(view);
+        if (apps.isEmpty()) {
+            Toast.makeText(this, Tracking.i18n().t("No calendar app found."), Toast.LENGTH_SHORT).show();
+            return;
+        }
+        ResolveInfo pick = find(apps, Store.calendarApp(this));
+        if (pick == null && apps.size() == 1) {
+            pick = apps.get(0);
+        }
+        if (pick == null) {
+            // Android's default calendar app, if one is set
+            ResolveInfo def = getPackageManager().resolveActivity(view, PackageManager.MATCH_DEFAULT_ONLY);
+            pick = def == null ? null : find(apps, key(def));
+        }
+        if (pick != null) {
+            launchCalendar(view, pick);
+            return;
+        }
+        chooseCalendarApp(app -> launchCalendar(view, app), null);
+    }
+
+    interface Picked2 {
+        void picked(ResolveInfo app);
+    }
+
+    /** The calendar apps on this phone, by name */
+    private List<ResolveInfo> calendarApps(Intent view) {
+        List<ResolveInfo> apps = new java.util.ArrayList<>(getPackageManager().queryIntentActivities(view, 0));
+        final PackageManager pm = getPackageManager();
+        apps.sort((a, b) -> String.valueOf(a.loadLabel(pm)).compareToIgnoreCase(String.valueOf(b.loadLabel(pm))));
+        return apps;
+    }
+
+    private static String key(ResolveInfo r) {
+        return r.activityInfo.packageName + "/" + r.activityInfo.name;
+    }
+
+    private static ResolveInfo find(List<ResolveInfo> apps, String key) {
+        if (key == null) {
+            return null;
+        }
+        for (ResolveInfo r : apps) {
+            if (key.equals(key(r))) {
+                return r;
+            }
+        }
+        return null;
+    }
+
+    private void launchCalendar(Intent view, ResolveInfo app) {
         try {
-            startActivity(new Intent(Intent.ACTION_VIEW, uri));
-        } catch (ActivityNotFoundException e) {
+            startActivity(new Intent(view).setClassName(app.activityInfo.packageName, app.activityInfo.name));
+        } catch (ActivityNotFoundException | SecurityException e) {
+            Store.setCalendarApp(this, null);
             Toast.makeText(this, Tracking.i18n().t("No calendar app found."), Toast.LENGTH_SHORT).show();
         }
+    }
+
+    /** "Open your calendar with": once; the answer is kept */
+    void chooseCalendarApp(Picked2 then, Runnable closed) {
+        final Intent view = new Intent(Intent.ACTION_VIEW, Uri.parse("content://com.android.calendar/time/" + System.currentTimeMillis()));
+        final List<ResolveInfo> apps = calendarApps(view);
+        if (apps.isEmpty()) {
+            Toast.makeText(this, Tracking.i18n().t("No calendar app found."), Toast.LENGTH_SHORT).show();
+            if (closed != null) {
+                closed.run();
+            }
+            return;
+        }
+        final PackageManager pm = getPackageManager();
+        String[] names = new String[apps.size()];
+        for (int i = 0; i < names.length; i++) {
+            names[i] = String.valueOf(apps.get(i).loadLabel(pm));
+        }
+        ResolveInfo current = find(apps, Store.calendarApp(this));
+        new AlertDialog.Builder(this)
+                .setTitle(Tracking.i18n().t("Open your calendar with"))
+                .setSingleChoiceItems(names, current == null ? -1 : apps.indexOf(current), (d, which) -> {
+                    Store.setCalendarApp(this, key(apps.get(which)));
+                    d.dismiss();
+                    if (then != null) {
+                        then.picked(apps.get(which));
+                    }
+                })
+                .setNegativeButton(Tracking.i18n().t("Cancel"), null)
+                .setOnDismissListener(d -> {
+                    if (closed != null) {
+                        closed.run();
+                    }
+                })
+                .show();
+    }
+
+    /** The chosen calendar app's name, or null */
+    String calendarAppName() {
+        Intent view = new Intent(Intent.ACTION_VIEW, Uri.parse("content://com.android.calendar/time/0"));
+        ResolveInfo r = find(calendarApps(view), Store.calendarApp(this));
+        return r == null ? null : String.valueOf(r.loadLabel(getPackageManager()));
     }
 
     void startLogin(String server, Done done) {

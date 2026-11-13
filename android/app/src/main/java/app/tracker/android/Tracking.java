@@ -478,6 +478,7 @@ final class Tracking {
                 }
             }
         }
+        Alerts.Bar bar = Alerts.bar(d, now);
         Notification.Builder b = new Notification.Builder(c, CH_TIMER)
                 .setSmallIcon(R.drawable.ic_stat_tracker)
                 .setContentTitle(st.title)
@@ -485,10 +486,11 @@ final class Tracking {
                 .setColor(color)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
-                .setShowWhen(true)
-                .setUsesChronometer(true)
-                .setChronometerCountDown(st.countDown)
-                .setWhen(st.when * 1000)
+                .setShowWhen(false)
+                // The timer card from Now, drawn by Blockwise (Android's frame around it)
+                .setStyle(new Notification.DecoratedCustomViewStyle())
+                .setCustomContentView(card(c, R.layout.notif_timer_small, d, st, bar, color, now))
+                .setCustomBigContentView(card(c, R.layout.notif_timer_big, d, st, bar, color, now))
                 // The lock screen shows only "Tracking", not what you work on
                 .setVisibility(Notification.VISIBILITY_PRIVATE)
                 .setPublicVersion(new Notification.Builder(c, CH_TIMER)
@@ -503,45 +505,56 @@ final class Tracking {
             b.setCategory(Notification.CATEGORY_STOPWATCH);
         }
         if (d.running != null) {
-            b.addAction(new Notification.Action.Builder(Icon.createWithResource(c, R.drawable.ic_stop), t.t("Stop"), broadcast(c, ACTION_STOP, 1)).build());
             // Stays while you track: swiped away (Android 14+ allows it), it comes back
             b.setDeleteIntent(broadcast(c, ACTION_DISMISSED, 3));
-            promote(b);
-        }
-        Alerts.Bar bar = Alerts.bar(d, now);
-        if (bar != null) {
-            progress(b, bar, color);
         }
         nm.notify(ID_TIMER, b.build());
         scheduleBar(c, bar != null);
     }
 
     /**
-     * The bar under the timer, in the commitment's color: the block up to now, or
-     * the Pomodoro cycle with a part per round. Android 16 draws it as Android's
-     * progress style (parts, the position as a dot); before, a plain bar.
+     * The card: the commitment's color, what runs, the clock (counting by itself),
+     * Stop, and (pulled down) the block's bar with the time left.
      */
-    private static void progress(Notification.Builder b, Alerts.Bar bar, int color) {
-        int total = (int) Math.max(1, (bar.end - bar.start) / 60);
-        int at = (int) Math.max(0, Math.min(total, (bar.now - bar.start) / 60));
-        if (Build.VERSION.SDK_INT >= 36) {
-            List<Notification.ProgressStyle.Segment> parts = new ArrayList<>();
-            long from = bar.start;
-            int used = 0;
-            for (int i = 0; i <= bar.marks.length; i++) {
-                long to = i < bar.marks.length ? bar.marks[i] : bar.end;
-                int len = i < bar.marks.length ? (int) Math.max(1, (to - from) / 60) : Math.max(1, total - used);
-                parts.add(new Notification.ProgressStyle.Segment(len).setColor(color));
-                used += len;
-                from = to;
-            }
-            b.setStyle(new Notification.ProgressStyle()
-                    .setStyledByProgress(true)
-                    .setProgressSegments(parts)
-                    .setProgress(Math.min(at, used)));
+    private static android.widget.RemoteViews card(Context c, int layout, Dash d, Alerts.Status st, Alerts.Bar bar, int color, long now) {
+        android.widget.RemoteViews v = new android.widget.RemoteViews(c.getPackageName(), layout);
+        // Text in white, or dark on a light color (as in the app)
+        double lum = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255;
+        boolean light = lum > 0.62;
+        int text = light ? Color.parseColor("#24223A") : Color.WHITE;
+        v.setInt(R.id.card, "setColorFilter", color);
+        v.setTextViewText(R.id.label, st.title);
+        v.setTextColor(R.id.label, text);
+        v.setTextColor(R.id.clock, text);
+        long nowMs = System.currentTimeMillis();
+        long base = android.os.SystemClock.elapsedRealtime() + (st.when * 1000 - nowMs);
+        v.setChronometer(R.id.clock, base, null, true);
+        v.setChronometerCountDown(R.id.clock, st.countDown);
+        if (d.running != null) {
+            v.setTextViewText(R.id.stop, "\u25A0  " + i18n().t("Stop"));
+            v.setOnClickPendingIntent(R.id.stop, broadcast(c, ACTION_STOP, 1));
+            v.setViewVisibility(R.id.stop, android.view.View.VISIBLE);
         } else {
-            b.setProgress(total, at, false);
+            v.setViewVisibility(R.id.stop, android.view.View.GONE);
         }
+        if (layout == R.layout.notif_timer_big) {
+            boolean showBar = bar != null;
+            int total = showBar ? (int) Math.max(1, (bar.end - bar.start) / 60) : 1;
+            int at = showBar ? (int) Math.max(0, Math.min(total, (bar.now - bar.start) / 60)) : 0;
+            v.setViewVisibility(R.id.bar_light, showBar && !light ? android.view.View.VISIBLE : android.view.View.GONE);
+            v.setViewVisibility(R.id.bar_dark, showBar && light ? android.view.View.VISIBLE : android.view.View.GONE);
+            v.setProgressBar(light ? R.id.bar_dark : R.id.bar_light, total, at, false);
+            v.setTextViewText(R.id.span, st.text);
+            v.setTextColor(R.id.span, text);
+            String times = "";
+            if (showBar && bar.marks.length == 0 && d.running != null) {
+                java.text.DateFormat f = android.text.format.DateFormat.getTimeFormat(c);
+                times = f.format(new java.util.Date(bar.start * 1000)) + " \u2013 " + f.format(new java.util.Date(bar.end * 1000));
+            }
+            v.setTextViewText(R.id.left, times);
+            v.setTextColor(R.id.left, text);
+        }
+        return v;
     }
 
     /**
@@ -566,27 +579,6 @@ final class Tracking {
             return;
         }
         showTimer(c.getApplicationContext(), d);
-    }
-
-    /**
-     * Android 16: a "live update", the running timer as a chip in the status bar,
-     * on every screen. Asked for by name, so older Android versions (and builds
-     * without these methods) simply keep the ordinary notification.
-     */
-    private static void promote(Notification.Builder b) {
-        if (Build.VERSION.SDK_INT < 36) {
-            return;
-        }
-        try {
-            Notification.Builder.class.getMethod("setRequestPromotedOngoing", boolean.class).invoke(b, true);
-        } catch (ReflectiveOperationException e) {
-            try {
-                int flag = Notification.class.getField("FLAG_PROMOTED_ONGOING").getInt(null);
-                Notification.Builder.class.getMethod("setFlag", int.class, boolean.class).invoke(b, flag, true);
-            } catch (ReflectiveOperationException ignored) {
-                // no live updates on this phone: the ordinary notification
-            }
-        }
     }
 
     private static void notifyAlert(Context c, Alerts.Notice n) {
