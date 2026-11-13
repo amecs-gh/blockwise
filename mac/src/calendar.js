@@ -46,6 +46,10 @@ function runHelper(helperPath, command, input, run = execFile) {
 function appleCalendar({ helperPath, run }) {
 	const call = (cmd, input) => runHelper(helperPath, cmd, input, run)
 	let cals = []
+	// The last answer for a range, kept a minute: the helper isn't started every 30 s for the same events.
+	// Changes made here clear it; changes in Calendar.app show within the minute.
+	let recent = null
+	const changed = () => { recent = null }
 	return {
 		kind: 'apple',
 		/** Asks macOS for access the first time (the system dialog) */
@@ -64,7 +68,10 @@ function appleCalendar({ helperPath, run }) {
 		async events(from, to, urls) {
 			const ids = (urls || []).map(appleId).filter(Boolean)
 			if (!ids.length || !(to > from)) return []
-			const list = await call('events', { from: Math.floor(from), to: Math.ceil(to), calendars: ids })
+			const key = `${Math.floor(from)}-${Math.ceil(to)}-${ids.join(',')}`
+			const list = recent && recent.key === key && Date.now() - recent.at < 60000 ? recent.list
+				: await call('events', { from: Math.floor(from), to: Math.ceil(to), calendars: ids })
+			recent = { key, at: recent && recent.key === key && recent.list === list ? recent.at : Date.now(), list }
 			const out = []
 			for (const e of Array.isArray(list) ? list : []) {
 				if (!e || typeof e.uid !== 'string' || !Number.isFinite(e.start) || !Number.isFinite(e.end) || e.allDay) continue
@@ -82,6 +89,7 @@ function appleCalendar({ helperPath, run }) {
 				if (Number.isFinite(until) && until >= start) input.until = until
 				input.skip = (Array.isArray(skip) ? skip : []).filter((x) => Number.isInteger(x)).slice(-1000)
 			}
+			changed()
 			const r = await call('createEvent', input)
 			if (!r || typeof r.uid !== 'string' || !r.uid) throw new Error('Apple Calendar could not be read.')
 			return { uid: `${r.uid}#${start}`, eventUid: r.uid }
@@ -90,12 +98,14 @@ function appleCalendar({ helperPath, run }) {
 		async removeCopy({ url, uid, start }) {
 			const calendar = appleId(url)
 			if (!calendar || typeof uid !== 'string' || !uid || uid.length > 1000) return
+			changed()
 			await call('deleteEvent', Number.isFinite(start) ? { calendar, uid, start } : { calendar, uid })
 		},
 		/** A commitment's calendar with all its events, when you delete the commitment (can't be undone) */
 		async deleteCalendar(url) {
 			const calendar = appleId(url)
 			if (!calendar) throw new Error('This calendar is not on this Mac.')
+			changed()
 			try {
 				await call('deleteCalendar', { calendar })
 			} catch (e) {
@@ -119,7 +129,7 @@ function nextcloudCalendar({ api, now = Date.now }) {
 	let cals = null
 	let calsAt = 0
 	let cache = [] // last events from the server
-	let recent = null // the last answer, reused for a few seconds (every refresh asks)
+	let recent = null // the last answer, reused for two minutes (every refresh asks; changes made here clear it)
 	const self = {
 		kind: 'nextcloud',
 		async calendars() {
@@ -136,7 +146,7 @@ function nextcloudCalendar({ api, now = Date.now }) {
 			try {
 				if (!cals) await self.calendars()
 				const key = `${Math.floor(from)}-${Math.ceil(to)}`
-				if (!recent || recent.key !== key || now() - recent.at > 20000) recent = { key, at: now(), blocks: (await api('GET', `blocks?from=${Math.floor(from)}&to=${Math.ceil(to)}`)).blocks }
+				if (!recent || recent.key !== key || now() - recent.at > 120000) recent = { key, at: now(), blocks: (await api('GET', `blocks?from=${Math.floor(from)}&to=${Math.ceil(to)}`)).blocks }
 				const { blocks } = recent
 				const out = []
 				for (const b of blocks || []) {

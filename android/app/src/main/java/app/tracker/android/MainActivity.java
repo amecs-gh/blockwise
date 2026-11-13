@@ -84,6 +84,9 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
     protected void onResume() {
         super.onResume();
         inFront = true;
+        if (web != null) {
+            web.onResume();
+        }
         Tracking.listener = this;
         BackgroundSync.schedule(this);
         if (Store.ready(this)) {
@@ -103,6 +106,11 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
     @Override
     protected void onPause() {
         inFront = false;
+        // The page is hidden now: its watch on the drive, the 3-minute sync and the clock stop
+        // (only this window's page: the background sync has its own)
+        if (web != null) {
+            web.onPause();
+        }
         if (Tracking.listener == this) {
             Tracking.listener = null;
         }

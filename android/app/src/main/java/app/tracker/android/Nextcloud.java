@@ -64,7 +64,9 @@ final class Nextcloud {
     }
 
     private static Response request(String url, String method, Map<String, String> headers, byte[] body) throws IOException {
-        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        URL u = new URL(url);
+        requireTailnet(u);
+        HttpURLConnection c = (HttpURLConnection) u.openConnection();
         try {
             c.setInstanceFollowRedirects(false);
             c.setUseCaches(false);
@@ -87,6 +89,24 @@ final class Nextcloud {
             return new Response(status, in == null ? "" : read(in));
         } finally {
             c.disconnect();
+        }
+    }
+
+    /**
+     * Plain http is allowed to Tailscale names (*.ts.net) because the tunnel is
+     * encrypted. Without Tailscale on, someone else on the network could answer
+     * for that name and get the app password in the clear: so the name must
+     * lead to a Tailscale address, or nothing is sent (as if offline).
+     */
+    static void requireTailnet(URL u) throws IOException {
+        if (!"http".equalsIgnoreCase(u.getProtocol()) || !u.getHost().toLowerCase(java.util.Locale.ROOT).endsWith(".ts.net")) {
+            return;
+        }
+        java.net.InetAddress[] all = java.net.InetAddress.getAllByName(u.getHost());
+        for (java.net.InetAddress a : all) {
+            if (!ServerUrl.isTailnetAddress(a.getAddress())) {
+                throw new IOException("Not connected through Tailscale");
+            }
         }
     }
 

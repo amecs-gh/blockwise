@@ -334,14 +334,15 @@
 	/** Called every second. Updates live numbers in place and fires reminders. */
 	function tick() {
 		const now = nowTs()
-		document.querySelectorAll('[data-live]').forEach((el) => {
+		// Nothing to redraw while the page is hidden (the reminders below still run)
+		if (!document.hidden) document.querySelectorAll('[data-live]').forEach((el) => {
 			const kind = el.dataset.live
 			const ts = Number(el.dataset.ts)
 			if (kind === 'elapsed') el.textContent = clock(now - ts)
 			else if (kind === 'left') el.textContent = clock(ts - now)
 			else if (kind === 'left-short') el.textContent = duration(ts - now)
 		})
-		document.querySelectorAll('[data-now-marker]').forEach((el) => {
+		if (!document.hidden) document.querySelectorAll('[data-now-marker]').forEach((el) => {
 			const s = Number(el.dataset.start)
 			const e = Number(el.dataset.end)
 			el.style.setProperty('--p', `${Math.min(100, Math.max(0, ((now - s) / (e - s)) * 100))}%`)

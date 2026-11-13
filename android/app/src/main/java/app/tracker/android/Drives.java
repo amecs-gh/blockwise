@@ -679,6 +679,43 @@ final class Drives {
         }
 
         /**
+         * Has anything changed since `cursor`, at once (the background check: no
+         * connection held open, so the phone can sleep again right away).
+         * Dropbox: one look at the folder's list; Google Drive: as changes().
+         */
+        JSONObject changesNow(String cursor) throws DriveException {
+            if (!dropbox()) {
+                return changes(cursor, 0);
+            }
+            if (cursor == null || cursor.isEmpty() || cursor.length() > 4096) {
+                throw new DriveException("The folder's watch cursor expired.", 409, false, false);
+            }
+            int[] st = {0};
+            try {
+                boolean changed = false;
+                String c = cursor;
+                for (int page = 0; page < 50; page++) {
+                    JSONObject d = rpc("files/list_folder/continue", new JSONObject().put("cursor", c), st);
+                    if (st[0] == 409) {
+                        throw new DriveException("The folder's watch cursor expired.", 409, false, false);
+                    }
+                    if (st[0] != 200 || d == null) {
+                        throw new DriveException("The drive is busy. Blockwise tries again later.", st[0], false, true);
+                    }
+                    JSONArray e = d.optJSONArray("entries");
+                    changed |= e != null && e.length() > 0;
+                    c = d.optString("cursor", c);
+                    if (!d.optBoolean("has_more")) {
+                        break;
+                    }
+                }
+                return new JSONObject().put("changed", changed).put("cursor", c).put("retryAfter", 0);
+            } catch (JSONException e) {
+                throw new DriveException("Unexpected answer from the drive.");
+            }
+        }
+
+        /**
          * Has anything changed since `cursor`? Dropbox: waits up to `seconds` and
          * answers at the change (only the cursor is sent, no token). Google
          * Drive: one look at the app data folder's change list, at once.

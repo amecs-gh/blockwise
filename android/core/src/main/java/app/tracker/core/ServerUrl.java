@@ -29,7 +29,19 @@ public final class ServerUrl {
         return h.equals("localhost") || h.matches("127(\\.\\d+){3}") || h.equals("[::1]") || h.equals("::1") || h.equals("10.0.2.2");
     }
 
-    /** Tailscale MagicDNS names: the tunnel itself is encrypted. */
+    /** A Tailscale address: 100.64.0.0/10 or fd7a:115c:a1e0::/48 */
+    public static boolean isTailnetAddress(byte[] b) {
+        if (b == null) {
+            return false;
+        }
+        if (b.length == 4) {
+            return (b[0] & 0xff) == 100 && (b[1] & 0xc0) == 64;
+        }
+        return b.length == 16 && (b[0] & 0xff) == 0xfd && (b[1] & 0xff) == 0x7a && (b[2] & 0xff) == 0x11
+                && (b[3] & 0xff) == 0x5c && (b[4] & 0xff) == 0xa1 && (b[5] & 0xff) == 0xe0;
+    }
+
+    /** Tailscale MagicDNS names: the tunnel itself is encrypted (when the name leads to a Tailscale address). */
     static boolean isTailnetName(String host) {
         return host.toLowerCase(Locale.ROOT).endsWith(".ts.net");
     }

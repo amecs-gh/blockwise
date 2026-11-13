@@ -536,7 +536,7 @@ function syncSoon(ms) {
 /** Sends this Mac's changes and gets the others'; then again in a while (sooner while tracking). */
 async function syncNow() {
 	clearTimeout(syncTimer)
-	if (!engine || !remote) return
+	if (!engine || !remote || screenLocked) return
 	try {
 		const r = await engine.sync()
 		syncError = null
@@ -560,7 +560,7 @@ async function syncNow() {
 	}
 	refresh()
 	// With a drive watched, other devices' changes arrive by themselves: this is only a fallback
-	if (engine) syncTimer = setTimeout(syncNow, watcher ? 10 * 60000 : dash && dash.running ? 30000 : 120000)
+	if (engine) syncTimer = setTimeout(syncNow, watcher ? 10 * 60000 : dash && dash.running ? 60000 : 120000)
 }
 
 /**
@@ -1077,9 +1077,11 @@ function startApp() {
 	watchDrive()
 	refresh()
 	clearInterval(refreshTimer)
-	// The current block and the timer move on with the clock
-	refreshTimer = setInterval(refresh, 30000)
+	// The current block and the timer move on with the clock (not while the screen is locked)
+	refreshTimer = setInterval(() => { if (!screenLocked) refresh() }, 30000)
 }
+/** While the Mac's screen is locked or it sleeps: no refreshing and no syncing; all of it again at unlock */
+let screenLocked = false
 
 // --- hardening for every window -------------------------------------------------------------
 
@@ -1143,6 +1145,8 @@ app.whenReady().then(async () => {
 	}
 	setInterval(tick, 1000)
 	powerMonitor.on('resume', () => { refresh(); syncSoon(2000) })
+	powerMonitor.on('lock-screen', () => { screenLocked = true; clearTimeout(syncTimer) })
+	powerMonitor.on('unlock-screen', () => { screenLocked = false; refresh(); syncSoon(2000) })
 	if (engine) syncSoon(1000)
 })
 

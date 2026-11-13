@@ -67,6 +67,13 @@ public final class CoreTest {
         check(normalized("file:///etc/passwd").startsWith("ERR"), "file: refused");
         check(normalized("javascript:alert(1)").startsWith("ERR"), "javascript: refused");
         check(normalized("").startsWith("ERR Enter"), "empty refused");
+        // plain http to a Tailscale name: only when the name leads to a Tailscale address
+        check(ServerUrl.isTailnetAddress(new byte[] {100, 64, 0, 1}), "100.64.0.1 is Tailscale");
+        check(ServerUrl.isTailnetAddress(new byte[] {100, 127, (byte) 255, (byte) 254}), "100.127.255.254 is Tailscale");
+        check(!ServerUrl.isTailnetAddress(new byte[] {100, (byte) 128, 0, 1}), "100.128.0.1 is not");
+        check(!ServerUrl.isTailnetAddress(new byte[] {(byte) 192, (byte) 168, 1, 10}), "a home network address is not");
+        check(ServerUrl.isTailnetAddress(new byte[] {(byte) 0xfd, 0x7a, 0x11, 0x5c, (byte) 0xa1, (byte) 0xe0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}), "fd7a:115c:a1e0::1 is Tailscale");
+        check(!ServerUrl.isTailnetAddress(new byte[] {(byte) 0xfd, 0x7a, 0x11, 0x5c, (byte) 0xa1, (byte) 0xe1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}), "fd7a:115c:a1e1::1 is not");
 
         // --- login flow URLs pinned to the server you entered ---
         try {

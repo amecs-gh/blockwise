@@ -1100,6 +1100,8 @@
 			const dirty = db.dirty[key]
 			for (const [k, v] of Object.entries(rec.fields || {})) {
 				if (!FIELDS[type].includes(k)) continue
+				// A color from another device: only #rrggbb (it ends up in the page's styles)
+				if (k === 'color' && !(typeof v === 'string' && /^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(v))) continue
 				if (k === 'carriedBlocks' ? !(Array.isArray(v) && v.every((x) => typeof x === 'string'))
 					: k === 'skip' ? !(Array.isArray(v) && v.length <= 1000 && v.every((x) => Number.isInteger(x)))
 						: !okValue(v)) continue

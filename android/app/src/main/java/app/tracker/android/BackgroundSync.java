@@ -20,7 +20,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * With Dropbox / Google Drive, while the app is closed: about every 15 minutes
+ * With Dropbox / Google Drive, while the app is closed: about every 30 minutes
  * (Android decides, less often when the phone rests) a small check whether
  * another device wrote to the drive. Only then Blockwise syncs, in an invisible
  * page of its own (the same code as the app: web/engine.js and web/filesync.js),
@@ -32,7 +32,8 @@ import java.util.concurrent.Executors;
  */
 public final class BackgroundSync extends JobService implements Bridge.Host {
     private static final int JOB_ID = 7301;
-    private static final long PERIOD_MS = 15 * 60 * 1000L;
+    // Every 30 min, not when the battery is low; the look itself is one quick request
+    private static final long PERIOD_MS = 30 * 60 * 1000L;
     private static final long LIMIT_MS = 90 * 1000L;
     private static final String PREFS = "tracker-background";
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
@@ -59,12 +60,16 @@ public final class BackgroundSync extends JobService implements Bridge.Host {
         }
         for (JobInfo j : js.getAllPendingJobs()) {
             if (j.getId() == JOB_ID) {
-                return; // scheduled already
+                if (j.getIntervalMillis() == PERIOD_MS && j.isRequireBatteryNotLow()) {
+                    return; // scheduled already
+                }
+                js.cancel(JOB_ID); // scheduled by an older version: more often
             }
         }
         js.schedule(new JobInfo.Builder(JOB_ID, new ComponentName(c, BackgroundSync.class))
                 .setPeriodic(PERIOD_MS)
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                .setRequiresBatteryNotLow(true)
                 .setPersisted(true)
                 .build());
     }
@@ -118,8 +123,8 @@ public final class BackgroundSync extends JobService implements Bridge.Host {
         }
         JSONObject r;
         try {
-            // Dropbox: waits up to 30 s for a change; Google Drive: one look
-            r = f.changes(cursor, 30);
+            // One quick look (no waiting for changes: the phone sleeps again at once)
+            r = f.changesNow(cursor);
         } catch (Drives.DriveException e) {
             if (e.status == 409) {
                 prefs(this).edit().putString(key, f.changeCursor()).apply();
