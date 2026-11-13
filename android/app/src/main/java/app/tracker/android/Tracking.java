@@ -43,6 +43,8 @@ final class Tracking {
     static final int ID_TIMER = 1;
     static final String ACTION_STOP = "app.tracker.android.STOP";
     static final String ACTION_CHECK = "app.tracker.android.CHECK";
+    /** The timer's notification was swiped away while tracking: it comes back */
+    static final String ACTION_DISMISSED = "app.tracker.android.DISMISSED";
 
     /** One background thread for all background work, so changes stay in order. */
     static final ExecutorService IO = Executors.newSingleThreadExecutor();
@@ -498,8 +500,32 @@ final class Tracking {
         }
         if (d.running != null) {
             b.addAction(new Notification.Action.Builder(Icon.createWithResource(c, R.drawable.ic_stop), t.t("Stop"), broadcast(c, ACTION_STOP, 1)).build());
+            // Stays while you track: swiped away (Android 14+ allows it), it comes back
+            b.setDeleteIntent(broadcast(c, ACTION_DISMISSED, 3));
+            promote(b);
         }
         nm.notify(ID_TIMER, b.build());
+    }
+
+    /**
+     * Android 16: a "live update", the running timer as a chip in the status bar,
+     * on every screen. Asked for by name, so older Android versions (and builds
+     * without these methods) simply keep the ordinary notification.
+     */
+    private static void promote(Notification.Builder b) {
+        if (Build.VERSION.SDK_INT < 36) {
+            return;
+        }
+        try {
+            Notification.Builder.class.getMethod("setRequestPromotedOngoing", boolean.class).invoke(b, true);
+        } catch (ReflectiveOperationException e) {
+            try {
+                int flag = Notification.class.getField("FLAG_PROMOTED_ONGOING").getInt(null);
+                Notification.Builder.class.getMethod("setFlag", int.class, boolean.class).invoke(b, flag, true);
+            } catch (ReflectiveOperationException ignored) {
+                // no live updates on this phone: the ordinary notification
+            }
+        }
     }
 
     private static void notifyAlert(Context c, Alerts.Notice n) {
