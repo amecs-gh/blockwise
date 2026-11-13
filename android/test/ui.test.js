@@ -83,6 +83,7 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 				if (mode === 'local') throw new Error('no server on this phone only')
 				if (!(method === 'GET' ? GUARD.test(p) : method === 'POST' && p === 'sync')) throw new Error('refused by ApiGuard: ' + method + ' ' + p)
 				if (dev.offline) throw new Error('offline')
+				if (dev.slow) await new Promise((r) => setTimeout(r, dev.slow))
 				const r = await fetch(`${SERVER}/index.php/apps/tracker/api/${p}`, { method, headers: { Authorization: AUTH, 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }, body: body === null ? undefined : JSON.stringify(body) })
 				const d = await r.json().catch(() => null)
 				env = r.ok ? { data: d } : { error: (d && d.message) || `HTTP ${r.status}`, status: r.status }
@@ -178,14 +179,14 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		await s2.ctx.close()
 		const b = await phone(browser, 'app.html', { mode: 'dropbox', dev: devB, hash: '#now' })
 		await b.page.waitForSelector('.imp-page', { timeout: 15000 })
-		await b.page.waitForFunction((name) => [...document.querySelectorAll('.imp-nav__commitments a')].some((x) => x.textContent.includes(name)), name, { timeout: 15000 })
+		await b.page.waitForFunction((name) => [...document.querySelectorAll('.imp-ring__name')].some((x) => x.textContent.includes(name)), name, { timeout: 15000 })
 		// Both phones open: what one adds shows on the other within moments (no waiting for the 3-minute round)
 		const a2 = await phone(browser, 'app.html', { mode: 'dropbox', dev: devA, hash: '#now' })
 		await a2.page.waitForSelector('.imp-page', { timeout: 15000 })
 		await b.page.waitForTimeout(1500)
 		const t0 = Date.now()
 		await a2.page.evaluate(() => window.trackerApp.api('POST', 'commitments', { name: 'Live one', color: '#0fa37f' }))
-		await b.page.waitForFunction(() => [...document.querySelectorAll('.imp-nav__commitments a')].some((x) => x.textContent.includes('Live one')), null, { timeout: 15000 })
+		await b.page.waitForFunction(() => [...document.querySelectorAll('.imp-ring__name')].some((x) => x.textContent.includes('Live one')), null, { timeout: 15000 })
 		assert.ok(Date.now() - t0 < 10000, `arrived in ${Date.now() - t0} ms`)
 		assert.ok(devB.watchCalls > 0, 'the open app watches the drive')
 		await a2.ctx.close()
@@ -269,7 +270,8 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		await l.page.screenshot({ path: `${shots}/local-now.png` })
 		await l.ctx.close()
 		const n = await phone(browser, 'app.html', { mode: 'nextcloud', dev, resend: true, hash: '#tasks' })
-		await n.page.waitForSelector('.imp-tcols', { timeout: 15000 })
+		// The first sync with a server can take a while (the app waits up to 20 s for it)
+		await n.page.waitForSelector('.imp-ptasks .imp-tcol', { timeout: 30000 })
 		await n.page.waitForTimeout(1500)
 		const r = await fetch(`${SERVER}/index.php/apps/tracker/api/sync?since=0&limit=5000`, { headers: { Authorization: AUTH, 'OCS-APIRequest': 'true' } })
 		const recs = (await r.json()).records
@@ -286,26 +288,36 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		const a = await phone(browser, 'app.html', { dark, locale, hash: '#now' })
 		await a.page.waitForSelector('.imp-page', { timeout: 15000 })
 		const tag = `${dark ? 'dark' : 'light'}-${locale.slice(0, 2)}`
-		const firstC = await a.page.evaluate(() => document.querySelector('.imp-nav__commitments a')?.getAttribute('href')?.slice(1))
-		for (const pg of ['now', 'tasks', 'notes', 'done', 'time', 'settings', firstC]) {
+		await a.page.waitForSelector('.imp-ring__name', { timeout: 15000 })
+		const firstC = await a.page.evaluate(() => document.querySelector('.imp-ring__name')?.getAttribute('href')?.slice(1))
+		for (const pg of ['now', 'tasks', 'done', 'time', 'settings', firstC]) {
 			await a.page.evaluate((h) => { location.hash = h }, '#' + pg)
 			// wait until the page has loaded (some make several requests)
-			await a.page.waitForFunction((pg) => { const h = document.querySelector('.imp-page h1'); const want = { now: null, tasks: 'Tasks|Task', done: 'Done|Fatto', time: 'Time|Tempo', settings: 'Settings|Impostazioni' }[pg]; return pg === 'now' ? !!document.querySelector('.imp-timer') && !!document.querySelector('.imp-day h2') && !document.querySelector('.imp-day [data-loading]') : pg === 'tasks' ? !!document.querySelector('.imp-tcols') : pg === 'settings' ? !!document.querySelector('.imp-settings__section') : pg === 'notes' ? !!document.querySelector('#imp-note-new') : pg.startsWith('c/') ? !!document.querySelector('.imp-cpage') : !!h && new RegExp('^(' + want + ')$').test(h.textContent.trim()) }, pg, { timeout: 15000 })
+			await a.page.waitForFunction((pg) => {
+				const q = (s) => !!document.querySelector(s)
+				return pg === 'now' ? q('.imp-pnow .imp-timer') && q('.imp-ptoday h2') && !q('.imp-ptoday [aria-busy]')
+					: pg === 'tasks' ? q('.imp-ptasks .imp-tcol')
+						: pg === 'done' ? q('.imp-pdone .imp-pdays')
+							: pg === 'time' ? q('.imp-ptime .imp-pweeks')
+								: pg === 'settings' ? q('.imp-psettings .imp-settings__section')
+									: q('.imp-pcommit .imp-ptabs')
+			}, pg, { timeout: 15000 })
 			await a.page.waitForTimeout(400)
 			const info = await a.page.evaluate(() => {
 				const m = document.querySelector('.imp-main')
-				const tabs = document.querySelector('.imp-nav__main:not(.imp-nav__apps)').getBoundingClientRect()
-				return { overflow: document.documentElement.scrollWidth - innerWidth, tabsBottom: Math.round(tabs.bottom), h: innerHeight, apps: document.querySelectorAll('.imp-nav__apps a').length, chips: document.querySelectorAll('.imp-nav__commitments a').length, failed: !!document.querySelector('.imp-empty')?.textContent.includes('could not be loaded') }
+				const tabs = document.querySelector('.imp-tabbar').getBoundingClientRect()
+				return { overflow: document.documentElement.scrollWidth - innerWidth, tabsBottom: Math.round(tabs.bottom), h: innerHeight, tabs: document.querySelectorAll('.imp-tabbar a').length, top: document.querySelectorAll('.imp-pbar__me, .imp-pbar__back').length, failed: !!document.querySelector('.imp-empty')?.textContent.includes('could not be loaded') }
 			})
 			assert.ok(info.overflow <= 1, `no sideways scroll on ${pg} (${info.overflow})`)
 			assert.equal(info.tabsBottom, info.h, 'tab bar at the bottom')
-			assert.equal(info.apps, 2, 'Calendar and Account buttons')
-			assert.ok(info.chips >= 2, 'commitment chips')
+			assert.equal(info.tabs, 5, 'Now, Tasks, Calendar, Done, Time')
+			assert.equal(info.top, 1, 'Settings (or Back) at the top')
 			assert.ok(!info.failed, `page ${pg} loads`)
 			if (!dark || pg === 'now' || pg === 'tasks' || pg === 'notes') await a.page.screenshot({ path: `${shots}/${tag}-${pg.replace('/', '')}.png` })
 		}
 		if (tag === 'light-en') {
-			await a.page.evaluate(() => { location.hash = '#notes' })
+			// Notes: on the commitment's page
+			await a.page.click('.imp-ptabs button:has-text("Notes")')
 			await a.page.waitForSelector('button#imp-note-new')
 			await a.page.click('button#imp-note-new')
 			const pn = 'Phone note ' + Date.now()
@@ -321,19 +333,22 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 			const note = await a.page.evaluate(async (pn) => (await window.trackerApp.api('GET', 'notes')).find((n) => n.text.includes(pn)), pn)
 			assert.ok(note && note.done, 'note ticked on the phone')
 			await a.page.evaluate((id) => window.trackerApp.api('DELETE', 'notes/' + id), note.id)
-			await a.page.evaluate((h) => { location.hash = h }, '#' + firstC)
-			await a.page.waitForSelector('.imp-cpage')
 		}
+		// The commitment's overview: planning a block
+		await a.page.click('.imp-ptabs button >> nth=2')
+		await a.page.waitForSelector('.imp-pcommit .imp-cpage')
 		assert.ok(await a.page.$('.imp-newblock button'), 'Plan a block on the commitment page')
 		await a.page.click('.imp-newblock button')
 		await a.page.locator('.imp-newblock').scrollIntoViewIfNeeded()
 		await a.page.screenshot({ path: `${shots}/${tag}-newblock.png` })
 		await a.page.click('.imp-newblock__form button[type=submit]')
 		await a.page.waitForTimeout(400)
-		await a.page.click('.imp-newblock__actions button[type=button]')
-		// Account and Calendar reach the app
-		await a.page.click('.imp-nav__apps a[title="Account"], .imp-nav__apps a[title="Account"]')
-		await a.page.click('.imp-nav__apps a >> nth=0')
+		// The form stays open (the calendar isn't on this phone) unless a sync redrew the page meanwhile
+		if (await a.page.$('.imp-newblock__actions button[type=button]')) await a.page.click('.imp-newblock__actions button[type=button]')
+		// Account (in Settings) and Calendar (a tab) reach the app
+		await a.page.evaluate(() => { location.hash = '#settings' })
+		await a.page.click('.imp-paccount')
+		await a.page.click('.imp-tabbar a[href="#calendar"]')
 		await a.page.waitForTimeout(300)
 		assert.ok(a.calls.includes('account') && a.calls.includes('openCalendar'), 'account/calendar calls')
 		assert.deepEqual(a.errors, [], 'no console errors')
@@ -344,10 +359,32 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 	assert.ok(device.remoteCalls.every((c) => /^(GET sync|POST sync|GET state|GET blocks)/.test(c)), 'only sync endpoints')
 	assert.ok(device.snapshot && Array.isArray(device.snapshot.commitments) && device.snapshot.node, 'snapshot for the notifications')
 
+	// A slow Nextcloud: tabs switch at once, the parts that wait for it show placeholders and fill in
+	{
+		device.slow = 2500
+		const sl = await phone(browser, 'app.html', { hash: '#now' })
+		await sl.page.waitForSelector('.imp-pnow .imp-timer', { timeout: 30000 })
+		const t0 = Date.now()
+		await sl.page.evaluate(() => { location.hash = '#done' })
+		await sl.page.waitForSelector('.imp-tabbar a.active[href="#done"]', { timeout: 5000 })
+		const switched = Date.now() - t0
+		assert.ok(switched < 800, `the tab switched in ${switched} ms`)
+		await sl.page.waitForSelector('.imp-updating:not([hidden])', { timeout: 5000 })
+		await sl.page.waitForSelector('.imp-updating[hidden]', { state: 'attached', timeout: 15000 })
+		// A day not seen yet: its blocks wait for Nextcloud (placeholders), then show
+		await sl.page.evaluate(() => { location.hash = '#now' })
+		await sl.page.waitForSelector('.imp-pnow .imp-ptoday', { timeout: 5000 })
+		await sl.page.waitForFunction(() => !document.querySelector('.imp-ptoday [aria-busy]'), null, { timeout: 15000 })
+		assert.deepEqual(sl.errors, [], 'no console errors')
+		await sl.ctx.close()
+		device.slow = 0
+		console.log(`  ✔ slow Nextcloud: the tab switched in ${switched} ms, placeholders until the answer`)
+	}
+
 	console.log('offline')
 	device.offline = true
 	const o = await phone(browser, 'app.html', { hash: '#tasks' })
-	await o.page.waitForSelector('.imp-tcols', { timeout: 15000 })
+	await o.page.waitForSelector('.imp-ptasks .imp-tcol', { timeout: 15000 })
 	const before = JSON.parse(device.db)
 	const pendingBefore = Object.keys(before.dirty).length
 	// a task added offline, in the composer at the bottom
@@ -366,7 +403,7 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 
 	device.offline = false
 	const back = await phone(browser, 'app.html', { hash: '#tasks' })
-	await back.page.waitForSelector('.imp-tcols', { timeout: 15000 })
+	await back.page.waitForSelector('.imp-ptasks .imp-tcol', { timeout: 15000 })
 	await back.page.waitForFunction(() => true)
 	await back.page.waitForTimeout(1500)
 	const r = await fetch(`${SERVER}/index.php/apps/tracker/api/sync?since=0&limit=1000`, { headers: { Authorization: AUTH, 'OCS-APIRequest': 'true' } })

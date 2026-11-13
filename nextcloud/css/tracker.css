@@ -4132,3 +4132,98 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 #tracker-app .imp-rings .imp-rings__next {
 	right: 10px;
 }
+
+/* --- a page being built, or waiting for Nextcloud: shapes that shimmer --------------- */
+
+.imp-sk {
+	display: block;
+	border-radius: 6px;
+	background: linear-gradient(90deg, var(--imp-bg-soft, #ebe8f5) 0%, color-mix(in srgb, var(--imp-bg-soft, #ebe8f5) 40%, #ffffff) 45%, var(--imp-bg-soft, #ebe8f5) 90%);
+	background-size: 220% 100%;
+	animation: imp-sk 1.3s ease-in-out infinite;
+}
+html.m3-dark .imp-sk,
+body.theme--dark .imp-sk {
+	background-image: linear-gradient(90deg, var(--imp-bg-soft) 0%, color-mix(in srgb, var(--imp-bg-soft) 70%, #ffffff) 45%, var(--imp-bg-soft) 90%);
+}
+.imp-sk--tile {
+	flex: 0 0 auto;
+	width: 40px;
+	height: 40px;
+	border-radius: 14px;
+}
+@keyframes imp-sk {
+	0% { background-position: 120% 0; }
+	100% { background-position: -120% 0; }
+}
+@keyframes imp-spin {
+	to { transform: rotate(360deg); }
+}
+.imp-skpage {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	padding-top: 24px;
+}
+.imp-skhead {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin: 0 4px 6px;
+}
+.imp-skcard {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding: 16px;
+	border-radius: 22px;
+	background: var(--imp-bg, #ffffff);
+}
+.imp-skrow {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+.imp-skrow__text {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	gap: 8px;
+}
+.imp-updating {
+	position: fixed;
+	top: calc(var(--inset-top, 0px) + 10px);
+	left: 50%;
+	z-index: 50;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 32px;
+	padding: 0 14px;
+	border-radius: 16px;
+	background: var(--md-surfaceContainerLow, #ffffff);
+	box-shadow: 0 4px 14px rgba(60, 50, 140, 0.16);
+	color: var(--md-onSurfaceVariant, #4c4966);
+	font-size: 12px;
+	font-weight: 700;
+	transform: translateX(-50%);
+}
+.imp-updating[hidden] {
+	display: none;
+}
+.imp-updating__spin {
+	width: 14px;
+	height: 14px;
+	border: 2.5px solid color-mix(in srgb, var(--md-primary, #6c5ce7) 25%, transparent);
+	border-top-color: var(--md-primary, #6c5ce7);
+	border-radius: 50%;
+	animation: imp-spin 0.9s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+	.imp-sk {
+		animation: none;
+	}
+	.imp-updating__spin {
+		animation-duration: 2.4s;
+	}
+}

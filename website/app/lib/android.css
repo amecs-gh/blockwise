@@ -168,29 +168,17 @@ body.android :focus-visible {
 	outline-offset: 2px;
 }
 
-/* --- layout: top app bar, page, navigation bar --------------------------------------- */
+/* --- layout: the page, the running timer, the tabs ----------------------------------- */
 
 body.android .imp-layout {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
-	grid-template-rows: auto minmax(0, 1fr) auto;
-	grid-template-areas:
-		"chips apps"
-		"main main"
-		"tabs tabs";
+	display: flex;
+	flex-direction: column;
 	height: 100%;
 	border-radius: 0;
 	background: var(--md-surface);
 }
-body.android .imp-nav {
-	display: contents;
-}
-body.android .imp-nav__heading,
-body.android .imp-nav__logo {
-	display: none;
-}
 body.android .imp-main {
-	grid-area: main;
+	flex: 1 1 auto;
 	min-height: 0;
 	overflow-y: auto;
 	overscroll-behavior: contain;
@@ -199,149 +187,169 @@ body.android .imp-main {
 body.android .imp-page {
 	max-width: 840px;
 	margin: 0 auto;
-	padding: 4px calc(16px + var(--inset-right)) 104px calc(16px + var(--inset-left));
+	padding: 0 calc(16px + var(--inset-right)) 32px calc(16px + var(--inset-left));
 }
 
-/* Top app bar: commitments as filter chips, Calendar and Account as action icons */
-body.android .imp-nav__commitments {
-	grid-area: chips;
+/* A page's top bar: stays at the top while the page scrolls */
+body.android .imp-pbar {
+	position: sticky;
+	top: 0;
+	z-index: 5;
 	display: flex;
 	align-items: center;
 	gap: 8px;
+	margin: 0 calc(-16px - var(--inset-right)) 4px calc(-16px - var(--inset-left));
+	padding: calc(var(--inset-top) + 14px) calc(8px + var(--inset-right)) 10px calc(20px + var(--inset-left));
+	background: var(--md-surface);
+}
+body.android .imp-pbar--back {
+	padding-left: calc(4px + var(--inset-left));
+}
+body.android .imp-pbar__text {
+	flex: 1 1 auto;
 	min-width: 0;
-	height: calc(var(--appbar) + var(--inset-top));
-	margin: 0;
-	padding: var(--inset-top) 4px 0 calc(16px + var(--inset-left));
-	overflow-x: auto;
-	list-style: none;
-	background: var(--md-surface);
 }
-body.android .imp-nav__commitments li {
+body.android .imp-page .imp-pbar h1 {
+	margin: 0;
+	font-size: 26px;
+	font-weight: 800;
+	line-height: 1.2;
+	letter-spacing: -0.02em;
+}
+body.android .imp-page .imp-pbar--back h1 {
+	font-size: 20px;
+}
+body.android .imp-pbar p {
+	margin: 0;
+	color: var(--md-onSurfaceVariant);
+	font-size: 13px;
+	font-weight: 600;
+}
+body.android .imp-pbar__actions {
+	display: flex;
 	flex: 0 0 auto;
-}
-body.android .imp-nav__commitments a {
-	display: flex;
 	align-items: center;
-	gap: 8px;
-	height: 34px;
-	padding: 0 16px 0 12px;
-	border: none;
-	border-radius: 999px;
-	color: var(--md-onSurface);
-	font-size: 14px;
-	font-weight: 700;
-	letter-spacing: 0.1px;
-	white-space: nowrap;
-	background: var(--md-surfaceContainerLow);
-	box-shadow: 0 4px 14px rgba(60, 50, 140, 0.07);
+	gap: 2px;
 }
-body.android .imp-nav__commitments a .imp-dot {
-	width: 10px;
-	height: 10px;
-}
-body.android .imp-nav__commitments a.active {
-	background: var(--c);
-	color: #ffffff;
-}
-body.android .imp-nav__commitments .imp-nav__add {
-	padding: 0 12px;
-	border: 2px dashed var(--md-outlineVariant);
-	background: transparent;
-	box-shadow: none;
-}
-body.android .imp-nav__apps {
-	grid-area: apps;
-	display: flex;
-	align-items: center;
-	gap: 0;
-	height: calc(var(--appbar) + var(--inset-top));
-	margin: 0;
-	padding: var(--inset-top) calc(4px + var(--inset-right)) 0 0;
-	list-style: none;
-	background: var(--md-surface);
-}
-body.android .imp-nav__apps a {
+body.android :is(.imp-pbar__me, .imp-pbar__back) {
 	display: grid;
 	place-items: center;
 	width: 48px;
 	height: 48px;
 	border-radius: 50%;
-	color: var(--md-onSurfaceVariant);
-	background: transparent;
+	color: var(--md-onSurface);
 }
-body.android .imp-nav__apps svg {
-	width: 24px;
-	height: 24px;
-	color: currentColor;
-}
-body.android .imp-nav__apps span {
-	position: absolute;
-	width: 1px;
-	height: 1px;
-	overflow: hidden;
-	clip: rect(0 0 0 0);
-	white-space: nowrap;
+body.android .imp-pbar__me {
+	width: 44px;
+	height: 44px;
+	margin-left: 4px;
+	background: var(--md-primaryContainer);
+	color: var(--md-onPrimaryContainer);
 }
 
-/* Navigation bar */
-body.android .imp-nav__main:not(.imp-nav__apps) {
-	grid-area: tabs;
-	display: grid;
-	grid-auto-flow: column;
-	grid-auto-columns: minmax(0, 1fr);
+/* The running timer on the other tabs, above the tabs */
+body.android .imp-mini {
+	flex: 0 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 56px;
+	margin: 6px calc(12px + var(--inset-right)) 8px calc(12px + var(--inset-left));
+	padding: 0 6px 0 16px;
+	border-radius: 18px;
+	background: var(--c);
+	color: var(--on-c);
+	box-shadow: 0 8px 20px color-mix(in srgb, var(--c) 30%, transparent);
+}
+body.android .imp-mini__text {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-width: 0;
+	color: inherit;
+}
+body.android .imp-mini__name {
+	overflow: hidden;
+	font-size: 12px;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	opacity: 0.92;
+}
+body.android .imp-mini__clock {
+	font-size: 18px;
+	font-weight: 800;
+	font-variant-numeric: tabular-nums;
+}
+body.android .imp-mini__stop {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
 	gap: 8px;
+	height: 44px;
+	padding: 0 16px;
+	border: none;
+	border-radius: 22px;
+	background: #ffffff;
+	color: #24223a;
+	font-size: 14px;
+	font-weight: 700;
+}
+
+/* The tabs */
+body.android .imp-tabbar {
+	flex: 0 0 auto;
 	height: calc(var(--navbar) + var(--inset-bottom));
-	margin: 0;
-	padding: 12px calc(8px + var(--inset-right)) var(--inset-bottom) calc(8px + var(--inset-left));
-	list-style: none;
+	padding: 12px calc(4px + var(--inset-right)) var(--inset-bottom) calc(4px + var(--inset-left));
 	border-radius: 24px 24px 0 0;
 	background: var(--md-surfaceContainerLow);
 	box-shadow: 0 -6px 24px rgba(60, 50, 140, 0.08);
-	overflow: visible;
 }
-body.android .imp-nav__main:not(.imp-nav__apps) a,
-body.android .imp-nav__main:not(.imp-nav__apps) a:hover,
-body.android .imp-nav__main:not(.imp-nav__apps) a.active {
+body.android .imp-tabbar ul {
+	display: grid;
+	grid-auto-columns: minmax(0, 1fr);
+	grid-auto-flow: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+body.android .imp-tabbar a {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
 	gap: 4px;
-	min-height: 0;
-	height: auto;
-	padding: 0;
-	border-radius: 0;
-	background: transparent;
-	box-shadow: none;
 	color: var(--md-onSurfaceVariant);
 	font-size: 12px;
 	font-weight: 500;
-	letter-spacing: 0.5px;
+	letter-spacing: 0.3px;
 }
-body.android .imp-nav__main:not(.imp-nav__apps) a svg {
-	box-sizing: content-box;
-	width: 24px;
-	height: 24px;
-	padding: 4px 20px;
+body.android .imp-tabbar a:active:not(:disabled) {
+	box-shadow: none;
+}
+body.android .imp-tab__ind {
+	display: grid;
+	place-items: center;
+	width: 60px;
+	height: 32px;
 	border-radius: 16px;
-	color: var(--md-onSurfaceVariant);
 	transition: background-color 0.2s var(--md-ease);
 }
-body.android .imp-nav__main:not(.imp-nav__apps) a:active svg {
+body.android .imp-tabbar a:active .imp-tab__ind {
 	background: color-mix(in srgb, var(--md-onSurface) 10%, transparent);
 }
-body.android .imp-nav__main:not(.imp-nav__apps) a span {
+body.android .imp-tabbar a.active {
+	color: var(--md-onSurface);
+	font-weight: 700;
+}
+body.android .imp-tabbar a.active .imp-tab__ind {
+	background: var(--md-secondaryContainer);
+	color: var(--md-onSecondaryContainer);
+}
+body.android .imp-tab__label {
 	max-width: 100%;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-}
-body.android .imp-nav__main:not(.imp-nav__apps) a.active {
-	color: var(--md-onSurface);
-	font-weight: 700;
-}
-body.android .imp-nav__main:not(.imp-nav__apps) a.active svg {
-	background: var(--md-primary);
-	color: var(--md-onPrimary);
 }
 
 /* --- type ---------------------------------------------------------------------------- */
@@ -763,3 +771,522 @@ body.android .imp-newblock h2 { margin: 0 0 12px; }
 body.android :is(input[type="date"], input[type="time"]) { color-scheme: light; }
 html.m3-dark body.android :is(input[type="date"], input[type="time"]) { color-scheme: dark; }
 
+
+/* --- the phone's pages ------------------------------------------------------------- */
+
+body.android .imp-psec__head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+body.android .imp-psec__head .imp-muted {
+	font-size: 12px;
+	font-weight: 600;
+}
+body.android .imp-page :is(.imp-pweek, .imp-ptoday, .imp-pcard) h2 {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 800;
+}
+body.android :is(.imp-pweek, .imp-pcard) {
+	margin: 0 0 12px;
+	border-radius: 24px;
+	background: var(--md-surfaceContainerLow);
+	box-shadow: 0 6px 18px rgba(60, 50, 140, 0.05);
+}
+body.android .imp-pcard {
+	padding: 16px 18px;
+}
+body.android .imp-pnow .imp-timer {
+	margin-bottom: 12px;
+}
+
+/* Now: this week's rings, today's blocks */
+body.android .imp-pweek {
+	padding: 14px 0 10px;
+}
+body.android .imp-pweek .imp-psec__head {
+	padding: 0 18px;
+}
+body.android .imp-pweek .imp-rings {
+	margin: 8px 0 0;
+	padding: 0;
+	border: none;
+}
+body.android #tracker-app .imp-pweek .imp-rings .imp-icon-btn {
+	display: none;
+}
+body.android .imp-ptoday {
+	margin: 0 0 12px;
+}
+body.android .imp-page .imp-ptoday h2 {
+	margin: 4px 4px 8px;
+}
+body.android .imp-plist {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+body.android .imp-prow {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 64px;
+	padding: 10px 10px 10px 12px;
+	border-radius: 20px;
+	background: var(--md-surfaceContainerLow);
+}
+body.android .imp-prow.is-now {
+	box-shadow: inset 0 0 0 2px var(--c);
+}
+body.android .imp-prow.is-past :is(.imp-tile, .imp-prow__text) {
+	opacity: 0.6;
+}
+body.android .imp-prow .imp-tile {
+	flex: 0 0 auto;
+	width: 40px;
+	height: 40px;
+	border-radius: 14px;
+	font-size: 15px;
+}
+body.android .imp-prow__text {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-width: 0;
+	color: var(--md-onSurface);
+}
+body.android .imp-prow__text strong {
+	overflow: hidden;
+	font-size: 15px;
+	font-weight: 700;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+body.android .imp-prow__text .imp-muted {
+	font-size: 12px;
+	font-weight: 600;
+}
+body.android .imp-prow__now {
+	flex: 0 0 auto;
+	padding: 4px 10px;
+	border-radius: 99px;
+	background: color-mix(in srgb, var(--c) 16%, var(--md-surfaceContainerLow));
+	color: var(--md-onSurface);
+	font-size: 12px;
+	font-weight: 700;
+}
+body.android .imp-prow__play {
+	display: grid;
+	flex: 0 0 auto;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	border: none;
+	border-radius: 50%;
+	background: color-mix(in srgb, var(--c) 14%, var(--md-surfaceContainerLow));
+	color: var(--c);
+}
+html.m3-dark body.android .imp-prow__play {
+	background: color-mix(in srgb, var(--c) 30%, var(--md-surfaceContainerLow));
+	color: var(--md-onSurface);
+}
+body.android .imp-pempty {
+	margin: 0 4px;
+}
+
+/* Placeholders while waiting (Nextcloud) */
+body.android .imp-prow--sk {
+	pointer-events: none;
+}
+body.android .imp-prow--sk .imp-skrow__text {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	gap: 8px;
+}
+
+/* Tasks: commitments as chips, one commitment's queue */
+body.android .imp-pchips {
+	display: flex;
+	gap: 8px;
+	margin: 0 calc(-16px - var(--inset-right)) 12px calc(-16px - var(--inset-left));
+	padding: 2px calc(16px + var(--inset-right)) 2px calc(16px + var(--inset-left));
+	overflow-x: auto;
+}
+body.android .imp-pchip {
+	display: inline-flex;
+	flex: 0 0 auto;
+	align-items: center;
+	gap: 8px;
+	height: 40px;
+	padding: 0 16px 0 12px;
+	border: 1px solid var(--md-outlineVariant);
+	border-radius: 20px;
+	background: var(--md-surfaceContainerLow);
+	color: var(--md-onSurface);
+	font-size: 14px;
+	font-weight: 700;
+	white-space: nowrap;
+}
+body.android .imp-pchip[aria-selected="true"] {
+	border-color: transparent;
+	background: var(--md-onSurface);
+	color: var(--md-surface);
+}
+body.android :is(.imp-ptasks, .imp-pcommit) .imp-tcol {
+	width: auto;
+	min-width: 0;
+	max-height: none;
+	margin: 0;
+	padding: 0;
+	border: none;
+	background: transparent;
+	box-shadow: none;
+}
+body.android :is(.imp-ptasks, .imp-pcommit) .imp-tcol__body {
+	overflow: visible;
+	padding: 0;
+}
+body.android .imp-pcommit .imp-tcol__head {
+	display: none;
+}
+body.android .imp-ptasks .imp-tcol__head {
+	margin: 0 0 8px;
+	padding: 0 2px;
+}
+body.android .imp-ptasks .imp-tcol__head .imp-tile {
+	display: none;
+}
+/* No arrows, drag handles or ×: reorder and delete are in the ⋯ menu (and clearing a subtask's title removes it) */
+body.android .imp-tq__actions .imp-icon-btn:not(.imp-tq__more),
+body.android :is(.imp-tq__handle, .imp-qitem__handle, .imp-sub__handle, .imp-tq__del) {
+	display: none;
+}
+body.android .imp-tq__sub {
+	min-height: 44px;
+}
+
+/* Done: the week as pairs of bars, then the day */
+body.android .imp-pdays {
+	display: grid;
+	grid-template-columns: repeat(7, minmax(0, 1fr));
+	gap: 4px;
+	margin: 10px -6px 8px;
+}
+body.android .imp-pday {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	min-height: 44px;
+	padding: 6px 0 4px;
+	border: none;
+	border-radius: 14px;
+	background: transparent;
+	color: var(--md-onSurface);
+}
+body.android .imp-pday[aria-selected="true"] {
+	background: var(--md-secondaryContainer);
+	box-shadow: inset 0 0 0 2px var(--md-primary);
+}
+body.android .imp-pday__bars {
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	gap: 3px;
+	height: 66px;
+}
+body.android :is(.imp-pday__planned, .imp-pday__tracked, .imp-plegend__planned, .imp-plegend__tracked) {
+	display: block;
+	width: 9px;
+	border-radius: 4px;
+}
+body.android :is(.imp-pday__planned, .imp-plegend__planned) {
+	background: color-mix(in srgb, var(--md-primary) 26%, transparent);
+}
+body.android :is(.imp-pday__tracked, .imp-plegend__tracked) {
+	background: var(--md-primary);
+}
+body.android .imp-pday__letter {
+	font-size: 12px;
+	font-weight: 700;
+}
+body.android .imp-pday__num {
+	color: var(--md-onSurfaceVariant);
+	font-size: 11px;
+	font-weight: 600;
+}
+body.android .imp-pday.is-today .imp-pday__letter {
+	color: var(--md-primary);
+}
+body.android .imp-plegend {
+	display: flex;
+	gap: 16px;
+	color: var(--md-onSurfaceVariant);
+	font-size: 12px;
+	font-weight: 600;
+}
+body.android .imp-plegend > span {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+body.android :is(.imp-plegend__planned, .imp-plegend__tracked) {
+	width: 10px;
+	height: 10px;
+	border-radius: 3px;
+}
+
+/* Bars against a plan or a goal (Done's day, Time's goals) */
+body.android .imp-pbars {
+	display: flex;
+	flex-direction: column;
+	gap: 14px;
+	margin: 12px 0;
+	padding: 0;
+	list-style: none;
+}
+body.android .imp-pbars li {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+body.android .imp-pbars__label {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+	font-size: 14px;
+	font-weight: 700;
+}
+body.android .imp-pbars__label > :first-child {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	color: var(--md-onSurface);
+}
+body.android .imp-pbars__label .imp-muted {
+	flex: 0 0 auto;
+	font-size: 13px;
+	font-weight: 600;
+}
+body.android .imp-pbars__label strong {
+	color: var(--md-onSurface);
+	font-weight: 800;
+}
+body.android .imp-pbars__track {
+	height: 10px;
+	overflow: hidden;
+	border-radius: 99px;
+	background: color-mix(in srgb, var(--c) 20%, transparent);
+}
+body.android .imp-pbars__track span {
+	display: block;
+	height: 100%;
+	border-radius: 99px;
+	background: var(--c);
+}
+body.android .imp-pbars__note {
+	color: var(--md-onSurfaceVariant);
+	font-size: 12px;
+	font-weight: 600;
+}
+body.android .imp-pbars__note.is-short {
+	color: var(--md-warning);
+}
+body.android .imp-pnogoal {
+	margin: 0;
+	padding-top: 10px;
+	border-top: 1px solid var(--md-outlineVariant);
+	font-size: 13px;
+}
+
+/* Done: what was checked off */
+body.android .imp-pticked ul {
+	margin: 6px 0 0;
+	padding: 0;
+	list-style: none;
+}
+body.android .imp-pticked li {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 40px;
+	font-size: 14px;
+}
+body.android .imp-pticked__check {
+	display: grid;
+	flex: 0 0 auto;
+	place-items: center;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	background: var(--c);
+	color: #ffffff;
+}
+body.android .imp-pticked__check svg {
+	stroke-width: 3.2;
+}
+body.android .imp-pticked__title {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+body.android .imp-pticked .imp-muted {
+	font-size: 12px;
+	font-weight: 600;
+}
+
+/* Time: four weeks */
+body.android .imp-pweeks {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	align-items: end;
+	gap: 12px;
+	margin: 12px 0 0;
+	padding: 0;
+	list-style: none;
+}
+body.android .imp-pweeks li {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 4px;
+	font-size: 11px;
+	font-weight: 600;
+}
+body.android .imp-pweeks__val {
+	font-size: 12px;
+	font-weight: 700;
+}
+body.android .imp-pweeks__bar {
+	width: 100%;
+	max-width: 44px;
+	border-radius: 10px;
+	background: color-mix(in srgb, var(--md-primary) 32%, transparent);
+}
+body.android .imp-pweeks li.is-current .imp-pweeks__bar {
+	background: var(--md-primary);
+}
+body.android .imp-pmore {
+	margin: 4px 0 12px;
+}
+body.android .imp-pmore > summary {
+	display: flex;
+	align-items: center;
+	min-height: 48px;
+	padding: 0 18px;
+	border-radius: 18px;
+	background: var(--md-surfaceContainerLow);
+	font-weight: 700;
+	list-style: none;
+}
+body.android .imp-pmore > summary::-webkit-details-marker {
+	display: none;
+}
+body.android .imp-pmore .imp-page {
+	padding: 0;
+}
+body.android :is(.imp-pmore, .imp-psettings, .imp-pcommit) .imp-phead,
+body.android .imp-pcommit .imp-cpage__head {
+	display: none;
+}
+
+/* A commitment's page */
+body.android .imp-page .imp-pbar h1.imp-pcommit__name {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+body.android .imp-pcommit__name > span:last-child {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+body.android .imp-pcommit__name .imp-tile {
+	flex: 0 0 auto;
+	width: 36px;
+	height: 36px;
+	border-radius: 12px;
+	font-size: 15px;
+}
+body.android .imp-pcommit__play {
+	display: grid;
+	place-items: center;
+	width: 48px;
+	height: 48px;
+	border: none;
+	border-radius: 50%;
+	background: var(--c);
+	color: var(--on-c);
+}
+body.android .imp-ptabs {
+	display: flex;
+	align-items: stretch;
+	margin: 0 calc(-16px - var(--inset-right)) 12px calc(-16px - var(--inset-left));
+	padding: 0 calc(8px + var(--inset-right)) 0 calc(8px + var(--inset-left));
+	border-bottom: 1px solid var(--md-outlineVariant);
+}
+body.android .imp-ptabs button,
+body.android .imp-ptabs__edit {
+	display: grid;
+	flex: 1 1 0;
+	place-items: center;
+	height: 48px;
+	border: none;
+	background: transparent;
+	color: var(--md-onSurfaceVariant);
+	font-size: 14px;
+	font-weight: 600;
+}
+body.android .imp-ptabs button[aria-selected="true"] {
+	color: var(--md-onSurface);
+	font-weight: 800;
+	box-shadow: inset 0 -3px 0 var(--c);
+}
+body.android .imp-ptabs__edit {
+	flex: 0 0 auto;
+	padding: 0 16px;
+	color: var(--md-primary);
+}
+
+/* Settings: the account first */
+body.android .imp-paccount {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	width: 100%;
+	min-height: 64px;
+	margin: 0 0 12px;
+	padding: 10px 14px 10px 18px;
+	border: none;
+	border-radius: 20px;
+	background: var(--md-surfaceContainerLow);
+	color: var(--md-onSurface);
+	text-align: left;
+}
+body.android .imp-paccount > span {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+}
+body.android .imp-paccount .imp-muted {
+	font-size: 12px;
+	font-weight: 600;
+}
+
+/* A page inside a phone page (Settings, a commitment's overview, Time's extras): no second margin */
+body.android .imp-page .imp-page {
+	max-width: none;
+	margin: 0;
+	padding: 0;
+}

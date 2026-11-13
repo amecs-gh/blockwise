@@ -70,7 +70,11 @@ async function openWindow(browser, file, winName, opts = {}) {
 	await sleep(300)
 	await setup.page.screenshot({ path: `${shots}/mac-setup.png` })
 	const choices = await setup.page.locator('.u-choice strong').allInnerTexts()
-	assert.deepEqual(choices, ['Nextcloud', 'This Mac only', 'Google Drive', 'Dropbox'], 'all four choices, always')
+	// Google Drive and Dropbox only when this build has their app keys (config/providers.json)
+	let keys = {}
+	try { keys = JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'config', 'providers.json'), 'utf8')) } catch (e) { /* none */ }
+	const drives = [keys.googleClientId ? 'Google Drive' : null, keys.dropboxAppKey ? 'Dropbox' : null].filter(Boolean)
+	assert.deepEqual(choices, ['Nextcloud', 'This Mac only', ...drives], 'Nextcloud and this Mac always; drives with their keys')
 	await setup.page.click('.u-choice >> nth=0')
 	assert.ok(await setup.page.isVisible('#server'))
 

@@ -19,7 +19,7 @@
 	// In the background sync (sync.html): no watching, no prompts, no timers
 	const background = window.__trackerBackground === true
 	const pending = new Map()
-	const listeners = { state: [], changed: [] }
+	const listeners = { state: [], changed: [], loading: [] }
 	let next = 1
 
 	function call(channel, ...args) {
@@ -104,34 +104,69 @@
 	const serverForm = (u) => { const p = calPath(u); return p === null ? null : DAV + p.split('/').map(rawurlencode).join('/') + '/' }
 
 	let phoneCals = []
+	// The server's calendars and blocks, kept from the last answer: a page never waits for
+	// Nextcloud (it can be slow). What is missing or old is asked for in the background; the
+	// page shows placeholders meanwhile (loading()) and is drawn again when the answer comes.
 	let serverCals = null
+	let serverCalsAt = 0
+	let serverCalsAsk = null
+	const serverBlocks = new Map() // "from-to" -> {at, list}
+	const blockAsks = new Map()
+	const FRESH = 120000
+	let asking = 0
+	const asked = (d) => { asking += d; fire('loading', asking > 0) }
+	function askServerCalendars() {
+		if (serverCalsAsk) return serverCalsAsk
+		asked(1)
+		serverCalsAsk = remote('GET', 'state').then((st) => {
+			const next = (st.calendars || []).map((c) => ({ id: c.id, url: c.url, name: c.name, color: c.color }))
+			const changed = serverCals !== null && JSON.stringify(next) !== JSON.stringify(serverCals)
+			serverCals = next
+			serverCalsAt = Date.now()
+			if (changed) fire('changed')
+		}).catch(() => { /* offline */ }).finally(() => { serverCalsAsk = null; asked(-1) })
+		return serverCalsAsk
+	}
+	function askServerBlocks(from, to) {
+		const key = `${Math.floor(from)}-${Math.ceil(to)}`
+		if (blockAsks.has(key)) return blockAsks.get(key)
+		asked(1)
+		const p = remote('GET', `blocks?from=${Math.floor(from)}&to=${Math.ceil(to)}`).then(({ blocks }) => {
+			const before = serverBlocks.get(key)
+			serverBlocks.set(key, { at: Date.now(), list: blocks || [] })
+			if (serverBlocks.size > 40) serverBlocks.delete(serverBlocks.keys().next().value)
+			if (!before || JSON.stringify(before.list) !== JSON.stringify(blocks || [])) fire('changed')
+		}).catch(() => { /* offline */ }).finally(() => { blockAsks.delete(key); asked(-1) })
+		blockAsks.set(key, p)
+		return p
+	}
 	const calendar = {
-		/** The phone's Nextcloud calendars (offline too), plus the server's others when online */
+		/** The phone's Nextcloud calendars (offline too), plus the server's others as last known */
 		async calendars() {
 			phoneCals = (await call('calendars').catch(() => [])) || []
-			try {
-				serverCals = ((await remote('GET', 'state')).calendars || []).map((c) => ({ id: c.id, url: c.url, name: c.name, color: c.color }))
-			} catch (e) { /* offline */ }
+			// Nothing known yet and nothing on the phone either (first start): wait for the server, briefly
+			if (serverCals === null && !phoneCals.length) await Promise.race([askServerCalendars(), new Promise((r) => setTimeout(r, 4000))])
+			else if (serverCals === null) askServerCalendars()
+			else if (Date.now() - serverCalsAt > FRESH) askServerCalendars()
 			const out = phoneCals.map((c) => ({ url: serverForm(c.url), name: c.name, color: c.color })).filter((c) => c.url)
 			for (const c of serverCals || []) if (!out.some((p) => samePath(p.url, c.url))) out.push({ url: c.url, name: c.name, color: c.color })
 			return out
 		},
-		/** Blocks from the phone's calendars; for calendars the phone doesn't have, the server's (online only) */
+		/** Blocks from the phone's calendars; for calendars the phone doesn't have, the server's as last known */
 		async events(from, to, urls) {
 			const onPhone = urls.filter((u) => phoneCals.some((p) => samePath(p.url, u)))
 			const rest = urls.filter((u) => !onPhone.includes(u))
 			let incomplete = false
 			const out = onPhone.length ? ((await call('events', from, to, onPhone).catch(() => { incomplete = true; return [] })) || []) : []
-			if (rest.length && !serverCals) incomplete = true
-			if (rest.length && serverCals) {
-				try {
-					const { blocks } = await remote('GET', `blocks?from=${Math.floor(from)}&to=${Math.ceil(to)}`)
-					for (const b of blocks || []) {
-						const cal = serverCals.find((c) => c.id === b.calendarId)
-						const url = cal && rest.find((u) => samePath(u, cal.url))
-						if (url) out.push({ uid: b.uid, title: b.title, start: b.start, end: b.end, url })
-					}
-				} catch (e) { incomplete = true /* offline: the phone's calendars only */ }
+			if (rest.length) {
+				const known = serverBlocks.get(`${Math.floor(from)}-${Math.ceil(to)}`)
+				if (!known || Date.now() - known.at > FRESH) askServerBlocks(from, to)
+				if (!known || !serverCals) incomplete = true
+				for (const b of (known && known.list) || []) {
+					const cal = (serverCals || []).find((c) => c.id === b.calendarId)
+					const url = cal && rest.find((u) => samePath(u, cal.url))
+					if (url) out.push({ uid: b.uid, title: b.title, start: b.start, end: b.end, url })
+				}
 			}
 			// Some blocks may be missing: the engine shows what it has, but doesn't count blocks as ended
 			if (incomplete) out.incomplete = true
@@ -364,6 +399,9 @@
 		cancelLogin: () => call('cancelLogin'),
 		openCalendar: (ts) => call('openCalendar', typeof ts === 'number' ? ts : null),
 		onChanged: (cb) => listeners.changed.push(cb),
+		/** Waiting for Nextcloud (calendars, blocks): the page shows placeholders */
+		loading: () => asking > 0,
+		onLoading: (cb) => listeners.loading.push(cb),
 		account: () => call('account'),
 		// The phone's file picker (the web app, a page in a browser, downloads instead)
 		saveFile: window.__trackerWeb ? undefined : (name, text) => call('saveFile', name, text),

@@ -9,6 +9,8 @@
 	// Set by the Mac app: API calls go through the app, it shows the notifications,
 	// and "Calendar" opens Apple Calendar. Not set in the browser.
 	const desktop = window.trackerBridge || null
+	// The phone app: its own layout (tabs at the bottom, pages made for a narrow screen)
+	const PHONE = !!(desktop && desktop.phone && desktop.account)
 	// Everything is rendered as text (never as HTML), so Nextcloud's HTML escaping of
 	// the placeholders would only show up as "&lt;" in titles: turn it off.
 	const NO_ESCAPE = { escape: false, sanitize: false }
@@ -477,22 +479,36 @@
 		return el
 	}
 
-	let rendering = false
+	// The newest render wins: a tap on another tab while a page is being built isn't lost
+	let renderSeq = 0
+	let shownRoute = null
 	async function render() {
-		if (rendering) return
-		rendering = true
+		const seq = ++renderSeq
 		const root = document.getElementById('tracker-app')
+		const route = state.route
+		const layout = (main) => PHONE
+			? h('div', { class: 'imp-layout imp-layout--phone' }, main, miniTimer(), phoneTabs())
+			: h('div', { class: 'imp-layout' }, navigation(), main)
+		// An open calendar panel stays open across a re-render
+		const panels = () => root.querySelectorAll(':scope > .imp-cvpanel')
+		// Another tab shows at once: the tab lit and the page as placeholders while it is built
+		const shell = route === shownRoute ? null : setTimeout(() => {
+			if (seq !== renderSeq) return
+			root.replaceChildren(layout(h('main', { class: 'imp-main', id: 'imp-main', 'aria-busy': 'true' }, skeleton())), ...panels())
+		}, 60)
 		const main = h('main', { class: 'imp-main', id: 'imp-main' })
 		try {
-			const page = await PAGES[state.route]()
+			const page = await PAGES[route]()
 			main.append(page)
 		} catch (e) {
 			console.error(e)
 			main.append(h('p', { class: 'imp-empty' }, tr('This page could not be loaded. Reload to try again.')))
 		}
-		const scroll = document.getElementById('imp-main')?.scrollTop || 0
-		// An open calendar panel stays open across a re-render
-		root.replaceChildren(h('div', { class: 'imp-layout' }, navigation(), main), ...root.querySelectorAll(':scope > .imp-cvpanel'))
+		clearTimeout(shell)
+		if (seq !== renderSeq) return // a newer render (another tab, fresher data) took over
+		const scroll = route === shownRoute ? (document.getElementById('imp-main')?.scrollTop || 0) : 0
+		root.replaceChildren(layout(main), ...panels())
+		shownRoute = route
 		// The window's (or browser tab's) title says where you are
 		const here = state.route === 'commitment' ? commitmentById(state.commitmentId)?.name : state.route === 'calendar' ? tr('Calendar') : ROUTES.find((r) => r.id === state.route)?.label()
 		if (here) document.title = `${here} · Blockwise`
@@ -501,7 +517,16 @@
 			document.getElementById(state.refocus)?.focus()
 			state.refocus = null
 		}
-		rendering = false
+	}
+
+	/** A page that is still being built: grey shapes that shimmer (still with reduced motion) */
+	function skeleton() {
+		const bar = (w, ht = 12) => h('span', { class: 'imp-sk', style: { width: w, height: `${ht}px` } })
+		const card = (n) => h('div', { class: 'imp-skcard' }, Array.from({ length: n }, (_, i) => h('div', { class: 'imp-skrow' },
+			h('span', { class: 'imp-sk imp-sk--tile' }),
+			h('span', { class: 'imp-skrow__text' }, bar(`${40 + ((i * 17) % 30)}%`), bar(`${55 + ((i * 13) % 30)}%`, 10)))))
+		return h('div', { class: 'imp-page imp-skpage', role: 'status', 'aria-label': tr('Loading…') },
+			h('div', { class: 'imp-skhead' }, bar('38%', 24), bar('24%', 12)), card(3), card(2))
 	}
 
 	async function refresh() {
@@ -1488,7 +1513,7 @@
 				h('button', { type: 'button', class: 'imp-icon-btn', onclick: () => { state.addingTo = t.id; render() }, 'aria-label': tr('Add subtask to {title}', { title: t.title }), title: tr('Add subtask') }, '+'),
 				h('button', { type: 'button', class: 'imp-icon-btn', onclick: () => moveTask(tasks, c, index, -1), disabled: index === 0, 'aria-label': tr('Move up'), title: tr('Move up (Alt+↑)') }, '↑'),
 				h('button', { type: 'button', class: 'imp-icon-btn', onclick: () => moveTask(tasks, c, index, 1), disabled: index === tasks.length - 1, 'aria-label': tr('Move down'), title: tr('Move down (Alt+↓)') }, '↓'),
-				h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('More for {title}', { title: t.title }), 'aria-haspopup': 'menu', onclick: (e) => { e.stopPropagation(); taskMenu(e.currentTarget, t, c) } }, '⋯')))
+				h('button', { type: 'button', class: 'imp-icon-btn imp-tq__more', 'aria-label': tr('More for {title}', { title: t.title }), 'aria-haspopup': 'menu', onclick: (e) => { e.stopPropagation(); taskMenu(e.currentTarget, t, c, { tasks, index }) } }, '⋯')))
 
 		const body = h('div', { class: 'imp-tq__main' }, head)
 		if (!single) {
@@ -1586,9 +1611,12 @@
 		return note
 	}
 
-	function taskMenu(anchor, t, c) {
+	function taskMenu(anchor, t, c, order) {
 		const others = state.commitments.filter((x) => x.id !== c.id)
 		openMenu(anchor, (close) => [
+			// The phone has no arrows in the list: moving is here
+			PHONE && order && order.index > 0 ? menuItem(tr('Move up'), () => { close(); moveTask(order.tasks, c, order.index, -1) }) : null,
+			PHONE && order && order.index < order.tasks.length - 1 ? menuItem(tr('Move down'), () => { close(); moveTask(order.tasks, c, order.index, 1) }) : null,
 			menuItem(t.note ? tr('Edit note') : tr('Add note'), () => {
 				close()
 				state.noteFor = t.id
@@ -2013,21 +2041,27 @@
 				onclick: () => { state.notesFor = x.id; state.noteEdit = null; render() },
 			}, h('span', { class: 'imp-dot', style: { background: x.color } }), x.name)))))
 
-		page.append(noteComposer(c))
+		page.append(notesBody(c, open, ticked))
+		return page
+	}
+
+	/** A commitment's notes: the composer, the open ones, the ticked ones folded away */
+	function notesBody(c, open, ticked) {
+		const out = document.createDocumentFragment()
+		out.append(noteComposer(c))
 		if (open.length) {
-			page.append(h('ul', { class: 'imp-notes__list', 'aria-label': tr('Notes') }, open.map((n, i) => noteItem(n, i, open, c))))
+			out.append(h('ul', { class: 'imp-notes__list', 'aria-label': tr('Notes') }, open.map((n, i) => noteItem(n, i, open, c))))
 		} else {
-			page.append(h('div', { class: 'imp-notes__empty' },
+			out.append(h('div', { class: 'imp-notes__empty' },
 				h('p', null, tr('Notes are for everything that isn\'t a task: ideas, things to ask, links, checklists.')),
 				h('p', { class: 'imp-muted' }, tr('Tick a note when it\'s dealt with: it shows in Done.'))))
 		}
-
 		if (ticked.length) {
-			page.append(h('details', { class: 'imp-notes__ticked', open: state.notesTickedOpen ? true : null, ontoggle: (e) => { state.notesTickedOpen = e.target.open } },
+			out.append(h('details', { class: 'imp-notes__ticked', open: state.notesTickedOpen ? true : null, ontoggle: (e) => { state.notesTickedOpen = e.target.open } },
 				h('summary', null, tr('Ticked ({count})', { count: ticked.length })),
 				h('ul', { class: 'imp-notes__list' }, ticked.map((n) => noteItem(n, -1, ticked, c)))))
 		}
-		return page
+		return out
 	}
 
 	// --- markdown (js/markdown.js parses; elements are built here, never from HTML) ---
@@ -3942,10 +3976,424 @@
 	})
 
 	// ---------------------------------------------------------------------------
+	// The phone: tabs at the bottom (Now, Tasks, Calendar, Done, Time), a bar on
+	// top of each page, the timer first on Now and as a small bar on the other
+	// tabs. Notes and a commitment's details are on its own page (tap its name);
+	// Settings and the account behind the button at the top right.
+	// ---------------------------------------------------------------------------
+
+	const ICON_ME = 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0'
+	const ICON_BACK = 'M19 12H5M11 6l-6 6 6 6'
+	const routeIcon = (id) => ROUTES.find((x) => x.id === id).icon
+
+	function phoneTabs() {
+		const tab = (id, label, d, onclick) => h('li', null, h('a', { href: `#${id}`, class: state.route === id ? 'active' : '', 'aria-current': state.route === id ? 'page' : null, onclick },
+			h('span', { class: 'imp-tab__ind' }, icon(d, 22)), h('span', { class: 'imp-tab__label' }, label)))
+		return h('nav', { class: 'imp-tabbar', 'aria-label': tr('Main') }, h('ul', null,
+			tab('now', tr('Now'), routeIcon('now')),
+			tab('tasks', tr('Tasks'), routeIcon('tasks')),
+			// Blocks in the phone's calendars (Nextcloud): the calendar app opens
+			calendarShown() ? tab('calendar', tr('Calendar'), ICON_CAL)
+				: desktop.openCalendar ? tab('calendar', tr('Calendar'), ICON_CAL, (e) => { e.preventDefault(); desktop.openCalendar() }) : null,
+			tab('done', tr('Done'), routeIcon('done')),
+			tab('time', tr('Time'), routeIcon('time'))))
+	}
+
+	/** A tab's top bar: title, a line under it, actions, and Settings */
+	function phoneBar(title, sub, ...actions) {
+		return h('header', { class: 'imp-pbar' },
+			h('div', { class: 'imp-pbar__text' }, h('h1', null, title), sub ? h('p', null, sub) : null),
+			h('div', { class: 'imp-pbar__actions' }, actions,
+				h('a', { class: 'imp-pbar__me', href: '#settings', 'aria-label': tr('Settings and account'), title: tr('Settings and account') }, icon(ICON_ME, 22))))
+	}
+
+	/** A page opened from a tab (a commitment, Settings): back on the left */
+	function phoneBack(title, sub, ...actions) {
+		const back = (e) => {
+			e.preventDefault()
+			if (history.length > 1) history.back()
+			else location.hash = '#now'
+		}
+		return h('header', { class: 'imp-pbar imp-pbar--back' },
+			h('a', { class: 'imp-pbar__back', href: '#now', onclick: back, 'aria-label': tr('Back'), title: tr('Back') }, icon(ICON_BACK, 22)),
+			h('div', { class: 'imp-pbar__text' }, typeof title === 'string' ? h('h1', null, title) : title, sub ? h('p', null, sub) : null),
+			actions.length ? h('div', { class: 'imp-pbar__actions' }, actions) : null)
+	}
+
+	/** While tracking, on every tab but Now: what runs, for how long, and Stop */
+	function miniTimer() {
+		const r = state.running
+		if (!r || state.route === 'now') return null
+		const color = r.commitmentId === null ? 'var(--tl-accent)' : colorOf(r.commitmentId)
+		return h('div', { class: 'imp-mini', style: { '--c': color, '--on-c': r.commitmentId === null ? '#fff' : onColor(color) } },
+			h('a', { class: 'imp-mini__text', href: '#now', 'aria-label': tr('{name} is running. Open the timer.', { name: nameOf(r.commitmentId) }) },
+				h('span', { class: 'imp-mini__name' }, nameOf(r.commitmentId)),
+				h('span', { class: 'imp-mini__clock', 'data-live': 'elapsed', 'data-ts': r.start }, clock(nowTs() - r.start))),
+			h('button', { type: 'button', class: 'imp-mini__stop', onclick: () => stopTracking() }, icon(ICON_STOP, 14, true), tr('Stop')))
+	}
+
+	/** Commitments as chips to pick one (Tasks) */
+	function commitmentChips(current, onPick) {
+		return hscroll(h('div', { class: 'imp-pchips', role: 'tablist', 'aria-label': tr('Commitments') }, state.commitments.map((x) => h('button', {
+			type: 'button',
+			role: 'tab',
+			class: 'imp-pchip',
+			'aria-selected': x.id === current ? 'true' : 'false',
+			onclick: () => onPick(x),
+		}, h('span', { class: 'imp-dot', style: { background: x.color } }), x.name))))
+	}
+
+	const noCommitments = () => h('div', { class: 'imp-empty' },
+		h('p', null, tr('Create your first commitment, for example Thesis or Work. It gets its own calendar: every event you put there is a work block.')),
+		h('a', { class: 'imp-button imp-button--primary', href: '#settings', onclick: () => { state.creatingCommitment = true } }, tr('Create a commitment')))
+
+	/** The dashboard and this week's tracked time per commitment (Now) */
+	async function dashboardWithWeek() {
+		const weekStart = Math.floor(startOfWeek(new Date()) / 1000)
+		const weekEnd = Math.floor(addPeriod(startOfWeek(new Date()), 'week', 1) / 1000)
+		const [d, weekSessions] = await Promise.all([
+			api('GET', 'dashboard'),
+			api('GET', `sessions?from=${weekStart}&to=${weekEnd}`),
+		])
+		const nowS = nowTs()
+		d.week = { start: weekStart, end: weekEnd, tracked: {} }
+		for (const x of weekSessions) {
+			d.week.tracked[x.commitmentId] = (d.week.tracked[x.commitmentId] || 0) + overlapSeconds(x.start, x.end ?? nowS, weekStart, weekEnd)
+		}
+		state.dashboard = d
+		state.running = d.running
+		state.longBreakUntil = d.longBreakUntil
+		state.settings = d.settings
+		return d
+	}
+
+	// --- Now ---------------------------------------------------------------------
+
+	async function phoneNow() {
+		const d = await dashboardWithWeek()
+		const today = new Date()
+		const page = h('div', { class: 'imp-page imp-pnow' })
+		const sub = h('p', null, new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long' }).format(today))
+		const bar = phoneBar(new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(today), null)
+		bar.querySelector('.imp-pbar__text').append(sub)
+		page.append(bar)
+		if (!d.commitments.length) {
+			page.append(noCommitments())
+			return page
+		}
+		if (d.overlaps.length) {
+			page.append(h('section', { class: 'imp-warning', role: 'alert' },
+				h('strong', null, trn('%n overlap between commitments', '%n overlaps between commitments', d.overlaps.length)),
+				h('p', { class: 'imp-muted' }, tr('Move one of them in the Calendar app.'))))
+		}
+		page.append(timerStrip(d))
+		page.append(h('section', { class: 'imp-pweek', 'aria-labelledby': 'imp-pweek-h' },
+			h('div', { class: 'imp-psec__head' }, h('h2', { id: 'imp-pweek-h' }, tr('This week')), h('span', { class: 'imp-muted' }, tr('Tap a ring to start'))),
+			goalRings(d)))
+		const todayEl = h('section', { class: 'imp-ptoday', 'aria-labelledby': 'imp-ptoday-h' })
+		page.append(todayEl)
+		fillToday(todayEl, d, sub)
+		page.append(blockCard(d))
+		return page
+	}
+
+	/** Today's blocks as a list: drawn at once from last time, then from the calendars */
+	async function fillToday(el, d, sub) {
+		const day = new Date(new Date().setHours(0, 0, 0, 0))
+		const from = Math.floor(day / 1000)
+		const to = Math.floor(addPeriod(day, 'day', 1) / 1000)
+		const cached = state.dayCache && state.dayCache.from === from ? state.dayCache.blocks : null
+		drawToday(el, d, from, to, cached, sub)
+		let blocks
+		try { blocks = (await api('GET', `blocks?from=${from}&to=${to}`)).blocks } catch (e) { blocks = cached || [] }
+		blocks = blocks.filter((b) => b.start < to && b.end > from).sort((a, b) => a.start - b.start)
+		state.dayCache = { from, blocks }
+		drawToday(el, d, from, to, blocks, sub)
+	}
+
+	function drawToday(el, d, from, to, blocks, sub) {
+		const now = nowTs()
+		const waiting = !blocks || (!blocks.length && desktop && desktop.loading && desktop.loading())
+		const planned = (blocks || []).reduce((sum, b) => sum + Math.min(b.end, to) - Math.max(b.start, from), 0)
+		if (sub) sub.textContent = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'long' }).format(at(from)) + (planned ? ` · ${tr('{hours} planned', { hours: fmtMin(Math.round(planned / 60)) })}` : '')
+		const row = (b) => {
+			const c = commitmentById(b.commitmentId) || { id: b.commitmentId, name: nameOf(b.commitmentId), color: colorOf(b.commitmentId) }
+			const entry = d.commitments.find((e) => e.commitment.id === c.id)
+			const inside = b.start <= now && now < b.end
+			const isNext = !inside && entry && entry.nextBlock && entry.nextBlock.start === b.start
+			const tasks = entry && (inside || isNext) ? entry.plannedTaskIds.length : 0
+			const running = d.running && d.running.commitmentId === c.id
+			const range = `${hourMin.format(at(b.start))} – ${hourMin.format(at(b.end))}`
+			const extra = inside ? null : tasks ? trn('%n task', '%n tasks', tasks) : null
+			return h('li', { class: `imp-prow ${inside ? 'is-now' : ''} ${b.end <= now ? 'is-past' : ''}`, style: { '--c': c.color, '--on-c': onColor(c.color) } },
+				tile(c),
+				h('a', { class: 'imp-prow__text', href: `#c/${c.id}` },
+					h('strong', null, c.name, b.title && b.title !== c.name ? h('span', { class: 'imp-muted' }, ` · ${b.title}`) : null),
+					h('span', { class: 'imp-muted' }, range, extra ? ` · ${extra}` : '')),
+				inside ? h('span', { class: 'imp-prow__now' }, tr('Now')) : null,
+				b.end > now && !running
+					? h('button', { type: 'button', class: 'imp-prow__play', onclick: () => startTracking(c.id), 'aria-label': tr('Start tracking {name}', { name: c.name }), title: tr('Start') }, icon(ICON_PLAY, 16, true))
+					: null)
+		}
+		const skRow = () => h('li', { class: 'imp-prow imp-prow--sk', 'aria-hidden': 'true' },
+			h('span', { class: 'imp-sk imp-sk--tile' }),
+			h('span', { class: 'imp-skrow__text' }, h('span', { class: 'imp-sk', style: { width: '45%', height: '12px' } }), h('span', { class: 'imp-sk', style: { width: '65%', height: '10px' } })))
+		el.replaceChildren(
+			h('h2', { id: 'imp-ptoday-h' }, tr('Today')),
+			waiting
+				? h('ol', { class: 'imp-plist', 'aria-busy': 'true', 'aria-label': tr('Loading…') }, skRow(), skRow(), skRow())
+				: blocks.length
+					? h('ol', { class: 'imp-plist' }, blocks.map(row))
+					: h('p', { class: 'imp-muted imp-pempty' }, tr('No blocks planned.'), ' ', calendarShown() ? h('a', { href: '#calendar' }, tr('Plan a block')) : null))
+	}
+
+	// --- Tasks ---------------------------------------------------------------------
+
+	async function phoneTasks() {
+		const page = h('div', { class: 'imp-page imp-ptasks' })
+		page.append(phoneBar(tr('Tasks'), null))
+		if (!state.commitments.length) {
+			page.append(noCommitments())
+			return page
+		}
+		if (!commitmentById(state.tasksFor)) state.tasksFor = state.commitments[0].id
+		const c = commitmentById(state.tasksFor)
+		const now = nowTs()
+		const [tasks, blockData] = await Promise.all([
+			api('GET', `tasks?commitmentId=${c.id}&status=open`),
+			api('GET', `blocks?from=${now - 86400}&to=${now + 14 * 86400}`).catch(() => ({ blocks: [] })),
+		])
+		page.append(commitmentChips(c.id, (x) => { state.tasksFor = x.id; state.composer = null; render() }))
+		page.append(taskColumn(c, tasks, blockData.blocks, now))
+		return page
+	}
+
+	// --- Done ----------------------------------------------------------------------
+
+	async function phoneDone() {
+		const ws = addPeriod(startOfWeek(new Date()), 'week', -state.doneWeek)
+		const from = Math.floor(ws / 1000)
+		const to = Math.floor(addPeriod(ws, 'week', 1) / 1000)
+		const [done, blocks, sessions] = await Promise.all([
+			api('GET', `done?from=${from}&to=${to}`),
+			api('GET', `blocks?from=${from}&to=${to}`),
+			api('GET', `sessions?from=${from}&to=${to}`),
+		])
+		const now = nowTs()
+		const days = Array.from({ length: 7 }, (_, i) => {
+			const start = Math.floor(addPeriod(ws, 'day', i) / 1000)
+			const end = Math.floor(addPeriod(ws, 'day', i + 1) / 1000)
+			const planned = blocks.blocks.reduce((s, b) => s + overlapSeconds(b.start, b.end, start, end), 0)
+			const tracked = sessions.reduce((s, x) => s + overlapSeconds(x.start, x.end ?? now, start, end), 0)
+			return { i, start, end, planned, tracked, date: at(start) }
+		})
+		// The day shown: today in this week, else Monday (or the one picked)
+		const todayIdx = days.findIndex((x) => x.start <= now && now < x.end)
+		if (state.doneDay === undefined || state.doneDay === null || state.doneDayWeek !== state.doneWeek) {
+			state.doneDay = todayIdx >= 0 ? todayIdx : 0
+			state.doneDayWeek = state.doneWeek
+		}
+		const day = days[state.doneDay]
+		const totalTracked = days.reduce((s, x) => s + x.tracked, 0)
+		const totalPlanned = days.reduce((s, x) => s + x.planned, 0)
+		const page = h('div', { class: 'imp-page imp-pdone' })
+		const week = (n) => { state.doneWeek = n; state.doneDay = null; render() }
+		page.append(phoneBar(tr('Done'), state.doneWeek === 0 ? tr('This week') : tr('Week of {date}', { date: fmt.day.format(ws) }),
+			h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('Previous week'), title: tr('Previous week'), onclick: () => week(state.doneWeek + 1) }, chevron(-1)),
+			h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('Next week'), title: tr('Next week'), disabled: state.doneWeek === 0, onclick: () => week(state.doneWeek - 1) }, chevron(1))))
+
+		// The week: planned and tracked per day, as pairs of bars on one scale
+		const max = Math.max(3600, ...days.map((x) => Math.max(x.planned, x.tracked)))
+		const px = (sec) => `${Math.max(sec ? 4 : 0, Math.round((sec / max) * 64))}px`
+		const wd = new Intl.DateTimeFormat(locale, { weekday: 'narrow' })
+		page.append(h('section', { class: 'imp-pcard imp-pweekbars', 'aria-label': tr('The week') },
+			h('div', { class: 'imp-psec__head' },
+				h('strong', null, tr('{time} tracked', { time: duration(totalTracked, { short: true }) })),
+				h('span', { class: 'imp-muted' }, tr('of {time} planned', { time: duration(totalPlanned, { short: true }) }))),
+			h('div', { class: 'imp-pdays', role: 'tablist', 'aria-label': tr('Day') }, days.map((x) => h('button', {
+				type: 'button',
+				role: 'tab',
+				class: `imp-pday ${x.i === todayIdx ? 'is-today' : ''}`,
+				'aria-selected': x.i === state.doneDay ? 'true' : 'false',
+				'aria-label': `${fmt.day.format(x.date)}: ${tr('{tracked} tracked of {planned} planned', { tracked: duration(x.tracked, { short: true }), planned: duration(x.planned, { short: true }) })}`,
+				onclick: () => { state.doneDay = x.i; render() },
+			},
+			h('span', { class: 'imp-pday__bars', 'aria-hidden': 'true' },
+				h('span', { class: 'imp-pday__planned', style: { height: px(x.planned) } }),
+				h('span', { class: 'imp-pday__tracked', style: { height: x.start > now ? '0px' : px(x.tracked) } })),
+			h('span', { class: 'imp-pday__letter' }, wd.format(x.date)),
+			h('span', { class: 'imp-pday__num' }, x.date.getDate())))),
+			h('div', { class: 'imp-plegend', 'aria-hidden': 'true' },
+				h('span', null, h('span', { class: 'imp-plegend__planned' }), tr('Planned')),
+				h('span', null, h('span', { class: 'imp-plegend__tracked' }), tr('Tracked')))))
+
+		// The day: hours per commitment against the plan, then what was checked off
+		const ids = [...new Set([...blocks.blocks.map((b) => b.commitmentId), ...sessions.map((x) => x.commitmentId)])]
+		const rows = ids.map((id) => ({
+			id,
+			planned: blocks.blocks.filter((b) => b.commitmentId === id).reduce((s, b) => s + overlapSeconds(b.start, b.end, day.start, day.end), 0),
+			tracked: sessions.filter((x) => x.commitmentId === id).reduce((s, x) => s + overlapSeconds(x.start, x.end ?? now, day.start, day.end), 0),
+		})).filter((r) => r.planned || r.tracked).sort((a, b) => b.planned + b.tracked - a.planned - a.tracked)
+		const addBtn = h('button', { type: 'button', class: 'imp-button', onclick: () => addTimeEditor(addBtn, null) }, '+ ', tr('Add tracked time'))
+		page.append(h('section', { class: 'imp-pcard imp-pdayhours', 'aria-labelledby': 'imp-pday-h' },
+			h('div', { class: 'imp-psec__head' },
+				h('h2', { id: 'imp-pday-h' }, new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'short' }).format(day.date)),
+				h('span', { class: 'imp-muted' }, day.planned ? tr('{tracked} of {planned}', { tracked: duration(day.tracked, { short: true }), planned: duration(day.planned, { short: true }) }) : duration(day.tracked, { short: true }))),
+			rows.length
+				? h('ul', { class: 'imp-pbars' }, rows.map((r) => h('li', { style: { '--c': colorOf(r.id) } },
+					h('div', { class: 'imp-pbars__label' },
+						h('span', null, h('span', { class: 'imp-dot', style: { background: colorOf(r.id) } }), nameOf(r.id)),
+						h('span', { class: 'imp-muted' }, r.planned ? tr('{tracked} of {planned}', { tracked: duration(r.tracked, { short: true }), planned: duration(r.planned, { short: true }) }) : tr('{time} tracked', { time: duration(r.tracked, { short: true }) }))),
+					h('div', { class: 'imp-pbars__track', 'aria-hidden': 'true' }, h('span', { style: { width: `${Math.round((r.tracked / Math.max(r.planned, r.tracked, 1)) * 100)}%` } })))))
+				: h('p', { class: 'imp-muted' }, day.start > now ? tr('Nothing planned yet.') : tr('Nothing planned or tracked.')),
+			addBtn))
+
+		const ticked = done.filter((x) => x.doneAt >= day.start && x.doneAt < day.end)
+		page.append(h('section', { class: 'imp-pcard imp-pticked', 'aria-labelledby': 'imp-pticked-h' },
+			h('h2', { id: 'imp-pticked-h' }, ticked.length ? tr('Checked off · {n}', { n: ticked.length }) : tr('Checked off')),
+			ticked.length
+				? h('ul', null, ticked.map((x) => h('li', { style: { '--c': colorOf(x.commitmentId) } },
+					h('span', { class: 'imp-pticked__check', 'aria-hidden': 'true' }, icon('M5 12.5l4.5 4.5L19 7.5', 12)),
+					h('span', { class: 'imp-pticked__title' }, x.task && x.task !== x.title ? `${x.task}: ${x.title}` : x.title),
+					h('span', { class: 'imp-muted' }, hourMin.format(at(x.doneAt))))))
+				: h('p', { class: 'imp-muted' }, tr('Nothing checked off this day.'))))
+		return page
+	}
+
+	// --- Time ------------------------------------------------------------------------
+
+	async function phoneTime() {
+		const weeks = [-3, -2, -1, 0].map(weekAt)
+		const now = nowTs()
+		const [sessions, blocks] = await Promise.all([
+			api('GET', `sessions?from=${weeks[0].start}&to=${now + 60}`),
+			api('GET', `blocks?from=${weeks[3].start}&to=${weeks[3].end}`),
+		])
+		const wk = weeks[3]
+		const tracked = (id, w) => sessions.filter((x) => x.commitmentId === id).reduce((s, x) => s + overlapSeconds(x.start, x.end ?? now, w.start, w.end), 0)
+		const plannedLeft = (id) => blocks.blocks.filter((b) => b.commitmentId === id).reduce((s, b) => s + overlapSeconds(b.start, b.end, Math.max(now, wk.start), wk.end), 0)
+		const daysLeft = Math.max(0, Math.ceil((wk.end - now) / 86400))
+		const page = h('div', { class: 'imp-page imp-ptime' })
+		page.append(phoneBar(tr('Time'), tr('This week')))
+
+		const withGoal = state.commitments.filter((c) => c.weeklyGoal)
+		const without = state.commitments.filter((c) => !c.weeklyGoal)
+		const goals = h('section', { class: 'imp-pcard', 'aria-labelledby': 'imp-pgoals-h' },
+			h('div', { class: 'imp-psec__head' }, h('h2', { id: 'imp-pgoals-h' }, tr('Weekly goals')), h('span', { class: 'imp-muted' }, trn('%n day left', '%n days left', daysLeft))))
+		if (withGoal.length) {
+			goals.append(h('ul', { class: 'imp-pbars' }, withGoal.map((c) => {
+				const sec = tracked(c.id, wk)
+				const goal = c.weeklyGoal * 60
+				const left = Math.max(0, goal - sec)
+				const plan = plannedLeft(c.id)
+				const note = !left ? tr('Goal reached') : plan >= left
+					? tr('{left} to go · {planned} planned', { left: duration(left, { short: true }), planned: duration(plan, { short: true }) })
+					: tr('{left} to go · {planned} planned: plan more blocks', { left: duration(left, { short: true }), planned: duration(plan, { short: true }) })
+				return h('li', { style: { '--c': c.color } },
+					h('div', { class: 'imp-pbars__label' },
+						h('a', { href: `#c/${c.id}` }, h('span', { class: 'imp-dot', style: { background: c.color } }), c.name),
+						h('span', { class: 'imp-muted' }, h('strong', null, duration(sec, { short: true })), ' ', tr('of {goal}', { goal: fmtMin(c.weeklyGoal) }))),
+					h('div', { class: 'imp-pbars__track', 'aria-hidden': 'true' }, h('span', { style: { width: `${Math.min(100, Math.round((sec / goal) * 100))}%` } })),
+					h('span', { class: `imp-pbars__note ${left && plan < left ? 'is-short' : ''}` }, note))
+			})))
+		} else {
+			goals.append(h('p', { class: 'imp-muted' }, tr('No weekly goals yet. Set one for a commitment in Settings.')))
+		}
+		if (without.length) {
+			goals.append(h('p', { class: 'imp-muted imp-pnogoal' }, tr('No goal: {list}', { list: without.map((c) => `${c.name} ${duration(tracked(c.id, wk), { short: true })}`).join(' · ') })))
+		}
+		page.append(goals)
+
+		// The last four weeks, all commitments
+		const totals = weeks.map((w) => sessions.reduce((s, x) => s + overlapSeconds(x.start, x.end ?? now, w.start, w.end), 0))
+		const top = Math.max(3600, ...totals)
+		page.append(h('section', { class: 'imp-pcard', 'aria-labelledby': 'imp-pweeks-h' },
+			h('div', { class: 'imp-psec__head' }, h('h2', { id: 'imp-pweeks-h' }, tr('Tracked per week')), h('span', { class: 'imp-muted' }, tr('all commitments'))),
+			h('ol', { class: 'imp-pweeks' }, weeks.map((w, i) => h('li', { class: i === 3 ? 'is-current' : '' },
+				h('span', { class: 'imp-pweeks__val' }, duration(totals[i], { short: true })),
+				h('span', { class: 'imp-pweeks__bar', style: { height: `${Math.max(4, Math.round((totals[i] / top) * 110))}px` }, 'aria-hidden': 'true' }),
+				h('span', { class: 'imp-muted' }, i === 3 ? tr('This week') : fmt.day.format(w.date)))))))
+
+		// Everything else (charts by month and year, the table, CSV export): folded away
+		const more = h('details', { class: 'imp-pmore', ontoggle: async (e) => {
+			if (!e.target.open || more.dataset.filled) return
+			more.dataset.filled = '1'
+			more.append(await pageTime())
+		} }, h('summary', null, tr('More: charts, table, CSV export')))
+		page.append(more)
+		return page
+	}
+
+	// --- one commitment: its tasks, notes, and the rest ----------------------------------------
+
+	async function phoneCommitment() {
+		const c = commitmentById(state.commitmentId)
+		if (!c) {
+			location.hash = '#now'
+			return h('div')
+		}
+		const tab = ['tasks', 'notes', 'overview'].includes(state.cTab) ? state.cTab : 'tasks'
+		const now = nowTs()
+		const wk = weekAt(0)
+		const weekSessions = await api('GET', `sessions?from=${wk.start}&to=${now + 60}`)
+		const sec = weekSessions.filter((x) => x.commitmentId === c.id).reduce((s, x) => s + overlapSeconds(x.start, x.end ?? now, wk.start, wk.end), 0)
+		const running = state.running && state.running.commitmentId === c.id
+		const page = h('div', { class: 'imp-page imp-pcommit', style: { '--c': c.color, '--on-c': onColor(c.color) } })
+		page.append(phoneBack(h('h1', { class: 'imp-pcommit__name' }, tile(c), h('span', null, c.name)),
+			c.weeklyGoal ? tr('Goal {goal} a week · {done} so far', { goal: fmtMin(c.weeklyGoal), done: duration(sec, { short: true }) }) : tr('{time} this week', { time: duration(sec, { short: true }) }),
+			h('button', {
+				type: 'button',
+				class: 'imp-pcommit__play',
+				onclick: () => (running ? stopTracking() : startTracking(c.id)),
+				'aria-label': running ? tr('Stop tracking {name}', { name: c.name }) : tr('Start tracking {name}', { name: c.name }),
+			}, icon(running ? ICON_STOP : ICON_PLAY, 18, true))))
+		const tabBtn = (id, label) => h('button', { type: 'button', role: 'tab', 'aria-selected': tab === id ? 'true' : 'false', onclick: () => { state.cTab = id; render() } }, label)
+		page.append(h('div', { class: 'imp-ptabs', role: 'tablist', 'aria-label': c.name },
+			tabBtn('tasks', tr('Tasks')), tabBtn('notes', tr('Notes')), tabBtn('overview', tr('Overview')),
+			h('a', { class: 'imp-ptabs__edit', href: '#settings', onclick: () => { state.editingCommitment = c.id; state.creatingCommitment = false } }, tr('Edit'))))
+		if (tab === 'tasks') {
+			const [tasks, blockData] = await Promise.all([
+				api('GET', `tasks?commitmentId=${c.id}&status=open`),
+				api('GET', `blocks?from=${now - 86400}&to=${now + 14 * 86400}`).catch(() => ({ blocks: [] })),
+			])
+			state.tasksFor = c.id
+			page.append(taskColumn(c, tasks, blockData.blocks, now))
+		} else if (tab === 'notes') {
+			const all = await api('GET', `notes?commitmentId=${c.id}`)
+			state.notesFor = c.id
+			page.append(h('div', { class: 'imp-notes' }, notesBody(c, all.filter((n) => !n.done), all.filter((n) => n.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0)))))
+		} else {
+			page.append(await pageCommitment())
+		}
+		return page
+	}
+
+	/** Notes (reached from a commitment's page): its notes, other commitments one tap away */
+	async function phoneNotes() {
+		const c = commitmentById(state.notesFor) || state.commitments[0]
+		if (c) { state.commitmentId = c.id; state.cTab = 'notes' }
+		location.replace(c ? `#c/${c.id}` : '#now')
+		return h('div')
+	}
+
+	async function phoneSettings() {
+		const page = h('div', { class: 'imp-page imp-psettings' })
+		page.append(phoneBack(tr('Settings'), null))
+		page.append(h('button', { type: 'button', class: 'imp-paccount', onclick: () => desktop.account() },
+			icon(ICON_ME, 22),
+			h('span', null, h('strong', null, tr('Account and sync')), h('span', { class: 'imp-muted' }, tr('Where your data is, sync, export'))),
+			chevron(1)))
+		page.append(await pageSettings())
+		return page
+	}
+
+	// ---------------------------------------------------------------------------
 	// Boot
 	// ---------------------------------------------------------------------------
 
-	const PAGES = { now: pageNow, tasks: pageTasks, notes: pageNotes, done: pageDone, time: pageTime, settings: pageSettings, commitment: pageCommitment, calendar: pageCalendar }
+	const PAGES = PHONE
+		? { now: phoneNow, tasks: phoneTasks, notes: phoneNotes, done: phoneDone, time: phoneTime, settings: phoneSettings, commitment: phoneCommitment, calendar: pageCalendar }
+		: { now: pageNow, tasks: pageTasks, notes: pageNotes, done: pageDone, time: pageTime, settings: pageSettings, commitment: pageCommitment, calendar: pageCalendar }
 
 	function routeFromHash() {
 		const r = (location.hash || '#now').slice(1)
@@ -3979,8 +4427,21 @@
 		await render()
 		window.addEventListener('hashchange', () => { routeFromHash(); state.offset = 0; render() })
 		if (desktop && desktop.onChanged) {
-			desktop.onChanged(() => {
-				if (!document.activeElement?.matches('input, textarea, select')) refresh()
+			// Not while something is being typed or a form, editor or menu is open (it would be lost):
+			// the next page shown reads the new data anyway
+			const busy = () => document.activeElement?.matches('input, textarea, select') || !!document.querySelector('#imp-main form, .imp-ned, .imp-menu, .imp-cvpanel')
+			desktop.onChanged(() => { if (!busy()) refresh() })
+		}
+		// Waiting for Nextcloud: a small "Updating" label (only if it takes a moment)
+		if (desktop && desktop.onLoading) {
+			const pill = h('div', { class: 'imp-updating', role: 'status', hidden: true },
+				h('span', { class: 'imp-updating__spin', 'aria-hidden': 'true' }), tr('Updating from Nextcloud'))
+			document.body.append(pill)
+			let t = null
+			desktop.onLoading((on) => {
+				clearTimeout(t)
+				if (on) t = setTimeout(() => { pill.hidden = false }, 400)
+				else pill.hidden = true
 			})
 		}
 		setInterval(tick, 1000)
