@@ -1290,3 +1290,171 @@ body.android .imp-page .imp-page {
 	margin: 0;
 	padding: 0;
 }
+
+/* --- Calendar: Day, 3 days, Month ----------------------------------------------------- */
+
+body.android .imp-pcal {
+	position: relative;
+	height: 100%;
+	padding-bottom: 0;
+	filter: none;
+}
+body.android .imp-pcal__today {
+	margin-left: 2px;
+}
+body.android .imp-pcal__views {
+	display: grid;
+	flex: 0 0 auto;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 4px;
+	margin: 0 0 8px;
+	padding: 4px;
+	border-radius: 22px;
+	background: var(--md-surfaceContainerHigh);
+}
+body.android .imp-pcal__views button {
+	height: 38px;
+	border: none;
+	border-radius: 18px;
+	background: transparent;
+	color: var(--md-onSurfaceVariant);
+	font-size: 14px;
+	font-weight: 600;
+}
+body.android .imp-pcal__views button[aria-selected="true"] {
+	background: var(--md-surfaceContainerLow);
+	color: var(--md-onSurface);
+	font-weight: 800;
+	box-shadow: 0 1px 3px rgba(36, 34, 58, 0.12);
+}
+body.android .imp-pcal .imp-cv__grid,
+body.android .imp-pcal .imp-cv__month {
+	flex: 1 1 auto;
+	min-height: 0;
+	margin: 0 calc(-16px - var(--inset-right)) 0 calc(-16px - var(--inset-left));
+	padding: 0 !important;
+	border-radius: 22px 22px 0 0 !important;
+	background: var(--md-surfaceContainerLow);
+}
+body.android .imp-pcal .imp-cv__dayheads {
+	grid-template-columns: 44px repeat(var(--days), minmax(0, 1fr));
+	column-gap: 4px;
+	padding: 8px 8px 6px 0;
+	border-bottom: 1px solid var(--md-outlineVariant);
+}
+body.android .imp-pcal .imp-cv__dn {
+	min-width: 32px;
+	height: 32px;
+	border-radius: 16px;
+	font-size: 16px;
+}
+body.android .imp-pcal .imp-cv__wd {
+	font-size: 11px;
+}
+body.android .imp-pcal .imp-cv__body {
+	grid-template-columns: 44px minmax(0, 1fr);
+	margin-right: 8px;
+	/* A finger scrolls; holding still picks up a block (calPointer) */
+	touch-action: pan-y;
+	-webkit-touch-callout: none;
+}
+body.android .imp-pcal .imp-cv__hours span {
+	font-size: 11px;
+}
+body.android .imp-pcal .imp-cv__ev {
+	padding: 4px 6px;
+	border-radius: 10px;
+	font-size: 12px;
+}
+body.android .imp-pcal .imp-cv__ev.is-dragging {
+	box-shadow: 0 12px 24px rgba(36, 34, 58, 0.3);
+	transform: rotate(-1.5deg);
+}
+body.android .imp-pcal .imp-cv__resize {
+	height: 14px;
+}
+body.android .imp-pcal__fab {
+	position: absolute;
+	right: calc(16px + var(--inset-right));
+	bottom: 16px;
+	z-index: 4;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 56px;
+	padding: 0 20px 0 16px;
+	border: none;
+	border-radius: 18px;
+	background: var(--md-primary);
+	color: var(--md-onPrimary);
+	font-size: 15px;
+	font-weight: 700;
+	box-shadow: 0 8px 18px color-mix(in srgb, var(--md-primary) 35%, transparent);
+}
+/* Month: small cells, a dot and the time per block */
+body.android .imp-pcal .imp-cv__month {
+	gap: 0;
+	padding: 4px 4px 8px !important;
+}
+body.android .imp-pcal .imp-cv__mday {
+	min-height: 0;
+	padding: 2px;
+}
+body.android .imp-pcal .imp-cv__mnum {
+	min-width: 32px;
+	height: 32px;
+	font-size: 13px;
+}
+body.android .imp-pcal .imp-cv__month {
+	grid-template-rows: auto repeat(6, minmax(0, 1fr));
+}
+body.android .imp-pcal .imp-cv__mday {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	overflow: hidden;
+}
+/* a dot per block (the day view has the rest) */
+body.android .imp-pcal .imp-cv__mlist {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 3px;
+	margin: 2px 0 0;
+}
+body.android .imp-pcal .imp-cv__chip {
+	min-height: 0;
+	padding: 0;
+	background: none;
+}
+body.android .imp-pcal :is(.imp-cv__chiptitle, .imp-cv__chiptime) {
+	display: none;
+}
+body.android .imp-pcal .imp-cv__chip .imp-dot {
+	width: 7px;
+	height: 7px;
+	margin: 0;
+}
+body.android .imp-pcal .imp-cv__more {
+	min-height: 0;
+	padding: 0;
+	font-size: 10px;
+	line-height: 7px;
+}
+body.android .imp-page .imp-pcal .imp-pbar h1 {
+	font-size: 22px;
+}
+
+/* The calendar's panels: a sheet from the bottom */
+body.android .imp-cvpanel--sheet {
+	top: auto !important;
+	right: 0;
+	bottom: 0;
+	left: 0 !important;
+	width: 100%;
+	max-height: 85vh;
+	padding: 22px calc(20px + var(--inset-right)) calc(20px + var(--inset-bottom)) calc(20px + var(--inset-left));
+	border-radius: 28px 28px 0 0;
+	background: var(--md-surfaceContainerLow);
+	box-shadow: 0 -12px 40px rgba(36, 34, 58, 0.25);
+}

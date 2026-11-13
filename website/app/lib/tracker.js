@@ -187,7 +187,8 @@
 		editingTask: null, // task id whose editor is open
 		addingTo: null, // task id with the inline "add subtask" field open on Now
 		nowDay: 0, // days from today in Now's day timeline
-		calView: localStorageGet('calView', 'week'), // the built-in calendar: day | week | month
+		// The built-in calendar: day | week | month (the phone: day | 3days | month)
+		calView: PHONE ? localStorageGet('calViewPhone', '3days') : localStorageGet('calView', 'week'),
 		calDate: new Date(new Date().setHours(0, 0, 0, 0)),
 		calScroll: null, // where the time grid was scrolled to
 		calBlocks: [],
@@ -3480,6 +3481,7 @@
 	function calDays() {
 		const d = startOfDay(state.calDate)
 		if (state.calView === 'day') return [d]
+		if (state.calView === '3days') return [d, addDays(d, 1), addDays(d, 2)]
 		if (state.calView === 'week') return Array.from({ length: 7 }, (_, i) => addDays(startOfWeek(d), i))
 		const first = startOfWeek(startOfMonth(d))
 		return Array.from({ length: 42 }, (_, i) => addDays(first, i))
@@ -3487,6 +3489,7 @@
 	function calMove(n) {
 		const d = new Date(state.calDate)
 		if (state.calView === 'day') d.setDate(d.getDate() + n)
+		else if (state.calView === '3days') d.setDate(d.getDate() + 3 * n)
 		else if (state.calView === 'week') d.setDate(d.getDate() + 7 * n)
 		else { d.setDate(1); d.setMonth(d.getMonth() + n) }
 		state.calDate = startOfDay(d)
@@ -3494,7 +3497,7 @@
 	}
 	function calSetView(v) {
 		state.calView = v
-		localStorageSet('calView', v)
+		localStorageSet(PHONE ? 'calViewPhone' : 'calView', v)
 		render()
 	}
 
@@ -3631,7 +3634,7 @@
 		},
 		// The commitment in bold; below it, the block's title and time
 		h('span', { class: 'imp-cv__evtitle' }, c ? c.name : title, b.repeat ? h('span', { class: 'imp-cv__rep', title: repeatLabel(b.repeat), 'aria-hidden': 'true' }, ' ↻') : null),
-		short ? null : h('span', { class: 'imp-cv__evtime' }, b.title && c ? `${b.title} · ` : '', `${hourMin.format(at(b.start))}–${hourMin.format(at(b.end))}`),
+		short ? null : h('span', { class: 'imp-cv__evtime' }, b.title && c && b.title !== c.name ? `${b.title} · ` : '', `${hourMin.format(at(b.start))}–${hourMin.format(at(b.end))}`),
 		clipEnd ? null : h('span', { class: 'imp-cv__resize', 'aria-hidden': 'true' }))
 		el.calBlock = b
 		return el
@@ -3644,24 +3647,47 @@
 		const colAt = (x) => [...body.querySelectorAll('.imp-cv__col')].find((c) => { const r = c.getBoundingClientRect(); return x >= r.left && x < r.right })
 		const minAt = (col, y) => Math.max(0, Math.min(24 * 60, ((y - col.getBoundingClientRect().top) / HOUR_PX) * 60))
 		const dayOf = (col) => at(Number(col.dataset.day))
-		body.addEventListener('pointerdown', (e) => {
-			if (e.button !== 0) return
-			const ev = e.target.closest('.imp-cv__ev')
-			const col = e.target.closest('.imp-cv__col')
-			if (!col) return
+		const begin = (target, x, y, pointerId, held) => {
+			const ev = target.closest('.imp-cv__ev')
+			const col = target.closest('.imp-cv__col')
+			if (!col || !document.contains(col)) return false
 			if (ev) {
 				const b = ev.calBlock
-				drag = { kind: e.target.classList.contains('imp-cv__resize') ? 'resize' : 'move', el: ev, b, x0: e.clientX, y0: e.clientY, moved: false, col, grab: minAt(col, e.clientY) - minutesOf(b.start), dur: (b.end - b.start) / 60 }
+				drag = { kind: target.classList.contains('imp-cv__resize') ? 'resize' : 'move', el: ev, b, x0: x, y0: y, moved: false, col, grab: minAt(col, y) - minutesOf(b.start), dur: (b.end - b.start) / 60 }
+				if (held) ev.classList.add('is-dragging')
 			} else {
-				const m = snap(minAt(col, e.clientY) - SNAP_MIN / 2)
+				const m = snap(minAt(col, y) - SNAP_MIN / 2)
 				const ghost = h('div', { class: 'imp-cv__ev imp-cv__ghost', style: { top: `${(m / 60) * HOUR_PX}px`, height: `${HOUR_PX - 2}px`, left: '1px', width: 'calc(100% - 3px)' } }, h('span', { class: 'imp-cv__evtime' }, ''))
-				drag = { kind: 'create', col, start: m, end: m + 60, ghost, x0: e.clientX, y0: e.clientY, moved: false }
+				drag = { kind: 'create', col, start: m, end: m + 60, ghost, x0: x, y0: y, moved: false }
+				if (held) {
+					col.append(ghost)
+					ghost.firstChild.textContent = `${timeValue(atMinutes(dayOf(col), m))}–${timeValue(atMinutes(dayOf(col), m + 60))}`
+				}
 			}
 			calBusy = true
-			body.setPointerCapture(e.pointerId)
-			e.preventDefault()
+			try { body.setPointerCapture(pointerId) } catch (err) { /* the finger is gone */ }
+			if (held && navigator.vibrate) { try { navigator.vibrate(12) } catch (err) { /* not allowed */ } }
+			return true
+		}
+		// A finger scrolls the grid; holding it still a moment picks up a block or starts planning one
+		let hold = null
+		const HOLD_MS = 450
+		body.addEventListener('pointerdown', (e) => {
+			if (e.button !== 0) return
+			if (e.pointerType === 'touch') {
+				const target = e.target
+				const x0 = e.clientX
+				const y0 = e.clientY
+				hold = { x0, y0, target, timer: setTimeout(() => { hold = null; begin(target, x0, y0, e.pointerId, true) }, HOLD_MS) }
+				return
+			}
+			if (begin(e.target, e.clientX, e.clientY, e.pointerId, false)) e.preventDefault()
 		})
+		// While a block is held, the finger moves it instead of scrolling
+		body.addEventListener('touchmove', (e) => { if (drag) e.preventDefault() }, { passive: false })
+		body.addEventListener('contextmenu', (e) => { if (hold || drag) e.preventDefault() })
 		body.addEventListener('pointermove', (e) => {
+			if (hold && Math.hypot(e.clientX - hold.x0, e.clientY - hold.y0) > 8) { clearTimeout(hold.timer); hold = null }
 			if (!drag) return
 			if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 4) return
 			drag.moved = true
@@ -3688,8 +3714,20 @@
 			if (col !== drag.el.parentNode) col.append(drag.el)
 			Object.assign(drag.el.style, { top: `${(start / 60) * HOUR_PX}px`, left: '1px', width: 'calc(100% - 3px)' })
 			drag.target = { col, start }
+			// Where it will land, on the block itself
+			const label = drag.el.querySelector('.imp-cv__evtime')
+			if (label) label.textContent = `${calFmt.weekday.format(dayOf(col))} ${timeValue(atMinutes(dayOf(col), start))}–${timeValue(atMinutes(dayOf(col), start + drag.dur))}`
 		})
 		const end = async (e) => {
+			if (hold) {
+				// A quick tap: a block opens; an empty hour says how to plan
+				clearTimeout(hold.timer)
+				const ev = e.type === 'pointerup' ? hold.target.closest('.imp-cv__ev') : null
+				hold = null
+				if (ev) blockSummary(ev, ev.calBlock)
+				else if (e.type === 'pointerup' && !state.calHinted) { state.calHinted = true; toast(tr('Hold an empty hour to plan a block')) }
+				return
+			}
 			if (!drag) return
 			const d = drag
 			drag = null
@@ -3763,7 +3801,8 @@
 	function calPanel(anchor, build, { label, onClose } = {}) {
 		closeCalPanel()
 		closeMenu()
-		const el = h('div', { class: 'imp-cvpanel', role: 'dialog', 'aria-label': label || '' })
+		const el = h('div', { class: `imp-cvpanel ${PHONE ? 'imp-cvpanel--sheet' : ''}`, role: 'dialog', 'aria-label': label || '' })
+		el.openedAt = Date.now()
 		el.returnFocus = anchor
 		el.onClose = onClose
 		el.addEventListener('mousedown', (e) => e.stopPropagation())
@@ -3773,7 +3812,7 @@
 		calPanelEl = el
 		calBusy = true
 		const place = () => {
-			if (!document.contains(anchor)) return
+			if (PHONE || !document.contains(anchor)) return // the phone: a sheet at the bottom
 			const r = anchor.getBoundingClientRect()
 			const w = el.offsetWidth
 			const hgt = el.offsetHeight
@@ -3793,7 +3832,8 @@
 		fill().then(() => setTimeout(() => (el.querySelector('[autofocus]') || el.querySelector('input, button'))?.focus(), 0))
 		return el
 	}
-	document.addEventListener('mousedown', () => closeCalPanel())
+	// A tap on the phone sends a mousedown after the touch: not a click outside the panel it just opened
+	document.addEventListener('mousedown', () => { if (calPanelEl && Date.now() - calPanelEl.openedAt > 500) closeCalPanel() })
 	document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && calPanelEl) { e.preventDefault(); closeCalPanel() } })
 
 	/** "This block only" or "all future blocks" for a repeating block: 'this' | 'future' | null */
@@ -4368,6 +4408,49 @@
 		return page
 	}
 
+	// --- Calendar (blocks in Blockwise): Day, 3 days, Month --------------------------------
+
+	async function phoneCalendar() {
+		if (!['day', '3days', 'month'].includes(state.calView)) state.calView = '3days'
+		await loadState()
+		const page = h('div', { class: 'imp-page imp-cv imp-pcal' })
+		if (!calendarShown() || !state.commitments.length) {
+			page.append(phoneBar(tr('Calendar'), null))
+			page.append(!state.commitments.length ? noCommitments() : h('div', { class: 'imp-empty' }, h('p', null, tr('Your blocks are in your calendar app.'))))
+			return page
+		}
+		const days = calDays()
+		const from = tsOf(days[0])
+		const to = tsOf(addDays(days[days.length - 1], 1))
+		const { blocks } = await api('GET', `blocks?from=${from}&to=${to}`)
+		state.calBlocks = blocks
+		const d = state.calDate
+		const short = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' })
+		const title = state.calView === 'month' ? calFmt.month.format(d)
+			: state.calView === 'day' ? new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'short' }).format(d)
+				: short.formatRange ? short.formatRange(days[0], days[2]) : `${short.format(days[0])} – ${short.format(days[2])}`
+		const planned = blocks.reduce((sum, b) => sum + Math.max(0, Math.min(b.end, to) - Math.max(b.start, from)), 0)
+		const isToday = days.some((x) => sameDay(x, new Date()))
+		page.append(phoneBar(title, planned ? tr('{hours} planned', { hours: fmtMin(Math.round(planned / 60)) }) : null,
+			h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('Previous'), title: tr('Previous'), onclick: () => calMove(-1) }, chevron(-1)),
+			h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('Next'), title: tr('Next'), onclick: () => calMove(1) }, chevron(1)),
+			isToday && state.calView !== 'month' ? null : h('button', { type: 'button', class: 'imp-button imp-pcal__today', onclick: () => { state.calDate = startOfDay(new Date()); state.calScroll = null; render() } }, tr('Today'))))
+		const seg = (v, label) => h('button', { type: 'button', role: 'tab', 'aria-selected': state.calView === v ? 'true' : 'false', onclick: () => calSetView(v) }, label)
+		page.append(h('div', { class: 'imp-pcal__views', role: 'tablist', 'aria-label': tr('View') }, seg('day', tr('Day')), seg('3days', tr('3 days')), seg('month', tr('Month'))))
+		page.append(state.calView === 'month' ? monthGrid(days, blocks) : timeGrid(days, blocks))
+		page.append(h('button', {
+			type: 'button',
+			class: 'imp-pcal__fab',
+			onclick: (e) => {
+				const day = state.calView === 'month' ? startOfDay(state.calDate) : (days.find((x) => sameDay(x, new Date())) || days[0])
+				const now = new Date()
+				const startMin = sameDay(day, now) ? Math.ceil((now.getHours() * 60 + now.getMinutes()) / 30) * 30 : 9 * 60
+				blockEditor(e.currentTarget, { start: atMinutes(day, startMin), end: atMinutes(day, startMin + 60) })
+			},
+		}, icon('M12 5v14M5 12h14', 22), tr('Block')))
+		return page
+	}
+
 	/** Notes (reached from a commitment's page): its notes, other commitments one tap away */
 	async function phoneNotes() {
 		const c = commitmentById(state.notesFor) || state.commitments[0]
@@ -4392,7 +4475,7 @@
 	// ---------------------------------------------------------------------------
 
 	const PAGES = PHONE
-		? { now: phoneNow, tasks: phoneTasks, notes: phoneNotes, done: phoneDone, time: phoneTime, settings: phoneSettings, commitment: phoneCommitment, calendar: pageCalendar }
+		? { now: phoneNow, tasks: phoneTasks, notes: phoneNotes, done: phoneDone, time: phoneTime, settings: phoneSettings, commitment: phoneCommitment, calendar: phoneCalendar }
 		: { now: pageNow, tasks: pageTasks, notes: pageNotes, done: pageDone, time: pageTime, settings: pageSettings, commitment: pageCommitment, calendar: pageCalendar }
 
 	function routeFromHash() {

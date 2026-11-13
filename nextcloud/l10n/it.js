@@ -3,6 +3,7 @@ OC.L10N.register(
     {
  "\"In blocks\" is the time in calendar events of the commitment; \"Tracked\" is the time you recorded with play. The CSV has one row per week and commitment.": "\"Nei blocchi\" è il tempo negli eventi del calendario dell'impegno; \"Registrato\" è il tempo registrato con play. Il CSV ha una riga per settimana e impegno.",
  "\"Planned\" is the time in calendar blocks during the days shown. Blocks coming up are on the Now page.": "\"Pianificato\" è il tempo nei blocchi del calendario nei giorni mostrati. I blocchi in arrivo sono nella pagina Adesso.",
+ "3 days": "3 giorni",
  "< 1 min": "< 1 min",
  "_%2$s: block ends in %1$s minute_::_%2$s: block ends in %1$s minutes_": ["%2$s: il blocco finisce tra %1$s minuto", "%2$s: il blocco finisce tra %1$s minuti"],
  "_%n block was not imported: here, blocks are events in your calendars._::_%n blocks were not imported: here, blocks are events in your calendars._": ["%n blocco non è stato importato: qui i blocchi sono eventi nei tuoi calendari.", "%n blocchi non sono stati importati: qui i blocchi sono eventi nei tuoi calendari."],
@@ -187,6 +188,7 @@ OC.L10N.register(
  "h/week": "h/settimana",
  "Heading": "Titolo",
  "Hide done": "Nascondi i fatti",
+ "Hold an empty hour to plan a block": "Tieni premuta un'ora libera per pianificare un blocco",
  "Hours committed": "Ore dedicate",
  "Hours per commitment": "Ore per impegno",
  "Hours per commitment: planned in blocks and tracked": "Ore per impegno: pianificate nei blocchi e registrate",
