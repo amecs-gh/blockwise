@@ -1458,3 +1458,104 @@ body.android .imp-cvpanel--sheet {
 	background: var(--md-surfaceContainerLow);
 	box-shadow: 0 -12px 40px rgba(36, 34, 58, 0.25);
 }
+
+/* Settings: other calendars as busy time */
+body.android .imp-pbusy {
+	margin: 0 0 12px;
+	padding: 6px 0 8px;
+	border-radius: 20px;
+	background: var(--md-surfaceContainerLow);
+}
+body.android .imp-pbusy__head {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 16px 8px 18px;
+}
+body.android .imp-pbusy__head > span {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+body.android .imp-pbusy__head .imp-muted {
+	font-size: 12px;
+	line-height: 1.45;
+}
+body.android .imp-pbusy__head input {
+	flex: 0 0 auto;
+	position: relative;
+	width: 52px;
+	height: 32px;
+	margin: 0;
+	appearance: none;
+	-webkit-appearance: none;
+	border: 2px solid var(--md-outline);
+	border-radius: 16px;
+	background: var(--md-surfaceContainerHighest);
+	transition: background 0.15s, border-color 0.15s;
+}
+body.android .imp-pbusy__head input::after {
+	content: '';
+	position: absolute;
+	top: 6px;
+	left: 6px;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: var(--md-outline);
+	transition: transform 0.15s, width 0.15s, height 0.15s, top 0.15s, background 0.15s;
+}
+body.android .imp-pbusy__head input:checked {
+	border-color: var(--md-primary);
+	background: var(--md-primary);
+}
+body.android .imp-pbusy__head input:checked::after {
+	top: 2px;
+	width: 24px;
+	height: 24px;
+	background: var(--md-onPrimary);
+	transform: translateX(20px);
+}
+body.android .imp-pbusy__head input:focus-visible {
+	outline: 2px solid var(--md-primary);
+	outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+	body.android .imp-pbusy__head input,
+	body.android .imp-pbusy__head input::after {
+		transition: none;
+	}
+}
+body.android .imp-pbusy__list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+body.android .imp-pbusy__list label {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 48px;
+	padding: 0 18px 0 22px;
+}
+body.android .imp-pbusy__list input {
+	flex: 0 0 auto;
+	width: 20px;
+	height: 20px;
+	margin: 0;
+}
+body.android .imp-pbusy__name {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+body.android .imp-pbusy__list .imp-muted {
+	font-size: 12px;
+}
+body.android .imp-pbusy__none {
+	margin: 0 18px 6px;
+	font-size: 12px;
+}

@@ -174,6 +174,9 @@
 		},
 		/** A new block in the commitment's calendar on the phone (DAVx5 uploads it) */
 		createEvent: (ev) => call('createEvent', ev),
+		/** Move or change one in the phone's calendar (this / future / all; `url`: another commitment's calendar) */
+		updateEvent: (series, occurrence, ch) => call('updateEvent', series, occurrence, ch),
+		deleteEvent: (series, occurrence, scope) => call('deleteEvent', series, occurrence, scope),
 	}
 
 	/** The drive's folder through the app (it holds the login); bytes as base64 over the bridge */
@@ -398,9 +401,12 @@
 		backToApp: () => call('backToApp'),
 		cancelLogin: () => call('cancelLogin'),
 		openCalendar: (ts) => call('openCalendar', typeof ts === 'number' ? ts : null),
-		/** The calendar app Blockwise opens (chosen once), and choosing another */
-		calendarApp: () => call('calendarApp'),
-		chooseCalendarApp: () => call('chooseCalendarApp'),
+		/** Your other calendars on this phone (not the commitments'), shown as grey busy time in Calendar */
+		otherCalendars: async (mine, ask) => {
+			if (ask && !(await call('calendarAccess'))) return null
+			return call('otherCalendars', (mine || []).filter((u) => typeof u === 'string'))
+		},
+		busy: (from, to, ids) => call('busy', from, to, ids),
 		onChanged: (cb) => listeners.changed.push(cb),
 		/** Waiting for Nextcloud (calendars, blocks): the page shows placeholders */
 		loading: () => asking > 0,

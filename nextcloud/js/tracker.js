@@ -3573,7 +3573,7 @@
 		return sorted
 	}
 
-	function timeGrid(days, blocks) {
+	function timeGrid(days, blocks, busy = []) {
 		const today = new Date()
 		const n = days.length
 		const head = h('div', { class: 'imp-cv__dayheads', style: { '--days': n } },
@@ -3595,6 +3595,12 @@
 				const bottom = b.end >= dayEnd ? 24 * 60 : Math.max(top + 15, minutesOf(b.end) || 24 * 60)
 				return { b, top, bottom, clipStart: b.start < dayStart, clipEnd: b.end > dayEnd }
 			})
+			// Other calendars: grey, behind the blocks, and not in the way of planning
+			const others = busy.filter((b) => b.end > dayStart && b.start < dayEnd).map((b) => {
+				const top = b.start <= dayStart ? 0 : minutesOf(b.start)
+				return { b, top, bottom: b.end >= dayEnd ? 24 * 60 : Math.max(top + 15, minutesOf(b.end) || 24 * 60) }
+			})
+			for (const x of layoutDay(others)) col.append(busyEvent(x))
 			for (const x of layoutDay(items)) col.append(calEvent(x))
 			if (sameDay(d, today)) {
 				const m = today.getHours() * 60 + today.getMinutes()
@@ -3617,6 +3623,25 @@
 		return h('div', { class: 'imp-cv__grid' }, head, scroll)
 	}
 
+	function busyEvent({ b, top, bottom, col, cols }) {
+		return h('div', {
+			class: `imp-cv__busy ${bottom - top < 40 ? 'is-short' : ''}`,
+			title: `${b.title}, ${blockTime(b)}`,
+			style: { top: `${(top / 60) * HOUR_PX}px`, height: `${((bottom - top) / 60) * HOUR_PX - 2}px`, left: `calc(${(col / cols) * 100}% + 1px)`, width: `calc(${100 / cols}% - 3px)` },
+		}, h('span', { class: 'imp-cv__busytitle' }, b.title || tr('Busy')))
+	}
+
+	/** Your other calendars' events for [from, to) when shown (Settings), else none */
+	async function busyTime(from, to) {
+		if (!desktop || !desktop.busy || localStorageGet('busyOn', '0') !== '1') return []
+		try {
+			const off = new Set(JSON.parse(localStorageGet('busyOff', '[]')))
+			const cals = (await desktop.otherCalendars(state.commitments.map((c) => c.calendarUrl).filter(Boolean), false)) || []
+			const ids = cals.map((c) => c.id).filter((id) => !off.has(id))
+			return ids.length ? ((await desktop.busy(from, to, ids)) || []) : []
+		} catch (e) { return [] }
+	}
+
 	function calEvent({ b, top, bottom, col, cols, clipEnd }) {
 		const c = commitmentById(b.commitmentId)
 		const color = c ? c.color : '#888'
@@ -3630,7 +3655,7 @@
 			style: { top: `${(top / 60) * HOUR_PX}px`, height: `${((bottom - top) / 60) * HOUR_PX - 2}px`, left: `calc(${(col / cols) * 100}% + 1px)`, width: `calc(${100 / cols}% - 3px)`, '--c': color, '--on-c': onColor(color) },
 			onkeydown: (e) => {
 				if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); blockSummary(el, b) }
-				if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteBlock(el, b) }
+				if ((e.key === 'Delete' || e.key === 'Backspace') && b.series) { e.preventDefault(); deleteBlock(el, b) }
 			},
 		},
 		// The commitment in bold; below it, the block's title and time
@@ -3654,6 +3679,8 @@
 			if (!col || !document.contains(col)) return false
 			if (ev) {
 				const b = ev.calBlock
+				// Only on the server (its calendar isn't on this phone): it opens, it doesn't move
+				if (!b.series) { if (!held) blockSummary(ev, b); return false }
 				drag = { kind: target.classList.contains('imp-cv__resize') ? 'resize' : 'move', el: ev, b, x0: x, y0: y, moved: false, col, grab: minAt(col, y) - minutesOf(b.start), dur: (b.end - b.start) / 60 }
 				if (held) ev.classList.add('is-dragging')
 			} else {
@@ -3928,8 +3955,8 @@
 						? [h('span', { class: 'imp-cvpanel__live', style: { '--c': c.color } }, h('span', { class: 'imp-dot', style: { background: c.color } }), tr('Tracking'), ' ', h('span', { 'data-live': 'elapsed', 'data-ts': state.running.start }, clock(nowTs() - state.running.start))),
 							h('button', { type: 'button', class: 'imp-button', onclick: async () => { closeCalPanel(); await stopTracking() } }, icon(ICON_STOP, 14, true), tr('Stop'))]
 						: !past ? h('button', { type: 'button', class: 'imp-button imp-button--primary', onclick: async () => { closeCalPanel(); await startTracking(c.id) } }, isNow ? tr('Start now') : tr('Start')) : null,
-					h('button', { type: 'button', class: 'imp-button', onclick: () => blockEditor(anchor, b) }, tr('Edit')),
-					h('button', { type: 'button', class: 'imp-button imp-button--danger', onclick: () => deleteBlock(anchor, b) }, tr('Delete'))),
+					b.series ? h('button', { type: 'button', class: 'imp-button', onclick: () => blockEditor(anchor, b) }, tr('Edit')) : null,
+					b.series ? h('button', { type: 'button', class: 'imp-button imp-button--danger', onclick: () => deleteBlock(anchor, b) }, tr('Delete')) : null),
 				h('h3', { class: 'imp-cvpanel__sub' }, past ? tr('This block is over') : slotIndex >= 0 ? tr('To do in this block') : tr('Open tasks')),
 				past ? h('p', { class: 'imp-muted' }, tr('Unfinished tasks stay on top for the next block.'))
 					: list.length
@@ -4033,9 +4060,8 @@
 		return h('nav', { class: 'imp-tabbar', 'aria-label': tr('Main') }, h('ul', null,
 			tab('now', tr('Now'), routeIcon('now')),
 			tab('tasks', tr('Tasks'), routeIcon('tasks')),
-			// Blocks in the phone's calendars (Nextcloud): the calendar app opens
-			calendarShown() ? tab('calendar', tr('Calendar'), ICON_CAL)
-				: desktop.openCalendar ? tab('calendar', tr('Calendar'), ICON_CAL, (e) => { e.preventDefault(); desktop.openCalendar() }) : null,
+			// The planner, wherever the blocks live (built in, or the phone's calendars)
+			calendarShown() ? tab('calendar', tr('Calendar'), ICON_CAL) : null,
 			tab('done', tr('Done'), routeIcon('done')),
 			tab('time', tr('Time'), routeIcon('time'))))
 	}
@@ -4417,13 +4443,13 @@
 		const page = h('div', { class: 'imp-page imp-cv imp-pcal' })
 		if (!calendarShown() || !state.commitments.length) {
 			page.append(phoneBar(tr('Calendar'), null))
-			page.append(!state.commitments.length ? noCommitments() : h('div', { class: 'imp-empty' }, h('p', null, tr('Your blocks are in your calendar app.'))))
+			page.append(!state.commitments.length ? noCommitments() : h('div', { class: 'imp-empty' }, h('p', null, tr('The calendar is off in Settings.'))))
 			return page
 		}
 		const days = calDays()
 		const from = tsOf(days[0])
 		const to = tsOf(addDays(days[days.length - 1], 1))
-		const { blocks } = await api('GET', `blocks?from=${from}&to=${to}`)
+		const [{ blocks }, busy] = await Promise.all([api('GET', `blocks?from=${from}&to=${to}`), state.calView === 'month' ? [] : busyTime(from, to)])
 		state.calBlocks = blocks
 		const d = state.calDate
 		const short = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' })
@@ -4438,7 +4464,7 @@
 			isToday && state.calView !== 'month' ? null : h('button', { type: 'button', class: 'imp-button imp-pcal__today', onclick: () => { state.calDate = startOfDay(new Date()); state.calScroll = null; render() } }, tr('Today'))))
 		const seg = (v, label) => h('button', { type: 'button', role: 'tab', 'aria-selected': state.calView === v ? 'true' : 'false', onclick: () => calSetView(v) }, label)
 		page.append(h('div', { class: 'imp-pcal__views', role: 'tablist', 'aria-label': tr('View') }, seg('day', tr('Day')), seg('3days', tr('3 days')), seg('month', tr('Month'))))
-		page.append(state.calView === 'month' ? monthGrid(days, blocks) : timeGrid(days, blocks))
+		page.append(state.calView === 'month' ? monthGrid(days, blocks) : timeGrid(days, blocks, busy))
 		page.append(h('button', {
 			type: 'button',
 			class: 'imp-pcal__fab',
@@ -4460,6 +4486,53 @@
 		return h('div')
 	}
 
+	/** Settings: your other calendars as grey busy time in Calendar (nothing copied, nothing synced) */
+	async function busySettings() {
+		const on = localStorageGet('busyOn', '0') === '1'
+		const box = h('section', { class: 'imp-card imp-pbusy' })
+		const sw = h('input', {
+			type: 'checkbox',
+			role: 'switch',
+			checked: on,
+			'aria-describedby': 'imp-pbusy-d',
+			onchange: async () => {
+				if (sw.checked) {
+					// The phone asks for calendar access the first time
+					const cals = await desktop.otherCalendars([], true).catch(() => null)
+					if (!cals) { sw.checked = false; toast(tr('Blockwise may not read your calendar.')); return }
+				}
+				localStorageSet('busyOn', sw.checked ? '1' : '0')
+				render()
+			},
+		})
+		box.append(h('label', { class: 'imp-pbusy__head' },
+			h('span', null, h('strong', null, tr('Show my other calendars')),
+				h('span', { class: 'imp-muted', id: 'imp-pbusy-d' }, tr('Their events appear as grey busy time in Calendar, so you plan around them. Nothing is copied or synced.'))),
+			sw))
+		if (on) {
+			const cals = (await desktop.otherCalendars(state.commitments.map((c) => c.calendarUrl).filter(Boolean), false).catch(() => [])) || []
+			let off = []
+			try { off = JSON.parse(localStorageGet('busyOff', '[]')) } catch (e) { off = [] }
+			if (!cals.length) box.append(h('p', { class: 'imp-muted imp-pbusy__none' }, tr('No other calendars on this phone.')))
+			box.append(h('ul', { class: 'imp-pbusy__list' }, cals.map((c) => h('li', null, h('label', null,
+				h('input', {
+					type: 'checkbox',
+					checked: !off.includes(c.id),
+					onchange: (e) => {
+						const now = new Set(off)
+						if (e.target.checked) now.delete(c.id)
+						else now.add(c.id)
+						off = [...now]
+						localStorageSet('busyOff', JSON.stringify(off))
+					},
+				}),
+				h('span', { class: 'imp-dot', style: { background: c.color } }),
+				h('span', { class: 'imp-pbusy__name' }, c.name),
+				h('span', { class: 'imp-muted' }, c.account))))))
+		}
+		return box
+	}
+
 	async function phoneSettings() {
 		const page = h('div', { class: 'imp-page imp-psettings' })
 		page.append(phoneBack(tr('Settings'), null))
@@ -4467,14 +4540,7 @@
 			icon(ICON_ME, 22),
 			h('span', null, h('strong', null, tr('Account and sync')), h('span', { class: 'imp-muted' }, tr('Where your data is, sync, export'))),
 			chevron(1)))
-		// Blocks in the phone's calendars: the calendar app the Calendar tab opens (chosen once)
-		if (!calendarShown() && desktop.calendarApp) {
-			const name = await desktop.calendarApp().catch(() => null)
-			page.append(h('button', { type: 'button', class: 'imp-paccount', onclick: async () => { await desktop.chooseCalendarApp(); render() } },
-				icon(ICON_CAL, 22),
-				h('span', null, h('strong', null, tr('Calendar app')), h('span', { class: 'imp-muted' }, name || tr('Asked the first time you open it'))),
-				chevron(1)))
-		}
+		if (desktop.otherCalendars && calendarShown()) page.append(await busySettings())
 		page.append(await pageSettings())
 		return page
 	}

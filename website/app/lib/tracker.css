@@ -3581,6 +3581,33 @@ button.imp-day__pill:is(:hover, :focus-visible) {
 	overflow: hidden;
 	cursor: grab;
 }
+/* Other calendars' events: grey busy time behind the blocks; taps go through to the hour */
+.imp-cv__busy {
+	position: absolute;
+	z-index: 1;
+	box-sizing: border-box;
+	padding: 4px 8px;
+	border-radius: 10px;
+	border: 1px solid rgba(128, 128, 128, 0.35);
+	background: repeating-linear-gradient(135deg, rgba(128, 128, 128, 0.16) 0 6px, rgba(128, 128, 128, 0.08) 6px 12px);
+	color: inherit;
+	opacity: 0.85;
+	font-size: 0.75em;
+	font-weight: 600;
+	line-height: 1.2;
+	overflow: hidden;
+	pointer-events: none;
+}
+.imp-cv__busy.is-short {
+	padding-top: 1px;
+	padding-bottom: 1px;
+}
+.imp-cv__busytitle {
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
 .imp-cv__ev:hover {
 	filter: brightness(1.06);
 }

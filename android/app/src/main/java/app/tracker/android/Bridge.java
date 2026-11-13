@@ -90,7 +90,7 @@ public final class Bridge {
 
     /** What only the app's window can do (dialogs, logins, permissions, other apps) */
     private static final java.util.Set<String> WINDOW_ONLY = new java.util.HashSet<>(java.util.Arrays.asList(
-            "calendarAccess", "createEvent", "login", "cancelLogin", "openCalendar", "calendarApp", "chooseCalendarApp", "account", "useLocal", "connect",
+            "calendarAccess", "createEvent", "updateEvent", "deleteEvent", "otherCalendars", "busy", "login", "cancelLogin", "openCalendar", "calendarApp", "chooseCalendarApp", "account", "useLocal", "connect",
             "backToApp", "connectDrive", "cancelDrive", "saveDrive", "saveFile", "openFile"));
     private static final int MAX_FILE = 64 * 1024 * 1024;
 
@@ -153,6 +153,20 @@ public final class Bridge {
                 break;
             case "createEvent":
                 createEvent(id, args.optJSONObject(0));
+                break;
+            case "updateEvent":
+                updateEvent(id, args);
+                break;
+            case "deleteEvent":
+                deleteEvent(id, args);
+                break;
+            case "otherCalendars": {
+                final List<String> mine = strings(args.optJSONArray(0));
+                background(id, () -> Calendars.others(ctx, mine));
+                break;
+            }
+            case "busy":
+                busy(id, args);
                 break;
             case "calendarAccess":
                 activity.askForCalendar(granted -> reply(id, data(granted)));
@@ -504,6 +518,9 @@ public final class Bridge {
         final String title = ev.optString("title", "");
         final long start = ev.optLong("start", 0);
         final long end = ev.optLong("end", 0);
+        final String repeat = ev.optString("repeat", "");
+        final Long until = ev.isNull("until") || !ev.has("until") ? null : ev.optLong("until", 0);
+        final String tz = ev.optString("tz", null);
         if (url.isEmpty() || title.length() > 255 || end <= start || end - start > 86400) {
             reply(id, error(i18n().t("Invalid request."), 0));
             return;
@@ -513,8 +530,63 @@ public final class Bridge {
                 reply(id, error(i18n().t("Blockwise may not write to your calendar."), 0));
                 return;
             }
-            background(id, () -> new JSONObject().put("uid", Calendars.create(ctx, url, title, start, end)));
+            background(id, () -> new JSONObject().put("uid", Calendars.create(ctx, url, title, start, end, repeat, until, tz)));
         });
+    }
+
+    /** [series, occurrence, changes]: a block in the phone's calendars, moved or changed */
+    private void updateEvent(String id, JSONArray args) {
+        final long series = args.optLong(0, 0);
+        final long occ = args.optLong(1, -1);
+        final JSONObject ch = args.optJSONObject(2);
+        if (series <= 0 || occ < 0 || ch == null || ch.length() > 12) {
+            reply(id, error(i18n().t("Invalid request."), 0));
+            return;
+        }
+        activity.askForCalendar(granted -> {
+            if (!granted) {
+                reply(id, error(i18n().t("Blockwise may not write to your calendar."), 0));
+                return;
+            }
+            background(id, () -> Calendars.update(ctx, series, occ, ch));
+        });
+    }
+
+    /** [series, occurrence, scope] */
+    private void deleteEvent(String id, JSONArray args) {
+        final long series = args.optLong(0, 0);
+        final long occ = args.optLong(1, -1);
+        final String scope = args.optString(2, "all");
+        if (series <= 0 || occ < 0) {
+            reply(id, error(i18n().t("Invalid request."), 0));
+            return;
+        }
+        activity.askForCalendar(granted -> {
+            if (!granted) {
+                reply(id, error(i18n().t("Blockwise may not write to your calendar."), 0));
+                return;
+            }
+            background(id, () -> Calendars.delete(ctx, series, occ, scope));
+        });
+    }
+
+    /** [from, to, calendar ids]: other calendars' events, as busy time */
+    private void busy(String id, JSONArray args) {
+        final long from = args.optLong(0, 0);
+        final long to = args.optLong(1, 0);
+        final JSONArray raw = args.optJSONArray(2);
+        if (to <= from || to - from > 50L * 86400 || raw == null || raw.length() > 200) {
+            reply(id, error(i18n().t("Invalid request."), 0));
+            return;
+        }
+        final List<Long> ids = new java.util.ArrayList<>();
+        for (int i = 0; i < raw.length(); i++) {
+            long x = raw.optLong(i, 0);
+            if (x > 0) {
+                ids.add(x);
+            }
+        }
+        background(id, () -> Calendars.busy(ctx, from, to, ids));
     }
 
     /** The answer is put into the page as data: make sure it is JSON and nothing else. */

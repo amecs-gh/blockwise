@@ -35,8 +35,9 @@
 	window.trackerBridge = {
 		api: (method, path, body) => app.api(method, path, body),
 		openCalendar: (ts) => app.openCalendar(ts),
-		calendarApp: app.calendarApp ? () => app.calendarApp() : undefined,
-		chooseCalendarApp: app.chooseCalendarApp ? () => app.chooseCalendarApp() : undefined,
+		// Other calendars on the phone, as grey busy time in the planner
+		otherCalendars: app.otherCalendars ? (mine, ask) => app.otherCalendars(mine, ask) : undefined,
+		busy: app.busy ? (from, to, ids) => app.busy(from, to, ids) : undefined,
 		onChanged: (cb) => app.onChanged(cb),
 		// Waiting for Nextcloud: placeholders where its answer goes
 		loading: app.loading ? () => app.loading() : undefined,

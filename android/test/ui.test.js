@@ -74,9 +74,30 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 			else if (channel === 'dbSave') { dev.db = args[0]; env = { data: null } }
 			else if (channel === 'snapshot') { dev.snapshot = args[0]; env = { data: null } }
 			else if (channel === 'takeResend') { env = { data: resend }; resend = false }
-			else if (channel === 'outbox' || channel === 'calendars' || channel === 'events') env = { data: [] }
-			else if (channel === 'calendarAccess') env = { data: false }
-			else if (channel === 'createEvent') env = { error: 'This commitment\'s calendar is not on this phone. Turn it on in DAVx5.', status: 0 }
+			else if (channel === 'outbox') env = { data: [] }
+			// The phone's calendars (CalendarContract through DAVx5): none, unless a test puts some there
+			else if (channel === 'calendars') env = { data: dev.phoneCals || [] }
+			else if (channel === 'events') {
+				const [from, to, urls] = args
+				env = { data: (dev.phoneEvents || []).filter((e) => urls.includes(e.url) && e.end > from && e.start < to)
+					.map((e) => ({ uid: `u${e.series}#${e.start}`, title: e.title, start: e.start, end: e.end, url: e.url, series: e.series, occurrence: e.start, repeat: '', until: null })) }
+			}
+			else if (channel === 'calendarAccess') env = { data: !!dev.phoneCals }
+			else if (channel === 'createEvent') {
+				const ev = args[0]
+				const cal = (dev.phoneCals || []).find((c) => c.url === ev.url)
+				if (!cal) env = { error: 'This commitment\'s calendar is not on this phone. Turn it on in DAVx5.', status: 0 }
+				else { const series = (dev.nextId = (dev.nextId || 100) + 1); dev.phoneEvents.push({ series, url: ev.url, title: ev.title, start: ev.start, end: ev.end, repeat: ev.repeat }); env = { data: { uid: `u${series}#${ev.start}` } } }
+			}
+			else if (channel === 'updateEvent') {
+				const [series, occ, ch] = args
+				const e = (dev.phoneEvents || []).find((x) => x.series === series && x.start === occ)
+				if (!e) env = { error: 'This block is gone. Pull to refresh.', status: 0 }
+				else { const len = e.end - e.start; Object.assign(e, { start: ch.start ?? e.start, title: ch.title ?? e.title, url: ch.url ?? e.url }); e.end = ch.end ?? e.start + len; env = { data: { ok: true, series, occurrence: e.start } } }
+			}
+			else if (channel === 'deleteEvent') { dev.phoneEvents = (dev.phoneEvents || []).filter((x) => !(x.series === args[0] && x.start === args[1])); env = { data: { ok: true } } }
+			else if (channel === 'otherCalendars') env = { data: dev.phoneCals ? [{ id: 7, name: 'Work', account: 'you@example.com', color: '#8e24aa' }] : [] }
+			else if (channel === 'busy') env = { data: args[2].includes(7) ? (dev.busyEvents || []).filter((e) => e.end > args[0] && e.start < args[1]) : [] }
 			else if (channel === 'remote') {
 				const [method, p, body] = args
 				dev.remoteCalls.push(`${method} ${p}`)
@@ -355,12 +376,12 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		await a.page.waitForTimeout(400)
 		// The form stays open (the calendar isn't on this phone) unless a sync redrew the page meanwhile
 		if (await a.page.$('.imp-newblock__actions button[type=button]')) await a.page.click('.imp-newblock__actions button[type=button]')
-		// Account (in Settings) and Calendar (a tab) reach the app
+		// Account (in Settings) reaches the app; Calendar is the planner, never another app
 		await a.page.evaluate(() => { location.hash = '#settings' })
 		await a.page.click('.imp-paccount')
 		await a.page.click('.imp-tabbar a[href="#calendar"]')
-		await a.page.waitForTimeout(300)
-		assert.ok(a.calls.includes('account') && a.calls.includes('openCalendar'), 'account/calendar calls')
+		await a.page.waitForSelector('.imp-pcal .imp-cv__grid', { timeout: 15000 })
+		assert.ok(a.calls.includes('account') && !a.calls.includes('openCalendar'), 'account in the app, the planner in Calendar')
 		assert.deepEqual(a.errors, [], 'no console errors')
 		console.log(tag, 'ok')
 		await a.ctx.close()
@@ -389,6 +410,54 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		await sl.ctx.close()
 		device.slow = 0
 		console.log(`  ✔ slow Nextcloud: the tab switched in ${switched} ms, placeholders until the answer`)
+	}
+
+	// Blocks in the phone's calendars (Nextcloud through DAVx5): the planner moves and deletes them there;
+	// other calendars show as grey busy time when turned on
+	{
+		const st = await (await fetch(`${SERVER}/index.php/apps/tracker/api/state`, { headers: { Authorization: AUTH, 'OCS-APIRequest': 'true' } })).json()
+		const linked = st.commitments.find((c) => c.calendarId)
+		const cal = linked && st.calendars.find((c) => c.id === linked.calendarId)
+		assert.ok(cal, 'a commitment with a Nextcloud calendar')
+		const path = decodeURIComponent(new URL(cal.url, SERVER).pathname)
+		const day = new Date(); day.setHours(0, 0, 0, 0)
+		const t = (h) => Math.floor(day.getTime() / 1000) + h * 3600
+		device.phoneCals = [{ url: path, name: cal.name, color: cal.color, writable: true }]
+		device.phoneEvents = [{ series: 42, url: path, title: 'On the phone', start: t(10), end: t(11) }]
+		device.busyEvents = [{ title: 'Dentist', start: t(14), end: t(15), calendar: 7 }]
+		const pc = await phone(browser, 'app.html', { hash: '#calendar' })
+		pc.page.on('dialog', (d) => d.accept())
+		await pc.page.waitForSelector('.imp-pcal .imp-cv__ev', { timeout: 15000 })
+		assert.equal(await pc.page.locator('.imp-cv__busy').count(), 0, 'no busy time until turned on')
+		// Moved by an hour: the event changes in the phone's calendar
+		const moved = await pc.page.evaluate(async (t) => {
+			const { blocks } = await window.trackerApp.api('GET', `blocks?from=${t.from}&to=${t.to}`)
+			const b = blocks.find((x) => x.title === 'On the phone')
+			return b && window.trackerApp.api('PUT', `blocks/${b.series}/${b.occurrence}`, { start: b.start + 3600, end: b.end + 3600, scope: 'all' })
+		}, { from: t(0), to: t(24) })
+		assert.ok(moved && moved.ok && device.phoneEvents[0].start === t(11), 'moved in the phone\'s calendar')
+		// Tapped: Edit and Delete, as with the built-in calendar
+		await pc.page.evaluate(() => { location.hash = '#now'; setTimeout(() => { location.hash = '#calendar' }, 50) })
+		await pc.page.waitForSelector('.imp-pcal .imp-cv__ev', { timeout: 15000 })
+		await pc.page.locator('.imp-pcal .imp-cv__ev').first().tap()
+		await pc.page.waitForSelector('.imp-cvpanel button.imp-button--danger', { timeout: 5000 })
+		await pc.page.click('.imp-cvpanel button.imp-button--danger')
+		await pc.page.waitForFunction(() => !document.querySelector('.imp-pcal .imp-cv__ev'), null, { timeout: 5000 })
+		assert.equal(device.phoneEvents.length, 0, 'deleted from the phone\'s calendar')
+		// Settings: other calendars, then Calendar shows them in grey
+		await pc.page.evaluate(() => { location.hash = '#settings' })
+		await pc.page.click('.imp-pbusy__head input')
+		await pc.page.waitForSelector('.imp-pbusy__list input:checked', { timeout: 5000 })
+		await pc.page.screenshot({ path: `${shots}/settings-busy.png` })
+		await pc.page.evaluate(() => { location.hash = '#calendar' })
+		await pc.page.waitForSelector('.imp-cv__busy', { timeout: 15000 })
+		assert.match(await pc.page.locator('.imp-cv__busy').first().innerText(), /Dentist/)
+		await pc.page.evaluate(() => document.querySelector('.imp-cv__busy').scrollIntoView({ block: 'center' }))
+		await pc.page.screenshot({ path: `${shots}/calendar-busy.png` })
+		assert.deepEqual(pc.errors, [], 'no console errors')
+		await pc.ctx.close()
+		Object.assign(device, { phoneCals: null, phoneEvents: [], busyEvents: [] })
+		console.log('  ✔ blocks in the phone\'s calendars: the planner moves and deletes them; other calendars as busy time')
 	}
 
 	console.log('offline')

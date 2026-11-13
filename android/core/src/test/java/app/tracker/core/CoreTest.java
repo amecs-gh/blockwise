@@ -145,6 +145,23 @@ public final class CoreTest {
         eq(Alerts.pomodoroPhase(T0, s, T0 + 115 * 60).kind, Alerts.Kind.LONG, "long break");
         eq(Alerts.pomodoroPhase(T0, s, T0).longAt, T0 + 115 * 60, "long break time");
 
+        // --- repeats as RRULEs (blocks in the phone's calendars) ---
+        eq(Repeat.toRrule("weekly", null), "FREQ=WEEKLY", "weekly");
+        eq(Repeat.toRrule("weekdays", null), "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR", "weekdays");
+        eq(Repeat.toRrule("biweekly", 1_800_000_000L), "FREQ=WEEKLY;INTERVAL=2;UNTIL=20270115T080000Z", "biweekly until");
+        eq(Repeat.toRrule("", null), null, "no repeat");
+        eq(Repeat.toRrule("yearly", null), null, "unknown: none");
+        eq(Repeat.fromRrule("FREQ=WEEKLY;INTERVAL=2;UNTIL=20270115T080000Z"), "biweekly", "back: biweekly");
+        eq(Repeat.fromRrule("freq=daily"), "daily", "back: lower case");
+        eq(Repeat.fromRrule("FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"), "weekdays", "back: weekdays");
+        eq(Repeat.fromRrule("FREQ=WEEKLY;BYDAY=MO,WE"), "custom", "back: other days");
+        eq(Repeat.fromRrule("FREQ=DAILY;COUNT=5"), "custom", "back: a count");
+        eq(Repeat.fromRrule(null), "", "back: none");
+        eq(Repeat.until("FREQ=WEEKLY;UNTIL=20270115T080000Z"), 1_800_000_000L, "until");
+        eq(Repeat.until("FREQ=WEEKLY;UNTIL=20270115"), 1_800_000_000L - 8 * 3600 + 86399, "until a date: the day's end");
+        eq(Repeat.withUntil("FREQ=DAILY;COUNT=9", 1_800_000_000L), "FREQ=DAILY;UNTIL=20270115T080000Z", "a new end");
+        eq(Repeat.endless("FREQ=DAILY;UNTIL=20270115T080000Z"), "FREQ=DAILY", "no end");
+
         // --- the notification's bar ---
         Alerts.Bar inBlock = Alerts.bar(dash(false, 1L, true), T0);
         eq(inBlock.start, T0 - 3600, "bar: the block's start");
