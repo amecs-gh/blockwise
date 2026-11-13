@@ -1505,12 +1505,14 @@
 		const head = h('div', { class: 'imp-tq__head' },
 			singleSub ? h('input', { type: 'checkbox', class: 'imp-tq__check', checked: singleSub.done, 'aria-label': tr('Done: {title}', { title: t.title }), onchange: (e) => setSubtaskDone(t, singleSub, e.target.checked) }) : null,
 			title,
-			singleSub ? estimateChip(singleSub.estimate, (m) => saveSubtask(t, singleSub, { estimate: m }), { id: `imp-chip-${singleSub.id}` }) : null,
-			t.carried > 0 ? h('span', { class: `imp-badge ${t.carried >= 3 ? 'is-stuck' : ''}`, title: trn('Not finished in %n earlier block', 'Not finished in %n earlier blocks', t.carried) }, tr('carried ×{n}', { n: t.carried })) : null,
-			h('span', { class: 'imp-tq__meta' },
-				singleSub
-					? null
-					: [`${doneCount}/${t.subtasks.length}`, ' · ', doneCount ? tr('{time} left', { time: fmtMin(left) }) : fmtMin(total)]),
+			// (the phone puts these on their own line under the title)
+			h('span', { class: 'imp-tq__info' },
+				singleSub ? estimateChip(singleSub.estimate, (m) => saveSubtask(t, singleSub, { estimate: m }), { id: `imp-chip-${singleSub.id}` }) : null,
+				t.carried > 0 ? h('span', { class: `imp-badge ${t.carried >= 3 ? 'is-stuck' : ''}`, title: trn('Not finished in %n earlier block', 'Not finished in %n earlier blocks', t.carried) }, tr('carried ×{n}', { n: t.carried })) : null,
+				h('span', { class: 'imp-tq__meta' },
+					singleSub
+						? null
+						: [`${doneCount}/${t.subtasks.length}`, ' · ', doneCount ? tr('{time} left', { time: fmtMin(left) }) : fmtMin(total)])),
 			h('span', { class: 'imp-tq__actions' },
 				h('button', { type: 'button', class: 'imp-icon-btn', onclick: () => { state.addingTo = t.id; render() }, 'aria-label': tr('Add subtask to {title}', { title: t.title }), title: tr('Add subtask') }, '+'),
 				h('button', { type: 'button', class: 'imp-icon-btn', onclick: () => moveTask(tasks, c, index, -1), disabled: index === 0, 'aria-label': tr('Move up'), title: tr('Move up (Alt+↑)') }, '↑'),
@@ -3490,24 +3492,32 @@
 	}
 	/** Phone: a sideways swipe on the planner goes to the next or previous days (or month) */
 	function calSwipe(el) {
+		swipeSides(el, (dir) => { state.calSlide = dir; calMove(dir) }, () => !calBusy)
+	}
+
+	/**
+	 * Phone: a quick sideways swipe on `el` calls go(+1) (to the left: next) or go(-1).
+	 * Not while `free()` says no (a block being moved), nor from a text field.
+	 */
+	function swipeSides(el, go, free = () => true) {
 		let s = null
 		el.addEventListener('pointerdown', (e) => {
-			s = e.pointerType === 'mouse' || !e.isPrimary ? null : { x: e.clientX, y: e.clientY, id: e.pointerId, t: Date.now(), drag: false }
+			const typing = e.target.closest && e.target.closest('input[type=text], textarea, [contenteditable="true"], .imp-ned')
+			s = e.pointerType === 'mouse' || !e.isPrimary || typing ? null : { x: e.clientX, y: e.clientY, id: e.pointerId, t: Date.now(), drag: false }
 			calTouching = !!s
 		}, true)
-		el.addEventListener('pointermove', (e) => { if (s && calBusy) s.drag = true }, true)
+		el.addEventListener('pointermove', (e) => { if (s && !free()) s.drag = true }, true)
 		el.addEventListener('pointerup', (e) => {
 			if (!s || s.id !== e.pointerId) return
 			calTouching = false
 			const dx = e.clientX - s.x
 			const dy = e.clientY - s.y
 			// Not while a block is held or moved: then the finger carries the block
-			const swipe = !s.drag && !calBusy && Math.abs(dx) > 56 && Math.abs(dx) > 2 * Math.abs(dy) && Date.now() - s.t < 900
+			const swipe = !s.drag && free() && Math.abs(dx) > 56 && Math.abs(dx) > 2 * Math.abs(dy) && Date.now() - s.t < 900
 			s = null
 			if (!swipe) return
 			e.stopPropagation()
-			state.calSlide = dx < 0 ? 1 : -1
-			calMove(dx < 0 ? 1 : -1)
+			go(dx < 0 ? 1 : -1)
 		}, true)
 		el.addEventListener('pointercancel', () => { s = null; calTouching = false }, true)
 	}
@@ -4142,13 +4152,21 @@
 
 	/** Commitments as chips to pick one (Tasks) */
 	function commitmentChips(current, onPick) {
-		return hscroll(h('div', { class: 'imp-pchips', role: 'tablist', 'aria-label': tr('Commitments') }, state.commitments.map((x) => h('button', {
+		const row = hscroll(h('div', { class: 'imp-pchips', role: 'tablist', 'aria-label': tr('Commitments') }, state.commitments.map((x) => h('button', {
 			type: 'button',
 			role: 'tab',
 			class: 'imp-pchip',
 			'aria-selected': x.id === current ? 'true' : 'false',
 			onclick: () => onPick(x),
 		}, h('span', { class: 'imp-dot', style: { background: x.color } }), x.name))))
+		// The chosen one in view (after a swipe it may be off to the side)
+		requestAnimationFrame(() => {
+			const on = row.querySelector('[aria-selected="true"]')
+			if (!on || !row.isConnected) return
+			const left = on.offsetLeft - (row.clientWidth - on.offsetWidth) / 2
+			row.scrollLeft = Math.max(0, left)
+		})
+		return row
 	}
 
 	const noCommitments = () => h('div', { class: 'imp-empty' },
@@ -4271,8 +4289,20 @@
 			api('GET', `tasks?commitmentId=${c.id}&status=open`),
 			api('GET', `blocks?from=${now - 86400}&to=${now + 14 * 86400}`).catch(() => ({ blocks: [] })),
 		])
-		page.append(commitmentChips(c.id, (x) => { state.tasksFor = x.id; state.composer = null; render() }))
-		page.append(taskColumn(c, tasks, blockData.blocks, now))
+		const pick = (x) => { state.tasksFor = x.id; state.composer = null; render() }
+		page.append(commitmentChips(c.id, pick))
+		const col = taskColumn(c, tasks, blockData.blocks, now)
+		// Swipe sideways for the next or previous commitment (the chips follow)
+		if (state.tasksSlide) { col.classList.add(state.tasksSlide > 0 ? 'imp-pslide--next' : 'imp-pslide--prev'); state.tasksSlide = 0 }
+		swipeSides(col, (dir) => {
+			const list = state.commitments
+			const i = list.findIndex((x) => x.id === c.id)
+			const next = list[(i + dir + list.length) % list.length]
+			if (!next || next.id === c.id) return
+			state.tasksSlide = dir
+			pick(next)
+		}, () => !document.querySelector('.imp-menu, .imp-ned'))
+		page.append(col)
 		return page
 	}
 
@@ -4501,8 +4531,9 @@
 		const isToday = days.some((x) => sameDay(x, new Date()))
 		// Always a second line: the grid mustn't jump when the blocks arrive
 		page.append(phoneBar(title, planned ? tr('{hours} planned', { hours: fmtMin(Math.round(planned / 60)) }) : tr('Nothing planned yet.'),
-			h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('Previous'), title: tr('Previous'), onclick: () => calMove(-1) }, chevron(-1)),
-			h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('Next'), title: tr('Next'), onclick: () => calMove(1) }, chevron(1)),
+			// Swipe sideways for other days (no arrows; these two only for screen readers and keyboards)
+			h('button', { type: 'button', class: 'imp-sr', onclick: () => calMove(-1) }, tr('Previous')),
+			h('button', { type: 'button', class: 'imp-sr', onclick: () => calMove(1) }, tr('Next')),
 			isToday && state.calView !== 'month' ? null : h('button', { type: 'button', class: 'imp-button imp-pcal__today', onclick: () => { state.calDate = startOfDay(new Date()); state.calScroll = null; render() } }, tr('Today'))))
 		const seg = (v, label) => h('button', { type: 'button', role: 'tab', 'aria-selected': state.calView === v ? 'true' : 'false', onclick: () => calSetView(v) }, label)
 		page.append(h('div', { class: 'imp-pcal__views', role: 'tablist', 'aria-label': tr('View') }, seg('day', tr('Day')), seg('3days', tr('3 days')), seg('month', tr('Month'))))
@@ -4638,7 +4669,8 @@
 		}
 		await render()
 		ready()
-		window.addEventListener('hashchange', () => { routeFromHash(); state.offset = 0; render() })
+		// (a planner sheet left open doesn't follow to another page)
+		window.addEventListener('hashchange', () => { if (calPanelEl) closeCalPanel(); routeFromHash(); state.offset = 0; render() })
 		if (desktop && desktop.onChanged) {
 			// Not while something is being typed or a form, editor or menu is open (it would be lost):
 			// the next page shown reads the new data anyway

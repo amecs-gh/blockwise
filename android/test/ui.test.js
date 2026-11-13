@@ -498,12 +498,25 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		const first = await heading()
 		await swipeTo(-200, (t) => document.querySelector('.imp-pcal .imp-pbar h1')?.innerText !== t)
 		await swipeTo(200, (t) => document.querySelector('.imp-pcal .imp-pbar h1')?.innerText === t)
+		// No arrows; away from today, Today appears and the title stays on one line
+		assert.equal(await pc.page.locator('.imp-pcal .imp-pbar .imp-icon-btn').count(), 0, 'no arrows')
+		for (const v of [2, 0, 1]) {
+			await pc.page.click(`.imp-pcal__views button >> nth=${v}`)
+			await pc.page.waitForSelector('.imp-pcal .imp-pbar')
+			await pc.page.evaluate(() => { for (let i = 0; i < 3; i++) document.querySelectorAll('.imp-pbar .imp-sr')[1].click() })
+			await pc.page.waitForSelector('.imp-pcal__today', { timeout: 5000 })
+			await pc.page.waitForTimeout(400)
+			const t = await pc.page.evaluate(() => { const h1 = document.querySelector('.imp-pcal .imp-pbar h1'); return { h: h1.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(h1).lineHeight), text: h1.innerText } })
+			assert.ok(t.h < t.lh * 1.5, `one line: ${t.text} (${t.h}px)`)
+			await pc.page.click('.imp-pcal__today')
+		}
+		await pc.page.screenshot({ path: `${shots}/calendar-header.png` })
 		// Month: the numbers don't move when the blocks arrive (the second line is always there)
 		await pc.page.click('.imp-pcal__views button >> nth=2')
 		await pc.page.waitForSelector('.imp-cv__month')
 		const tops = await pc.page.evaluate(() => new Promise((res) => {
 			const seen = new Set(); const t0 = performance.now()
-			document.querySelector('.imp-pbar button[aria-label="Next"]').click()
+			document.querySelectorAll('.imp-pbar .imp-sr')[1].click()
 			const f = () => { const n = document.querySelectorAll('.imp-cv__mnum')[14]; if (n) seen.add(Math.round(n.getBoundingClientRect().top)); if (performance.now() - t0 < 3000) requestAnimationFrame(f); else res([...seen]) }
 			f()
 		}))
@@ -520,6 +533,22 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		assert.ok(sheet.bottom <= sheet.h + 1 && sheet.top >= 0 && sheet.field <= sheet.h, `the sheet fits above the keyboard (${JSON.stringify(sheet)})`)
 		await pc.page.screenshot({ path: `${shots}/newblock-keyboard.png` })
 		await pc.page.setViewportSize({ width: 393, height: 852 })
+		// Tasks: a sideways swipe goes to the next commitment, and back
+		await pc.page.evaluate(() => { location.hash = '#tasks' })
+		await pc.page.waitForSelector('.imp-ptasks .imp-tcol', { timeout: 15000 })
+		const chosen = () => pc.page.evaluate(() => document.querySelector('.imp-pchip[aria-selected="true"]')?.innerText)
+		const firstChip = await chosen()
+		const swipeTasks = async (dx, ok) => {
+			for (let i = 0; i < 3; i++) {
+				await pc.page.waitForSelector('.imp-updating[hidden]', { state: 'attached', timeout: 15000 }).catch(() => {})
+				await swipe(dx)
+				if (await pc.page.waitForFunction(ok, firstChip, { timeout: 5000 }).catch(() => null)) return
+			}
+			assert.fail(`tasks swiped ${dx}`)
+		}
+		await swipeTasks(-200, (t) => document.querySelector('.imp-pchip[aria-selected="true"]')?.innerText !== t)
+		await swipeTasks(200, (t) => document.querySelector('.imp-pchip[aria-selected="true"]')?.innerText === t)
+		assert.equal(await chosen(), firstChip)
 		assert.deepEqual(pc.errors, [], 'no console errors')
 		await pc.ctx.close()
 		Object.assign(device, { phoneCals: null, phoneEvents: [], busyEvents: [] })

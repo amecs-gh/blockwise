@@ -386,8 +386,13 @@ html.m3-dark #tracker-app {
 	gap: 10px;
 	padding: 3px 0;
 }
+/* (its own line under the title on the phone; inline here) */
+.imp-tq__info {
+	display: contents;
+}
 .imp-tcol .imp-tq__sub .imp-chip,
-.imp-tcol .imp-tq__head > .imp-chip {
+.imp-tcol .imp-tq__head > .imp-chip,
+.imp-tcol .imp-tq__info > .imp-chip {
 	margin-left: auto !important;
 }
 #tracker-app .imp-tcol .imp-tq__sub .imp-tq__del {
@@ -4253,4 +4258,24 @@ body.theme--dark .imp-sk {
 	.imp-updating__spin {
 		animation-duration: 2.4s;
 	}
+}
+
+/* Only for screen readers (e.g. the phone planner's previous/next: others swipe) */
+.imp-sr {
+	position: absolute !important;
+	width: 1px !important;
+	height: 1px !important;
+	margin: -1px !important;
+	padding: 0 !important;
+	overflow: hidden !important;
+	clip: rect(0 0 0 0) !important;
+	white-space: nowrap !important;
+	border: 0 !important;
+}
+.imp-sr:focus-visible {
+	position: static !important;
+	width: auto !important;
+	height: auto !important;
+	margin: 0 !important;
+	clip: auto !important;
 }
