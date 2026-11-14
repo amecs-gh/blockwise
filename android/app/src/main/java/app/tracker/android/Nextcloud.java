@@ -26,6 +26,7 @@ import app.tracker.core.ServerUrl;
 final class Nextcloud {
     static final String USER_AGENT = "Blockwise for Android";
     private static final int TIMEOUT_MS = 20000;
+    private static final int CONNECT_TIMEOUT_MS = 8000;
     private static final int MAX_BODY = 8 * 1024 * 1024;
 
     static final class ApiException extends Exception {
@@ -70,7 +71,8 @@ final class Nextcloud {
         try {
             c.setInstanceFollowRedirects(false);
             c.setUseCaches(false);
-            c.setConnectTimeout(TIMEOUT_MS);
+            // A server that's down is noticed quickly (the app works on the phone meanwhile)
+            c.setConnectTimeout(CONNECT_TIMEOUT_MS);
             c.setReadTimeout(TIMEOUT_MS);
             c.setRequestMethod(method);
             c.setRequestProperty("User-Agent", USER_AGENT);

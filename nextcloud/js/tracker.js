@@ -4722,14 +4722,32 @@
 		}
 		// Waiting for Nextcloud: a small "Updating" label (only if it takes a moment)
 		if (desktop && desktop.onLoading) {
-			const pill = h('div', { class: 'imp-updating', role: 'status', hidden: true },
-				h('span', { class: 'imp-updating__spin', 'aria-hidden': 'true' }), tr('Updating from Nextcloud'))
+			const label = h('span', { class: 'imp-updating__text' }, tr('Updating from Nextcloud'))
+			const spin = h('span', { class: 'imp-updating__spin', 'aria-hidden': 'true' })
+			const pill = h('div', { class: 'imp-updating', role: 'status', hidden: true }, spin, label)
 			document.body.append(pill)
 			let t = null
+			let offlineUntil = 0
 			desktop.onLoading((on) => {
+				if (Date.now() < offlineUntil) return
 				clearTimeout(t)
 				if (on) t = setTimeout(() => { pill.hidden = false }, 400)
 				else pill.hidden = true
+			})
+			// Nextcloud down or out of reach: everything keeps working here and syncs later
+			if (desktop.onOffline) desktop.onOffline(() => {
+				clearTimeout(t)
+				offlineUntil = Date.now() + 6000
+				pill.classList.add('is-offline')
+				spin.hidden = true
+				label.textContent = tr('Nextcloud is unreachable. Saved on this phone; it syncs when it\'s back.')
+				pill.hidden = false
+				t = setTimeout(() => {
+					pill.hidden = true
+					pill.classList.remove('is-offline')
+					spin.hidden = false
+					label.textContent = tr('Updating from Nextcloud')
+				}, 6000)
 			})
 		}
 		setInterval(tick, 1000)

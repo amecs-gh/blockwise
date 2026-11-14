@@ -42,6 +42,7 @@
 		// Waiting for Nextcloud: placeholders where its answer goes
 		loading: app.loading ? () => app.loading() : undefined,
 		onLoading: app.onLoading ? (cb) => app.onLoading(cb) : undefined,
+		onOffline: app.onOffline ? (cb) => app.onOffline(cb) : undefined,
 		// The phone and the web app have an account sheet; the Mac app uses its menu bar menu
 		account: app.account ? () => app.account() : undefined,
 		phone: !!app.phone,

@@ -115,7 +115,8 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 				dev.remoteCalls.push(`${method} ${p}`)
 				if (mode === 'local') throw new Error('no server on this phone only')
 				if (!(method === 'GET' ? GUARD.test(p) : method === 'POST' && p === 'sync')) throw new Error('refused by ApiGuard: ' + method + ' ' + p)
-				if (dev.offline) throw new Error('offline')
+				// (a server that's down: no answer for a while, then the connection fails)
+				if (dev.offline) { if (dev.downDelay) await new Promise((r) => setTimeout(r, dev.downDelay)); throw new Error('offline') }
 				if (dev.slow) await new Promise((r) => setTimeout(r, dev.slow))
 				const r = await fetch(`${SERVER}/index.php/apps/tracker/api/${p}`, { method, headers: { Authorization: AUTH, 'OCS-APIRequest': 'true', 'Content-Type': 'application/json' }, body: body === null ? undefined : JSON.stringify(body) })
 				const d = await r.json().catch(() => null)
@@ -429,6 +430,13 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		await sl.page.evaluate(() => { location.hash = '#now' })
 		await sl.page.waitForSelector('.imp-pnow .imp-ptoday', { timeout: 5000 })
 		await sl.page.waitForFunction(() => !document.querySelector('.imp-ptoday [aria-busy]'), null, { timeout: 15000 })
+		// Then quiet: pages that reach "now" don't ask Nextcloud again every second
+		await sl.page.waitForSelector('.imp-updating[hidden]', { state: 'attached', timeout: 15000 })
+		await sl.page.waitForTimeout(3000)
+		const asksFrom = device.remoteCalls.filter((c) => /blocks|state/.test(c)).length
+		await sl.page.waitForTimeout(8000)
+		const asks = device.remoteCalls.filter((c) => /blocks|state/.test(c)).length - asksFrom
+		assert.ok(asks <= 1, `no request storm (${asks} block requests in 8 s)`)
 		assert.deepEqual(sl.errors, [], 'no console errors')
 		await sl.ctx.close()
 		device.slow = 0
@@ -614,6 +622,10 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 	device.offline = true
 	const o = await phone(browser, 'app.html', { hash: '#tasks' })
 	await o.page.waitForSelector('.imp-ptasks .imp-tcol', { timeout: 15000 })
+	// Said once: Nextcloud can't be reached, the changes stay on the phone
+	await o.page.waitForSelector('.imp-updating.is-offline:not([hidden])', { timeout: 15000 })
+	assert.match(await o.page.locator('.imp-updating').innerText(), /unreachable/i)
+	await o.page.screenshot({ path: `${shots}/offline-note.png` })
 	const before = JSON.parse(device.db)
 	const pendingBefore = Object.keys(before.dirty).length
 	// a task added offline, in the composer at the bottom
@@ -626,9 +638,22 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 	assert.equal(added.estimate, 20)
 	await o.page.waitForTimeout(600)
 	assert.ok(Object.keys(JSON.parse(device.db).dirty).length > pendingBefore, 'change saved on the phone, waiting to sync')
+	// Every tab opens at once from the phone's data while the server doesn't answer (slowly)
+	device.downDelay = 3000
+	await o.page.evaluate(() => { location.hash = '#now' })
+	await o.page.waitForSelector('.imp-pnow .imp-timer', { timeout: 8000 })
+	for (const [hash, sel] of [['#progress', '.imp-pprogress .imp-pdays'], ['#calendar', '.imp-pcal .imp-cv__grid'], ['#tasks', '.imp-ptasks .imp-tcol'], ['#now', '.imp-pnow .imp-timer']]) {
+		const t0 = Date.now()
+		await o.page.evaluate((h) => { location.hash = h }, hash)
+		await o.page.waitForSelector(sel, { timeout: 8000 })
+		const ms = Date.now() - t0
+		assert.ok(ms < 1500, `${hash} opened in ${ms} ms with Nextcloud down`)
+	}
+	// the skeleton sits below the status bar
+	device.downDelay = 0
 	assert.deepEqual(o.errors.filter((e) => !/offline/.test(e)), [], 'no console errors offline')
 	await o.ctx.close()
-	console.log('  ✔ works offline from the phone\'s data')
+	console.log('  ✔ works offline from the phone\'s data; with Nextcloud down every tab opens at once')
 
 	device.offline = false
 	const back = await phone(browser, 'app.html', { hash: '#tasks' })

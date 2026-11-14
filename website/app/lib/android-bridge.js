@@ -19,7 +19,7 @@
 	// In the background sync (sync.html): no watching, no prompts, no timers
 	const background = window.__trackerBackground === true
 	const pending = new Map()
-	const listeners = { state: [], changed: [], loading: [] }
+	const listeners = { state: [], changed: [], loading: [], offline: [] }
 	let next = 1
 
 	function call(channel, ...args) {
@@ -107,36 +107,92 @@
 	// The server's calendars and blocks, kept from the last answer: a page never waits for
 	// Nextcloud (it can be slow). What is missing or old is asked for in the background; the
 	// page shows placeholders meanwhile (loading()) and is drawn again when the answer comes.
+	// Kept on the phone too (last known), so a restart while Nextcloud is down still shows them.
 	let serverCals = null
 	let serverCalsAt = 0
 	let serverCalsAsk = null
+	let serverTried = false // asked once this run (answered or not): never wait for it again
 	const serverBlocks = new Map() // "from-to" -> {at, list}
 	const blockAsks = new Map()
 	const FRESH = 120000
+	const KEEP = 'serverCalendarCache'
+	try {
+		const kept = JSON.parse(localStorage.getItem(KEEP) || 'null')
+		if (kept && Array.isArray(kept.cals)) {
+			serverCals = kept.cals
+			// (as old: asked again soon, shown meanwhile)
+			for (const [k, list] of kept.blocks || []) if (Array.isArray(list)) serverBlocks.set(k, { at: 0, list })
+		}
+	} catch (e) { /* none kept */ }
+	let keepTimer = null
+	function keepSoon() {
+		clearTimeout(keepTimer)
+		keepTimer = setTimeout(() => {
+			try { localStorage.setItem(KEEP, JSON.stringify({ cals: serverCals || [], blocks: [...serverBlocks].slice(-12).map(([k, v]) => [k, v.list]) })) } catch (e) { /* full: next time */ }
+		}, 1000)
+	}
 	let asking = 0
 	const asked = (d) => { asking += d; fire('loading', asking > 0) }
+	// Nextcloud didn't answer: say once that the app carries on with what's on the phone
+	let offlineSaid = 0
+	let offlineNow = false
+	const unreachable = () => {
+		offlineNow = true
+		if (Date.now() - offlineSaid < 10 * 60000) return
+		offlineSaid = Date.now()
+		fire('offline', true)
+	}
 	function askServerCalendars() {
 		if (serverCalsAsk) return serverCalsAsk
 		asked(1)
+		serverTried = true
 		serverCalsAsk = remote('GET', 'state').then((st) => {
 			const next = (st.calendars || []).map((c) => ({ id: c.id, url: c.url, name: c.name, color: c.color }))
 			const changed = serverCals !== null && JSON.stringify(next) !== JSON.stringify(serverCals)
 			serverCals = next
 			serverCalsAt = Date.now()
+			offlineSaid = 0
+			offlineNow = false
+			keepSoon()
 			if (changed) fire('changed')
-		}).catch(() => { /* offline */ }).finally(() => { serverCalsAsk = null; asked(-1) })
+		}).catch(() => {
+			// Down or unreachable: try again in a minute, not on every page
+			serverCalsAt = Date.now() - FRESH + 60000
+			unreachable()
+		}).finally(() => { serverCalsAsk = null; asked(-1) })
 		return serverCalsAsk
 	}
+	// Ranges on a 6-hour grid: a range ending "now" stays the same request (and the same answer)
+	// instead of a new one every second
+	const GRID = 6 * 3600
+	const gridKey = (from, to) => `${Math.floor(from / GRID) * GRID}-${Math.ceil(to / GRID) * GRID}`
+	/** The last known answer covering [from, to), if any */
+	function knownBlocks(from, to) {
+		const exact = serverBlocks.get(gridKey(from, to))
+		if (exact) return exact
+		for (const [k, v] of serverBlocks) {
+			const [a, b] = k.split('-').map(Number)
+			if (a <= from && b >= to) return v
+		}
+		return null
+	}
 	function askServerBlocks(from, to) {
-		const key = `${Math.floor(from)}-${Math.ceil(to)}`
+		const key = gridKey(from, to)
+		const [gFrom, gTo] = key.split('-').map(Number)
 		if (blockAsks.has(key)) return blockAsks.get(key)
 		asked(1)
-		const p = remote('GET', `blocks?from=${Math.floor(from)}&to=${Math.ceil(to)}`).then(({ blocks }) => {
+		const p = remote('GET', `blocks?from=${gFrom}&to=${gTo}`).then(({ blocks }) => {
 			const before = serverBlocks.get(key)
 			serverBlocks.set(key, { at: Date.now(), list: blocks || [] })
 			if (serverBlocks.size > 40) serverBlocks.delete(serverBlocks.keys().next().value)
+			keepSoon()
 			if (!before || JSON.stringify(before.list) !== JSON.stringify(blocks || [])) fire('changed')
-		}).catch(() => { /* offline */ }).finally(() => { blockAsks.delete(key); asked(-1) })
+		}).catch(() => {
+			// Offline: keep what's known, ask again in a minute
+			const before = serverBlocks.get(key)
+			serverBlocks.set(key, { at: Date.now() - FRESH + 60000, list: before ? before.list : [], failed: true })
+			unreachable()
+		}).finally(() => { blockAsks.delete(key); asked(-1) })
 		blockAsks.set(key, p)
 		return p
 	}
@@ -145,8 +201,9 @@
 		async calendars() {
 			phoneCals = (await call('calendars').catch(() => [])) || []
 			// Nothing known yet and nothing on the phone either (first start): wait for the server, briefly
-			if (serverCals === null && !phoneCals.length) await Promise.race([askServerCalendars(), new Promise((r) => setTimeout(r, 4000))])
-			else if (serverCals === null) askServerCalendars()
+			// (only on the very first start, and only once: never again while Nextcloud is down)
+			if (serverCals === null && !phoneCals.length && !serverTried) await Promise.race([askServerCalendars(), new Promise((r) => setTimeout(r, 4000))])
+			// (old, or never answered: asked again, but after a failure only once a minute)
 			else if (Date.now() - serverCalsAt > FRESH) askServerCalendars()
 			const out = phoneCals.map((c) => ({ url: serverForm(c.url), name: c.name, color: c.color })).filter((c) => c.url)
 			for (const c of serverCals || []) if (!out.some((p) => samePath(p.url, c.url))) out.push({ url: c.url, name: c.name, color: c.color })
@@ -159,10 +216,11 @@
 			let incomplete = false
 			const out = onPhone.length ? ((await call('events', from, to, onPhone).catch(() => { incomplete = true; return [] })) || []) : []
 			if (rest.length) {
-				const known = serverBlocks.get(`${Math.floor(from)}-${Math.ceil(to)}`)
+				const known = knownBlocks(from, to)
 				if (!known || Date.now() - known.at > FRESH) askServerBlocks(from, to)
-				if (!known || !serverCals) incomplete = true
+				if (!known || !serverCals || known.failed) incomplete = true
 				for (const b of (known && known.list) || []) {
+					if (!(b.end > from && b.start < to)) continue
 					const cal = (serverCals || []).find((c) => c.id === b.calendarId)
 					const url = cal && rest.find((u) => samePath(u, cal.url))
 					if (url) out.push({ uid: b.uid, title: b.title, start: b.start, end: b.end, url })
@@ -325,7 +383,10 @@
 					try { window.OC.Notification.showTemporary(msg, { type: 'error' }) } catch (x) { /* no page */ }
 					always = true
 				}
-			} catch (err) { /* offline: the changes wait */ }
+			} catch (err) {
+				// Offline or the server is down: the changes wait on the phone
+				if (mode === 'nextcloud') unreachable()
+			}
 			snapshotSoon()
 			if (always || pulled) fire('changed')
 		})().finally(() => { syncing = null })
@@ -338,7 +399,8 @@
 			firstSync = engine().then((e) => {
 				if (mode === 'local') { snapshotSoon(); return }
 				if (e.lastSync()) { syncSoon(500); return }
-				return Promise.race([syncNow(false), new Promise((r) => setTimeout(r, 20000))])
+				// The very first sync on this phone (nothing to show before it): at most 12 s
+				return Promise.race([syncNow(false), new Promise((r) => setTimeout(r, 12000))])
 			}).catch(() => {})
 		}
 		return firstSync
@@ -411,6 +473,12 @@
 		/** Waiting for Nextcloud (calendars, blocks): the page shows placeholders */
 		loading: () => asking > 0,
 		onLoading: (cb) => listeners.loading.push(cb),
+		/** Nextcloud didn't answer (said at most every 10 minutes) */
+		onOffline: (cb) => {
+			listeners.offline.push(cb)
+			// (said before the page listened: say it now)
+			if (offlineNow) setTimeout(() => cb(true), 0)
+		},
 		account: () => call('account'),
 		// The phone's file picker (the web app, a page in a browser, downloads instead)
 		saveFile: window.__trackerWeb ? undefined : (name, text) => call('saveFile', name, text),

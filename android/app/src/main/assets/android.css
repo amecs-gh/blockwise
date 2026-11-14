@@ -1925,3 +1925,23 @@ body.android .imp-updating {
 body.android:has(.imp-mini) .imp-updating {
 	bottom: calc(var(--navbar) + var(--inset-bottom) + 76px);
 }
+
+/* The pill: one line; the offline note may wrap, centred, within the screen */
+body.android .imp-updating {
+	max-width: calc(100vw - 32px - var(--inset-left) - var(--inset-right));
+	white-space: nowrap;
+}
+body.android .imp-updating.is-offline {
+	height: auto;
+	min-height: 32px;
+	padding: 8px 16px;
+	border-radius: 18px;
+	white-space: normal;
+	text-align: center;
+	width: max-content;
+}
+
+/* The placeholder page while a tab loads: below the status bar, like the page it stands for */
+body.android .imp-skpage {
+	padding-top: calc(var(--inset-top) + 18px);
+}

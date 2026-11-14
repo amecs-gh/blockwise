@@ -263,6 +263,7 @@ OC.L10N.register(
  "Next day": "Giorno successivo",
  "Next month": "Mese successivo",
  "Next week": "Settimana successiva",
+ "Nextcloud is unreachable. Saved on this phone; it syncs when it's back.": "Nextcloud non è raggiungibile. Salvato su questo telefono; si sincronizza quando torna.",
  "no block in the next 2 weeks": "nessun blocco nelle prossime 2 settimane",
  "No block in the next two weeks. Add an event to the \"{name}\" calendar.": "Nessun blocco nelle prossime due settimane. Aggiungi un evento al calendario \"{name}\".",
  "No block planned": "Nessun blocco pianificato",
