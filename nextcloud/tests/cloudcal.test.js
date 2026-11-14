@@ -31,7 +31,7 @@ const T = (d, h) => day0 + d * 86400 + h * 3600
 	let cc = make()
 	const thesis = await cc.createCalendar({ name: 'Thesis', color: '#c2255c' })
 	const work = await cc.createCalendar({ name: 'Work', color: '#3b6fd8' })
-	assert.match(thesis, /^gcal:cal\d+@group\.calendar\.google\.com$/)
+	assert.match(thesis, /^gcal:[a-z]*cal\d+@group\.calendar\.google\.com$/)
 	assert.equal(g.cals.get(cc.calOf(thesis)).color, '#c2255c', 'the calendar in the commitment\'s color')
 	console.log('  ✔ a calendar per commitment')
 

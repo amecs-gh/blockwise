@@ -521,8 +521,14 @@
 
 		const routes = [
 			// Backup: every record as sync sends it, with its clocks (js/tracker.js makes the file)
-			['GET', /^backup$/, async () => ({ records: backupRecords() })],
-			['POST', /^backup$/, async (m, q, body) => restoreRecords(body.records)],
+			// With a calendar app (Nextcloud, Google, the phone's or the Mac's), the blocks come along from there
+			['GET', /^backup$/, async () => ({ records: builtin ? backupRecords() : backupRecords().concat(await calendarBlockRecords()) })],
+			['POST', /^backup$/, async (m, q, body) => {
+				if (builtin) return restoreRecords(body.records)
+				const list = Array.isArray(body.records) ? body.records : []
+				const r = restoreRecords(list.filter((x) => !x || x.type !== 'block'), { keepCalendars: true })
+				return { ...r, ...(await importIntoCalendars(list.filter((x) => x && x.type === 'block' && !x.deleted), list)) }
+			}],
 			['GET', /^state$/, async () => {
 				await refreshCalendars()
 				const list = commitments()
@@ -534,7 +540,7 @@
 					running: running(),
 					longBreakUntil: longBreakUntil(),
 					now: now(),
-					features: { createBlocks: typeof o.calendar.createEvent === 'function', calendars: o.calendar.kind !== 'none', builtinCalendar: builtin, deleteCalendar: !builtin && typeof o.calendar.deleteCalendar === 'function' ? (o.calendar.kind === 'nextcloud' ? 'trash' : 'permanent') : null, calendarView: builtin || typeof o.calendar.updateEvent === 'function', calendarHome: calendarHome(), calendarKind: o.calendar.kind || null },
+					features: { createBlocks: typeof o.calendar.createEvent === 'function', calendars: o.calendar.kind !== 'none', builtinCalendar: builtin, deleteCalendar: !builtin && typeof o.calendar.deleteCalendar === 'function' ? (o.calendar.kind === 'nextcloud' ? 'trash' : 'permanent') : null, calendarView: builtin || typeof o.calendar.updateEvent === 'function', calendarHome: calendarHome(), calendarKind: o.calendar.kind || null, blocksInBackup: true },
 					sync: { pending: pendingCount(), lastSync: db.lastSync, server: !!o.remote, refused: db.refused || null },
 				}
 			}],
@@ -1263,7 +1269,122 @@
 		 * wins, deleted stays deleted) and kept as changes to send, so the backup
 		 * reaches your other devices too. A backup never deletes anything.
 		 */
-		const restoreRecords = (records) => {
+		/**
+		 * The blocks in the calendars, as block records for a backup: a repeating
+		 * event once (its occurrences moved or deleted there as exceptions), the rest
+		 * one by one. From a year back to a year ahead.
+		 */
+		const calendarBlockRecords = async () => {
+			const from = now() - 365 * 86400
+			const to = now() + 365 * 86400
+			const byUrl = new Map()
+			for (const [u, r] of Object.entries(db.records.commitment)) if (complete('commitment', r) && calUrlOf(u, r)) byUrl.set(calUrlOf(u, r), u)
+			if (!byUrl.size) return []
+			let events
+			if (typeof o.calendar.readAll === 'function') events = await o.calendar.readAll(from, to, [...byUrl.keys()])
+			else {
+				events = (await o.calendar.events(from, to, [...byUrl.keys()])) || []
+				if (events.incomplete) throw new ApiError('The calendars could not all be read. Try again when you are online.', 503)
+			}
+			const groups = new Map()
+			for (const ev of events) {
+				const u = byUrl.get(ev.url)
+				if (!u || !(ev.end > ev.start) || ev.end - ev.start > 86400) continue
+				const key = ev.series && REPEATS.includes(ev.repeat) ? `${ev.url}|${ev.series}` : `one|${ev.uid}|${ev.start}`
+				if (!groups.has(key)) groups.set(key, [])
+				groups.get(key).push({ ...ev, commitment: u })
+			}
+			const out = []
+			const rec = (f) => {
+				const fields = { commitment: f.commitment, title: [...String(f.title || '')].slice(0, 255).join(''), start: f.start, end: f.end, repeat: f.repeat || '', until: f.until ?? null, skip: f.skip || [], created: now() }
+				const clock = {}
+				for (const k of Object.keys(fields)) clock[k] = tick()
+				out.push({ type: 'block', id: uuid4(), fields, clock })
+			}
+			for (const list of groups.values()) {
+				const one = list[0]
+				if (list.length === 1 && !REPEATS.includes(one.repeat)) { rec({ ...one, repeat: '', until: null }); continue }
+				list.sort((a, b) => (a.occurrence ?? a.start) - (b.occurrence ?? b.start))
+				const base = list.find((e) => e.start === (e.occurrence ?? e.start)) || list[0]
+				const occ0 = base.occurrence ?? base.start
+				const f = { start: occ0, end: occ0 + (base.end - base.start), repeat: base.repeat, until: base.until ?? null }
+				const expected = occurrences(f, occ0, to)
+				const have = new Map(list.map((e) => [e.occurrence ?? e.start, e]))
+				const skip = []
+				for (const t of expected) {
+					const e = have.get(t)
+					// Deleted there, or moved: not part of the repeat here (the moved one as its own block)
+					if (!e || e.start !== t || e.end - e.start !== f.end - f.start || e.title !== base.title) skip.push(t)
+				}
+				const exp = new Set(expected)
+				rec({ ...f, commitment: base.commitment, title: base.title, skip: skip.slice(0, 1000) })
+				for (const e of list) {
+					const t = e.occurrence ?? e.start
+					if (!exp.has(t) || e.start !== t || e.end - e.start !== f.end - f.start || e.title !== base.title) rec({ ...e, repeat: '', until: null })
+				}
+			}
+			return out
+		}
+
+		/**
+		 * Blocks from a backup into the calendars: every commitment of the backup gets
+		 * its calendar here if it has none (made in the calendar app), and its blocks
+		 * become events there. Already there (same title and time): not again.
+		 */
+		const importIntoCalendars = async (blockRecs, all) => {
+			const result = { blocks: 0, calendars: 0 }
+			const commitmentsIn = new Set(all.filter((x) => x && x.type === 'commitment' && typeof x.id === 'string').map((x) => x.id))
+			for (const b of blockRecs) if (b.fields && typeof b.fields.commitment === 'string') commitmentsIn.add(b.fields.commitment)
+			await refreshCalendars()
+			const urlOf = new Map()
+			for (const u of commitmentsIn) {
+				const r = db.records.commitment[u]
+				if (!r || !complete('commitment', r)) continue
+				let url = calUrlOf(u, r)
+				if (!url || !calendarList.some((c) => c.url === url)) {
+					if (typeof o.calendar.createCalendar !== 'function') continue
+					try { url = await o.calendar.createCalendar({ name: r.f.name, color: r.f.color || '#0082c9' }) } catch (e) { continue }
+					if (!url) continue
+					write('commitment', u, { calendarUrl: url })
+					result.calendars++
+				}
+				urlOf.set(u, url)
+			}
+			if (result.calendars) { changed(); await refreshCalendars() }
+			const wanted = []
+			for (const b of blockRecs) {
+				const f = b.fields || {}
+				const url = urlOf.get(f.commitment)
+				const start = Math.trunc(Number(f.start))
+				const end = Math.trunc(Number(f.end))
+				if (!url || !(end > start) || end - start > 86400) continue
+				const repeat = REPEATS.includes(f.repeat) ? f.repeat : ''
+				wanted.push({ url, title: [...String(f.title || '')].slice(0, 255).join(''), start, end, repeat, until: repeat && Number.isFinite(f.until) ? f.until : null, skip: repeat ? skipList(f.skip) : [] })
+			}
+			if (!wanted.length) return result
+			// What's there already (the same backup imported twice): not again
+			const lo = Math.min(...wanted.map((w) => w.start))
+			const hi = Math.max(...wanted.map((w) => w.end)) + 86400
+			const urls = [...new Set(wanted.map((w) => w.url))]
+			let there = []
+			try { there = (typeof o.calendar.readAll === 'function' ? await o.calendar.readAll(lo, hi, urls) : await o.calendar.events(lo, hi, urls)) || [] } catch (e) { there = [] }
+			const seen = new Set(there.map((e) => `${e.url}|${e.start}|${e.end}|${e.title || ''}`))
+			const fresh = wanted.filter((w) => !seen.has(`${w.url}|${w.start}|${w.end}|${w.title}`))
+			const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch (e) { return undefined } })()
+			if (typeof o.calendar.importBlocks === 'function') {
+				result.blocks = await o.calendar.importBlocks(fresh.map((w) => ({ ...w, tz })))
+			} else {
+				for (const w of fresh) {
+					try {
+						await o.calendar.createEvent({ url: w.url, title: w.title, start: w.start, end: w.end, repeat: w.repeat, until: w.until, tz })
+						result.blocks++
+					} catch (e) { /* that one not */ }
+				}
+			}
+			return result
+		}
+
+		const restoreRecords = (records, { keepCalendars = false } = {}) => {
 			if (!Array.isArray(records)) throw new ApiError('Invalid backup')
 			if (records.length > 2000) throw new ApiError('Too many changes at once')
 			const order = { settings: 0, commitment: 1, task: 2, subtask: 3, note: 4, session: 5, block: 6 }
@@ -1284,6 +1405,11 @@
 				for (const [k, v] of Object.entries(rec.fields && typeof rec.fields === 'object' ? rec.fields : {})) {
 					const c = rec.clock && rec.clock[k]
 					if (typeof c === 'string' && CLOCK_RE.test(c) && parseClock(c)[0] <= limit) { fields[k] = v; clock[k] = c }
+				}
+				// A calendar of another account or device: not taken over (this one keeps or makes its own)
+				if (keepCalendars && type === 'commitment' && 'calendarUrl' in fields && !calendarList.some((c) => c.url === fields.calendarUrl)) {
+					delete fields.calendarUrl
+					delete clock.calendarUrl
 				}
 				if (!Object.keys(fields).length) { rejected.push({ id, reason: 'Incomplete record' }); continue }
 				merge({ type, id, fields, clock })

@@ -2848,9 +2848,9 @@
 				else confirmImport(file.records, picked.name)
 			}))
 			show(
-				h('p', { class: 'imp-muted' }, state.features.builtinCalendar
+				h('p', { class: 'imp-muted' }, state.features.builtinCalendar || !state.features.blocksInBackup
 					? tr('A file with your commitments, tasks, notes, tracked time, blocks and settings: to keep, or to bring to another device.')
-					: tr('A file with your commitments, tasks, notes, tracked time and settings: to keep, or to bring to another device. Blocks stay in your calendars.')),
+					: tr('A file with your commitments, tasks, notes, tracked time, blocks (from your calendars, a year back to a year ahead) and settings: to keep, or to bring to another device.')),
 				form,
 				h('h3', null, tr('Import')),
 				h('p', { class: 'imp-muted' }, tr('Adds a backup to what is here. Where something is in both, the later change wins; nothing is deleted.')),
@@ -2880,21 +2880,27 @@
 					.sort((a, b) => (BACKUP_ORDER[a.type] ?? 9) - (BACKUP_ORDER[b.type] ?? 9))
 				let applied = 0
 				let blocks = 0
+				let placed = 0
+				let calendars = 0
 				const reasons = new Set()
+				// (commitments first, then their blocks: a block's commitment is always there before it)
 				for (let i = 0; i < sorted.length; i += 500) {
 					const r = await api('POST', 'backup', { records: sorted.slice(i, i + 500) })
 					applied += r.applied || 0
+					placed += r.blocks || 0
+					calendars += r.calendars || 0
 					for (const x of r.rejected || []) {
 						if (x.reason === 'Unknown type') blocks++
 						else reasons.add(x.reason)
 					}
 				}
 				await refresh()
-				toast(tr('Imported {n} items.', { n: applied }))
+				toast(tr('Imported {n} items.', { n: applied + placed }))
 				const notes = []
+				if (calendars || placed) notes.push(tr('{blocks} put in your calendars ({calendars} made for commitments).', { blocks: trn('%n block', '%n blocks', placed), calendars: calendars }))
 				if (blocks) notes.push(trn('%n block was not imported: here, blocks are events in your calendars.', '%n blocks were not imported: here, blocks are events in your calendars.', blocks))
 				if (reasons.size) notes.push(tr('Some items were not imported: {reasons}', { reasons: [...reasons].slice(0, 3).map((x) => tr(x)).join('; ') }))
-				if (notes.length) toast(notes.join(' '), true)
+				if (notes.length) toast(notes.join(' '), !!(blocks || reasons.size))
 			}))
 			show(h('p', null, tr('Import from {file}: {what}?', { file: name, what })),
 				h('p', { class: 'imp-muted' }, tr('Where something is in both, the later change wins; nothing is deleted.')),

@@ -625,7 +625,7 @@ function createCloudCalendar(o) {
 					if (notReachable(e)) unreachable()
 					throw new Error('The calendar could not be read. Try again when you are online.')
 				}
-				for (const it of items) out.push({ uid: it.key, title: it.title, start: it.start, end: it.end, url: urlOf(cal) })
+				for (const it of items) out.push({ uid: it.key, title: it.title, start: it.start, end: it.end, url: urlOf(cal), series: num(it.series), occurrence: it.occ, repeat: it.repeat || '', until: it.until || null })
 			}
 			return out
 		},

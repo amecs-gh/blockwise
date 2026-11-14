@@ -51,6 +51,8 @@ function expand(e, from, to) {
 function fakeGoogle() {
 	const cals = new Map() // id -> {summary, events: Map(id -> event)}
 	let n = 1
+	// (each account's calendars have ids of their own)
+	const account = Math.random().toString(36).replace(/[^a-z]/g, '').slice(0, 5)
 	const calls = []
 	let down = false
 	const err = (status, message) => Object.assign(new Error(message || `HTTP ${status}`), { status })
@@ -86,7 +88,7 @@ function fakeGoogle() {
 		const q = new URLSearchParams(qs || '')
 		let m
 		if (method === 'POST' && p === 'calendars') {
-			const id = `cal${n++}@group.calendar.google.com`
+			const id = `${account}cal${n++}@group.calendar.google.com`
 			cals.set(id, { summary: body.summary, events: new Map(), color: null })
 			return { id, summary: body.summary }
 		}

@@ -200,9 +200,14 @@ class CalendarService {
 			$vcal = Reader::read($data);
 			// The series: its repeat (to change it from the calendar page)
 			$rule = ['repeat' => '', 'until' => null];
+			$tz = null;
 			foreach ($vcal->select('VEVENT') as $ev) {
 				if (!isset($ev->{'RECURRENCE-ID'})) {
 					$rule = BlockService::describeRule($ev);
+					// The series' time zone (its repeats follow that local time)
+					if (isset($ev->DTSTART) && $ev->DTSTART->hasTime() && !$ev->DTSTART->isFloating()) {
+						$tz = $ev->DTSTART->getDateTime()->getTimezone()->getName();
+					}
 					break;
 				}
 			}
@@ -244,6 +249,7 @@ class CalendarService {
 				'occurrence' => isset($event->{'RECURRENCE-ID'}) ? $event->{'RECURRENCE-ID'}->getDateTime()->getTimestamp() : $s,
 				'repeat' => $rule['repeat'],
 				'until' => $rule['until'],
+				'tz' => $tz,
 			];
 		}
 		return $out;

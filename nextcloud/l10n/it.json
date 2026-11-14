@@ -133,6 +133,7 @@
 			"{time} di lavoro rimanente in %n task aperti"
 		],
 		"A file with your commitments, tasks, notes, tracked time and settings: to keep, or to bring to another device. Blocks stay in your calendars.": "Un file con impegni, task, note, tempo registrato e impostazioni: da conservare o da portare su un altro dispositivo. I blocchi restano nei tuoi calendari.",
+		"A file with your commitments, tasks, notes, tracked time, blocks (from your calendars, a year back to a year ahead) and settings: to keep, or to bring to another device.": "Un file con impegni, attività, note, tempo registrato, blocchi (dai tuoi calendari, da un anno fa a un anno avanti) e impostazioni: da conservare o da portare su un altro dispositivo.",
 		"A file with your commitments, tasks, notes, tracked time, blocks and settings: to keep, or to bring to another device.": "Un file con impegni, task, note, tempo registrato, blocchi e impostazioni: da conservare o da portare su un altro dispositivo.",
 		"A task needs at least one subtask. Delete the task instead.": "Un task deve avere almeno un sottotask. Elimina invece il task.",
 		"Account": "Account",
@@ -586,6 +587,7 @@
 		"Your blocks are in your calendar app.": "I tuoi blocchi sono nell'app Calendario.",
 		"Your blocks are in {calendar}. Allow it on this device to see and plan them.": "I tuoi blocchi sono in {calendar}. Consentilo su questo dispositivo per vederli e pianificarli.",
 		"Your data": "I tuoi dati",
+		"{blocks} put in your calendars ({calendars} made for commitments).": "{blocks} messi nei tuoi calendari ({calendars} creati per gli impegni).",
 		"{done} of {goal} this week": "{done} di {goal} questa settimana",
 		"{done} of {total}": "{done} di {total}",
 		"{file} is encrypted. Enter the passphrase it was exported with.": "{file} è cifrato. Inserisci la passphrase usata per esportarlo.",

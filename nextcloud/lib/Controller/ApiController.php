@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\Tracker\Controller;
 
 use OCA\Tracker\AppInfo\Application;
+use OCA\Tracker\Service\BackupService;
 use OCA\Tracker\Service\BlockService;
 use OCA\Tracker\Service\CalendarService;
 use OCA\Tracker\Service\CommitmentService;
@@ -37,6 +38,7 @@ class ApiController extends Controller {
 		private NoteService $notes,
 		private ITimeFactory $time,
 		private BlockService $blockService,
+		private BackupService $backups,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -137,7 +139,8 @@ class ApiController extends Controller {
 				}
 				$since = $r['cursor'];
 			}
-			return ['records' => array_values($records)];
+			// The blocks, from the commitments' calendars
+			return ['records' => array_merge(array_values($records), $this->backups->blockRecords($this->uid()))];
 		});
 	}
 
@@ -146,7 +149,32 @@ class ApiController extends Controller {
 	public function restore(): JSONResponse {
 		$records = $this->request->getParam('records');
 		$records = is_array($records) ? array_values(array_filter($records, fn ($r) => is_array($r) && empty($r['deleted']))) : [];
-		return $this->handle(fn () => $this->sync->push($this->uid(), $records));
+		return $this->handle(function () use ($records) {
+			$uid = $this->uid();
+			$blocks = array_values(array_filter($records, fn ($r) => ($r['type'] ?? '') === 'block'));
+			$rest = [];
+			$commitments = [];
+			foreach ($records as $r) {
+				if (($r['type'] ?? '') === 'block') {
+					continue;
+				}
+				if (($r['type'] ?? '') === 'commitment' && is_string($r['id'] ?? null)) {
+					$commitments[] = $r['id'];
+					// A calendar of another account or device: not taken over (one is made here)
+					$url = $r['fields']['calendarUrl'] ?? null;
+					if (is_string($url) && $this->calendars->calendarIdForUrl($uid, $url) === null) {
+						unset($r['fields']['calendarUrl'], $r['clock']['calendarUrl']);
+					}
+				}
+				$rest[] = $r;
+			}
+			$had = $this->backups->withCalendar($uid);
+			$result = $this->sync->push($uid, $rest);
+			$placed = $this->backups->importBlocks($uid, $blocks, $commitments);
+			$now = $this->backups->withCalendar($uid);
+			$placed['calendars'] = count(array_filter(array_unique($commitments), fn ($u) => isset($now[$u]) && !isset($had[$u])));
+			return $result + $placed;
+		});
 	}
 
 	#[NoAdminRequired]
