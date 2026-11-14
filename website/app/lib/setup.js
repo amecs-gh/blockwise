@@ -1,7 +1,7 @@
 /*
  * First run: Blockwise on this phone only (no account), or synced: with
  * Nextcloud (enter the address, then log in on the page that opens) or through
- * Dropbox / Google Drive (allow Blockwise in the browser, then a passphrase
+ * Dropbox / Google Drive / OneDrive (allow Blockwise in the browser, then a passphrase
  * that encrypts everything on the drive).
  * "#connect": from "on this phone only" to a sync; your data comes along.
  */
@@ -9,7 +9,7 @@
 	'use strict'
 	const app = window.trackerApp
 	const $ = (id) => document.getElementById(id)
-	const NAMES = { dropbox: 'Dropbox', gdrive: 'Google Drive' }
+	const NAMES = { dropbox: 'Dropbox', gdrive: 'Google Drive', onedrive: 'OneDrive' }
 	let t = (s) => s
 	let connecting = false
 	let web = false // the web app (website/app): "this browser" instead of "this phone"
@@ -67,11 +67,14 @@
 		$('dropbox').textContent = t('Sync with {drive}', { drive: 'Dropbox' })
 		$('gdrive').textContent = t('Sync with {drive}', { drive: 'Google Drive' })
 		$('dropbox').hidden = !drives.dropbox
+		$('onedrive').textContent = t('Sync with {drive}', { drive: 'OneDrive' })
 		$('gdrive').hidden = !drives.gdrive
-		$('drives').hidden = !drives.dropbox && !drives.gdrive
-		$('drives-note').textContent = web
+		$('onedrive').hidden = !drives.onedrive
+		$('drives').hidden = !drives.dropbox && !drives.gdrive && !drives.onedrive
+		$('drives-note').textContent = (web
 			? t('With your Mac and phone, end-to-end encrypted with a passphrase only you know.')
-			: t('With your Mac and other phones, end-to-end encrypted with a passphrase only you know.')
+			: t('With your Mac and other phones, end-to-end encrypted with a passphrase only you know.'))
+			+ (drives.gdrive || drives.onedrive ? ' ' + t('With Google Drive or OneDrive, your blocks can also be in Google Calendar or Outlook.') : '')
 		$('choose-back').textContent = t('Back to Blockwise')
 		$('choose-back').hidden = !connecting
 		// The web app has no Nextcloud login (a browser page can't reach your server)
@@ -136,7 +139,7 @@
 		}
 	})
 
-	for (const provider of ['dropbox', 'gdrive']) {
+	for (const provider of ['dropbox', 'gdrive', 'onedrive']) {
 		$(provider).addEventListener('click', async () => {
 			drive = { provider, exists: false }
 			$('choose-error').hidden = true

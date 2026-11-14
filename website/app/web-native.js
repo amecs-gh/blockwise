@@ -202,7 +202,7 @@
 				mode,
 				connecting: location.hash === '#connect',
 				nextcloud: false,
-				drives: { dropbox: available('dropbox'), gdrive: false },
+				drives: { dropbox: available('dropbox'), gdrive: false, onedrive: false },
 				pendingDrive: login && login.provider ? login.provider : null,
 				driveError: login && login.error ? login.error : null,
 			}

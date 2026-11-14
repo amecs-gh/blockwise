@@ -184,7 +184,7 @@ const google = {
 		return { start: secOf(e && e.start && e.start.dateTime), end: secOf(e && e.end && e.end.dateTime), title: e && typeof e.summary === 'string' ? e.summary : '', rule, tz: e && e.start && e.start.timeZone }
 	},
 	/** One occurrence of a series: Google's id for it */
-	instance: (series, occ) => `${series}_${utcBasic(occ)}`,
+	instance: async (request, cal, series, occ) => `${series}_${utcBasic(occ)}`,
 	async patch(request, cal, id, fields) {
 		await request('PATCH', `calendars/${encodeURIComponent(cal)}/events/${encodeURIComponent(id)}`, fields)
 	},
@@ -219,11 +219,212 @@ const google = {
 	},
 }
 
-const PROVIDERS = { google }
+// --- Outlook (Microsoft Graph, https://graph.microsoft.com/v1.0/) -------------------------------
+//
+// Graph names repeats with a pattern and a range (not RRULEs): converted both
+// ways here, so the rest works with RRULEs as for Google. Times are sent as the
+// wall-clock time in the block's time zone (so a repeat keeps its hour across
+// summer time) and come back in UTC. Graph has no "move to another calendar":
+// the event is made there and deleted here.
+
+const GRAPH_DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+const RR_DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']
+/** "YYYY-MM-DDTHH:MM:SS" as the clock shows it in `tz` */
+function wall(sec, tz) {
+	const f = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+	const p = {}
+	for (const x of f.formatToParts(new Date(sec * 1000))) p[x.type] = x.value
+	return `${p.year}-${p.month}-${p.day}T${p.hour === '24' ? '00' : p.hour}:${p.minute}:${p.second}`
+}
+const wallUtc = (w) => Date.UTC(+w.slice(0, 4), +w.slice(5, 7) - 1, +w.slice(8, 10), +w.slice(11, 13) || 0, +w.slice(14, 16) || 0, +w.slice(17, 19) || 0) / 1000
+/** The moment the clock in `tz` shows `w` */
+function fromWall(w, tz) {
+	const guess = wallUtc(w)
+	let t = guess - (wallUtc(wall(guess, tz)) - guess)
+	t = guess - (wallUtc(wall(t, tz)) - t)
+	return t
+}
+const dayBefore = (date) => new Date(Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10)) - DAY * 1000).toISOString().slice(0, 10)
+/** Graph's {dateTime, timeZone} as seconds (it answers in UTC) */
+function graphTime(g) {
+	if (!g || typeof g.dateTime !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/.test(g.dateTime)) return NaN
+	const w = g.dateTime.slice(0, 19)
+	const tz = g.timeZone && g.timeZone !== 'UTC' ? validTz(g.timeZone) : null
+	return tz ? fromWall(w, tz) : secOf(`${w.length === 16 ? `${w}:00` : w}Z`)
+}
+/** An RRULE (from toRrule/ruleUntil) as Graph's recurrence, for a series starting at `start` */
+function graphRecurrence(rule, start, tz) {
+	if (!rule) return null
+	const zone = validTz(tz) || localTz()
+	const p = parseRrule(rule)
+	const first = wall(start, zone)
+	const interval = Math.max(1, Math.min(99, Number(p.INTERVAL) || 1))
+	let pattern
+	if (p.FREQ === 'DAILY') pattern = { type: 'daily', interval }
+	else if (p.FREQ === 'WEEKLY') {
+		const days = p.BYDAY ? p.BYDAY.split(',').map((d) => GRAPH_DAYS[RR_DAYS.indexOf(d.slice(-2))]).filter(Boolean) : []
+		pattern = { type: 'weekly', interval, daysOfWeek: days.length ? days : [GRAPH_DAYS[new Date(wallUtc(first) * 1000).getUTCDay()]], firstDayOfWeek: 'monday' }
+	} else if (p.FREQ === 'MONTHLY') pattern = { type: 'absoluteMonthly', interval, dayOfMonth: Number(p.BYMONTHDAY) || +first.slice(8, 10) }
+	else return null
+	const range = { type: 'noEnd', startDate: first.slice(0, 10), recurrenceTimeZone: zone }
+	const until = untilOf(rule)
+	if (until !== null) {
+		// Graph ends on a day: the last one with an occurrence at or before `until`
+		const u = wall(until, zone)
+		let end = u.slice(0, 10)
+		if (u.slice(11) < first.slice(11)) end = dayBefore(end)
+		if (end < range.startDate) end = range.startDate
+		Object.assign(range, { type: 'endDate', endDate: end })
+	} else if (p.COUNT) Object.assign(range, { type: 'numbered', numberOfOccurrences: Math.max(1, Math.min(999, Number(p.COUNT) || 1)) })
+	return { pattern, range }
+}
+/** Graph's recurrence as an RRULE (fromRrule then names the planner's repeats) */
+function rruleOfGraph(r, start) {
+	const pt = r && r.pattern
+	if (!pt || typeof pt.type !== 'string') return ''
+	const zone = validTz(r.range && r.range.recurrenceTimeZone) || localTz()
+	const interval = Math.max(1, Math.min(99, Number(pt.interval) || 1))
+	let rule
+	if (pt.type === 'daily') rule = `FREQ=DAILY;INTERVAL=${interval}`
+	else if (pt.type === 'weekly') {
+		const days = (Array.isArray(pt.daysOfWeek) ? pt.daysOfWeek : []).map((d) => RR_DAYS[GRAPH_DAYS.indexOf(String(d).toLowerCase())]).filter(Boolean)
+		const own = Number.isFinite(start) ? RR_DAYS[new Date(wallUtc(wall(start, zone)) * 1000).getUTCDay()] : null
+		const sorted = RR_DAYS.filter((d) => days.includes(d))
+		rule = `FREQ=WEEKLY;INTERVAL=${interval}`
+		if (sorted.join(',') === 'MO,TU,WE,TH,FR') rule += ';BYDAY=MO,TU,WE,TH,FR'
+		else if (!(sorted.length === 1 && sorted[0] === own) && sorted.length) rule += `;BYDAY=${sorted.join(',')}`
+	} else if (pt.type === 'absoluteMonthly') {
+		const own = Number.isFinite(start) ? +wall(start, zone).slice(8, 10) : null
+		rule = `FREQ=MONTHLY;INTERVAL=${interval}` + (Number(pt.dayOfMonth) && Number(pt.dayOfMonth) !== own ? `;BYMONTHDAY=${Number(pt.dayOfMonth)}` : '')
+	} else rule = `FREQ=YEARLY;INTERVAL=${interval}` // (anything else: shown, not one of the planner's repeats)
+	const rg = r.range || {}
+	if (rg.type === 'endDate' && /^\d{4}-\d{2}-\d{2}$/.test(rg.endDate || '')) rule += `;UNTIL=${utcBasic(fromWall(`${rg.endDate}T23:59:59`, zone))}`
+	else if (rg.type === 'numbered' && Number(rg.numberOfOccurrences) > 0) rule += `;COUNT=${Number(rg.numberOfOccurrences)}`
+	return rule
+}
+/** The nearest of Outlook's calendar colors */
+function outlookColor(hex) {
+	const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || '')
+	if (!m) return 'auto'
+	const [r, g, b] = [m[1], m[2], m[3]].map((x) => parseInt(x, 16) / 255)
+	const max = Math.max(r, g, b)
+	const min = Math.min(r, g, b)
+	if (max - min < 0.12) return 'lightGray'
+	let h = max === r ? ((g - b) / (max - min)) % 6 : max === g ? (b - r) / (max - min) + 2 : (r - g) / (max - min) + 4
+	h = (h * 60 + 360) % 360
+	if (h < 15 || h >= 340) return 'lightRed'
+	if (h < 40) return max < 0.6 ? 'lightBrown' : 'lightOrange'
+	if (h < 70) return 'lightYellow'
+	if (h < 160) return 'lightGreen'
+	if (h < 200) return 'lightTeal'
+	if (h < 280) return 'lightBlue'
+	return 'lightPink'
+}
+const FIELDS = 'id,subject,start,end,type,seriesMasterId,originalStart,isAllDay,isCancelled'
+const enc = encodeURIComponent
+const graphEv = (cal, id) => `me/calendars/${enc(cal)}/events/${enc(id)}`
+
+const microsoft = {
+	prefix: 'mscal:',
+	async read(request, cal, from, to) {
+		const items = []
+		const masters = new Set()
+		let skip = 0
+		for (let n = 0; ; n++) {
+			// (a cut-off list would look like deleted occurrences)
+			if (n >= 100) throw new Error('Too many events in this calendar to read at once.')
+			const r = await request('GET', `me/calendars/${enc(cal)}/calendarView?startDateTime=${iso(from)}&endDateTime=${iso(to)}&$top=500&$select=${FIELDS}${skip ? `&$skip=${skip}` : ''}`)
+			const list = r && Array.isArray(r.value) ? r.value : []
+			for (const e of list) {
+				if (!e || typeof e.id !== 'string' || !ID_RE.test(e.id) || e.isCancelled || e.isAllDay) continue
+				const start = graphTime(e.start)
+				const end = graphTime(e.end)
+				if (!(end > start)) continue
+				const inSeries = (e.type === 'occurrence' || e.type === 'exception') && typeof e.seriesMasterId === 'string' && ID_RE.test(e.seriesMasterId)
+				const series = inSeries ? e.seriesMasterId : e.id
+				const occ = inSeries ? secOf(e.originalStart) : start
+				if (inSeries) masters.add(series)
+				items.push({ key: e.id, series, occ: Number.isFinite(occ) ? occ : start, start, end, title: typeof e.subject === 'string' ? e.subject.slice(0, 255) : '', cal })
+			}
+			// (only the number of the next page is taken from the answer)
+			const next = r && typeof r['@odata.nextLink'] === 'string' ? /[?&](?:\$|%24)skip=(\d{1,6})(?:&|$)/.exec(r['@odata.nextLink']) : null
+			if (!next || !list.length || Number(next[1]) <= skip) break
+			skip = Number(next[1])
+		}
+		const rules = new Map()
+		for (const id of masters) {
+			try { const m = await microsoft.master(request, cal, id); rules.set(id, m.rule) } catch (e) { if (!e || !e.status || e.status >= 500 || e.status === 429) throw e }
+		}
+		for (const it of items) {
+			const rule = rules.get(it.series)
+			it.repeat = rule ? fromRrule(rule) : ''
+			it.until = rule ? untilOf(rule) : null
+		}
+		return items
+	},
+	times: (start, end, tz) => {
+		const zone = validTz(tz) || localTz()
+		return { start: { dateTime: wall(start, zone), timeZone: zone }, end: { dateTime: wall(end, zone), timeZone: zone } }
+	},
+	recurrence: (rule, start, tz) => ({ recurrence: rule ? graphRecurrence(rule, start, tz) : null }),
+	summary: (title) => ({ subject: title }),
+	async create(request, cal, { title, start, end, rule, tz }) {
+		const body = { subject: title, ...microsoft.times(start, end, tz) }
+		if (rule) body.recurrence = graphRecurrence(rule, start, tz)
+		const r = await request('POST', `me/calendars/${enc(cal)}/events`, body)
+		return { series: safeId(r && r.id) }
+	},
+	async master(request, cal, series) {
+		const e = await request('GET', `${graphEv(cal, series)}?$select=subject,start,end,recurrence,originalStartTimeZone`)
+		const start = graphTime(e && e.start)
+		const rec = e && e.recurrence
+		return {
+			start, end: graphTime(e && e.end), title: e && typeof e.subject === 'string' ? e.subject : '',
+			rule: rec ? rruleOfGraph(rec, start) : '',
+			tz: validTz(rec && rec.range && rec.range.recurrenceTimeZone) || validTz(e && e.originalStartTimeZone) || null,
+			recurrence: rec || null,
+		}
+	},
+	/** One occurrence of a series: Graph's id for it (asked for) */
+	async instance(request, cal, series, occ) {
+		const r = await request('GET', `${graphEv(cal, series)}/instances?startDateTime=${iso(occ - 35 * DAY)}&endDateTime=${iso(occ + 35 * DAY)}&$top=200&$select=id,originalStart`)
+		const hit = (r && Array.isArray(r.value) ? r.value : []).find((e) => e && secOf(e.originalStart) === occ)
+		if (!hit) throw Object.assign(new Error('This occurrence is no longer in the calendar.'), { status: 404 })
+		return safeId(hit.id)
+	},
+	async patch(request, cal, id, fields) {
+		await request('PATCH', graphEv(cal, id), fields)
+	},
+	async remove(request, cal, id) {
+		try {
+			await request('DELETE', graphEv(cal, id))
+		} catch (e) {
+			if (e && (e.status === 404 || e.status === 410)) return
+			throw e
+		}
+	},
+	async move(request, cal, id, dest) {
+		const m = await microsoft.master(request, cal, id)
+		const body = { subject: m.title, ...microsoft.times(m.start, m.end, m.tz) }
+		if (m.recurrence) body.recurrence = graphRecurrence(m.rule, m.start, m.tz)
+		await request('POST', `me/calendars/${enc(dest)}/events`, body)
+		await microsoft.remove(request, cal, id)
+	},
+	async createCalendar(request, { name, color }) {
+		// (the app marks it as Blockwise's: only such calendars are reachable)
+		const r = await request('POST', 'me/calendars', { name: String(name || 'Blockwise').slice(0, 200), color: outlookColor(color) })
+		return safeId(r && r.id)
+	},
+	async deleteCalendar(request, id) {
+		try { await request('DELETE', `me/calendars/${enc(id)}`) } catch (e) { if (!e || e.status !== 404) throw e }
+	},
+}
+
+const PROVIDERS = { google, microsoft }
 
 /**
  * @param {object} o
- * @param {'google'} o.provider
+ * @param {'google'|'microsoft'} o.provider
  * @param {(method: string, path: string, body?: object) => Promise<any>} o.request
  * @param {{load: () => Promise<string|null>, save: (text: string) => Promise<void>}} [o.storage]
  * @param {() => void} [o.onChange] new blocks to show (draw again)
@@ -424,17 +625,17 @@ function createCloudCalendar(o) {
 			sentAs.set(x.pid, r.series)
 			// (copied in with occurrences deleted before: deleted there too)
 			for (const s of Array.isArray(x.skip) ? x.skip.slice(0, 200) : []) {
-				if (Number.isFinite(s)) await P.remove(request, x.cal, P.instance(r.series, s)).catch(() => {})
+				if (Number.isFinite(s)) await P.instance(request, x.cal, r.series, s).then((id) => P.remove(request, x.cal, id)).catch(() => {})
 			}
 			return
 		}
 		const single = !x.repeat
 		if (x.op === 'delete') {
 			if (single || x.scope === 'all' || !x.scope) return P.remove(request, x.cal, x.series)
-			if (x.scope === 'this') return P.remove(request, x.cal, P.instance(x.series, x.occ))
+			if (x.scope === 'this') return P.remove(request, x.cal, await P.instance(request, x.cal, x.series, x.occ))
 			const m = await P.master(request, x.cal, x.series)
 			if (x.occ <= m.start) return P.remove(request, x.cal, x.series)
-			return P.patch(request, x.cal, x.series, P.recurrence(ruleUntil(m.rule, x.occ - 1)))
+			return P.patch(request, x.cal, x.series, P.recurrence(ruleUntil(m.rule, x.occ - 1), m.start, m.tz))
 		}
 		// update
 		const ch = x.ch
@@ -442,12 +643,12 @@ function createCloudCalendar(o) {
 		const fields = {}
 		if (ch.title !== undefined) Object.assign(fields, P.summary(ch.title))
 		if (single || x.scope === 'this') {
-			const id = single ? x.series : P.instance(x.series, x.occ)
+			const id = single ? x.series : await P.instance(request, x.cal, x.series, x.occ)
+			const newStart = ch.start !== undefined ? ch.start : x.start
 			if (ch.start !== undefined || ch.end !== undefined) {
-				const start = ch.start !== undefined ? ch.start : x.start
-				Object.assign(fields, P.times(start, len !== null ? start + len : (ch.end !== undefined ? ch.end : x.end), ch.tz))
+				Object.assign(fields, P.times(newStart, len !== null ? newStart + len : (ch.end !== undefined ? ch.end : x.end), ch.tz))
 			}
-			if (single && ch.repeat !== undefined && ch.repeat !== 'custom') Object.assign(fields, P.recurrence(toRrule(ch.repeat, ch.until)))
+			if (single && ch.repeat !== undefined && ch.repeat !== 'custom') Object.assign(fields, P.recurrence(toRrule(ch.repeat, ch.until), newStart, ch.tz))
 			if (Object.keys(fields).length) await P.patch(request, x.cal, id, fields)
 			if (ch.cal && ch.cal !== x.cal) {
 				if (single) await P.move(request, x.cal, x.series, ch.cal)
@@ -469,13 +670,13 @@ function createCloudCalendar(o) {
 		else if (untilOf(m.rule) && delta) rule = ruleUntil(m.rule, untilOf(m.rule) + delta)
 		if (x.scope === 'future' && x.occ > m.start) {
 			// This one and the following: the series ends before it, a new one starts here
-			await P.patch(request, x.cal, x.series, P.recurrence(ruleUntil(m.rule, x.occ - 1)))
+			await P.patch(request, x.cal, x.series, P.recurrence(ruleUntil(m.rule, x.occ - 1), m.start, m.tz))
 			const start = x.occ + delta
 			await P.create(request, ch.cal || x.cal, { title: ch.title !== undefined ? ch.title : m.title, start, end: start + mlen, rule, tz: ch.tz || m.tz })
 			return
 		}
 		const start = m.start + delta
-		Object.assign(fields, P.times(start, start + mlen, ch.tz || m.tz), P.recurrence(rule))
+		Object.assign(fields, P.times(start, start + mlen, ch.tz || m.tz), P.recurrence(rule, start, ch.tz || m.tz))
 		await P.patch(request, x.cal, x.series, fields)
 		if (ch.cal && ch.cal !== x.cal) await P.move(request, x.cal, x.series, ch.cal)
 	}
@@ -648,5 +849,5 @@ function createCloudCalendar(o) {
 	return adapter
 }
 
-return { createCloudCalendar, toRrule, fromRrule, untilOf, ruleUntil, occurrencesOf, PROVIDERS }
+return { createCloudCalendar, toRrule, fromRrule, untilOf, ruleUntil, occurrencesOf, PROVIDERS, graphRecurrence, rruleOfGraph, outlookColor, wall, fromWall }
 })

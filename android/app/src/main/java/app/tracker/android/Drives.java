@@ -44,12 +44,19 @@ import java.util.regex.Pattern;
  * against a random `state`. Only the refresh token is kept, encrypted by the
  * Keystore (Store); access tokens live in memory. Every request goes to the
  * provider's fixed https address; nothing from an answer is used as a URL.
+ * - OneDrive: the app's own folder (Apps/Blockwise, scope Files.ReadWrite.AppFolder),
+ *   nothing else in your OneDrive. Outlook for the blocks is asked for only when
+ *   you switch it on (Calendars.ReadWrite); as Microsoft can't limit that to the
+ *   calendars Blockwise makes, the app does (CloudGuard: Blockwise's own, marked
+ *   calendars only; events carry only a title, times and a repeat).
+ *
  * The files are end-to-end encrypted by the page (web/filesync.js) before
  * they get here: the drive only sees random-looking bytes.
  */
 final class Drives {
     static final String DROPBOX = "dropbox";
     static final String GOOGLE = "gdrive";
+    static final String ONEDRIVE = "onedrive";
 
     private static final Pattern NAME = Pattern.compile("^[A-Za-z0-9_-][A-Za-z0-9._-]{0,79}$");
     private static final Pattern ID = Pattern.compile("^[A-Za-z0-9_-]{1,200}$");
@@ -75,6 +82,16 @@ final class Drives {
     private static final String GOOGLE_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
     static final String CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.app.created";
     private static final String GOOGLE_CALENDAR = "https://www.googleapis.com/calendar/v3/";
+
+    // Microsoft: personal and work/school accounts; a public client (no secret), PKCE
+    private static final String MS_AUTHORIZE = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
+    private static final String MS_TOKEN = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
+    private static final String GRAPH = "https://graph.microsoft.com/v1.0/";
+    private static final String APPROOT = GRAPH + "me/drive/special/approot";
+    private static final String MS_FILES = "Files.ReadWrite.AppFolder";
+    private static final String MS_CALENDAR = "Calendars.ReadWrite";
+    // OneDrive hands files out from these hosts (a link that needs no login)
+    private static final Pattern MS_DOWNLOAD = Pattern.compile("^https://[A-Za-z0-9.-]+\\.(1drv\\.com|sharepoint\\.com|onedrive\\.com|svc\\.ms|live\\.net)/[^\\s]*$");
 
     private Drives() {
     }
@@ -102,6 +119,7 @@ final class Drives {
         String dropboxAppKey = "";
         String googleClientId = "";
         String googleClientSecret = "";
+        String microsoftClientId = "";
     }
 
     private static Keys keys;
@@ -116,6 +134,10 @@ final class Drives {
             String d = j.optString("dropboxAppKey", "");
             String id = j.optString("googleClientId", "");
             String secret = j.optString("googleClientSecret", "");
+            String ms = j.optString("microsoftClientId", "");
+            if (ms.matches("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")) {
+                k.microsoftClientId = ms;
+            }
             if (d.matches("^[a-z0-9]{8,32}$")) {
                 k.dropboxAppKey = d;
             }
@@ -132,11 +154,18 @@ final class Drives {
 
     static boolean available(Context c, String provider) {
         Keys k = keys(c);
-        return DROPBOX.equals(provider) ? !k.dropboxAppKey.isEmpty() : GOOGLE.equals(provider) && !k.googleClientId.isEmpty();
+        return DROPBOX.equals(provider) ? !k.dropboxAppKey.isEmpty()
+                : GOOGLE.equals(provider) ? !k.googleClientId.isEmpty()
+                : ONEDRIVE.equals(provider) && !k.microsoftClientId.isEmpty();
     }
 
     static String displayName(String provider) {
-        return DROPBOX.equals(provider) ? "Dropbox" : "Google Drive";
+        return DROPBOX.equals(provider) ? "Dropbox" : ONEDRIVE.equals(provider) ? "OneDrive" : "Google Drive";
+    }
+
+    /** The calendar app that comes with the drive's account (null: none) */
+    static String calendarName(String provider) {
+        return GOOGLE.equals(provider) ? "Google Calendar" : ONEDRIVE.equals(provider) ? "Outlook" : null;
     }
 
     // --- logging in -------------------------------------------------------------------------------
@@ -165,11 +194,20 @@ final class Drives {
 
     /** @return {refresh token, account id or null, "calendar" if Google Calendar was allowed too} */
     static String[] login(Context c, String provider, Browser browser, Login login) throws DriveException {
+        return login(c, provider, browser, login, false);
+    }
+
+    /**
+     * @param calendar OneDrive: ask for Outlook too (Google always offers its calendar, and you can leave it out)
+     * @return {refresh token, account id or null, "calendar" if the account's calendar was allowed too}
+     */
+    static String[] login(Context c, String provider, Browser browser, Login login, boolean calendar) throws DriveException {
         Keys k = keys(c);
         if (!available(c, provider)) {
             throw new DriveException("This build of Blockwise can't connect to " + displayName(provider) + ".");
         }
         boolean dropbox = DROPBOX.equals(provider);
+        boolean ms = ONEDRIVE.equals(provider);
         String verifier = b64url(random(32));
         String challenge;
         try {
@@ -178,7 +216,8 @@ final class Drives {
             throw new DriveException("Something went wrong.");
         }
         String state = b64url(random(24));
-        String path = dropbox ? "/dropbox" : "/google";
+        // (Microsoft: the registered address is http://localhost, any port, no path)
+        String path = dropbox ? "/dropbox" : ms ? "/" : "/google";
         ServerSocket server;
         try {
             server = new ServerSocket(dropbox ? DROPBOX_PORT : 0, 4, InetAddress.getByName("127.0.0.1"));
@@ -188,7 +227,8 @@ final class Drives {
         }
         login.server = server;
         try {
-            String redirect = "http://127.0.0.1:" + server.getLocalPort() + path;
+            String redirect = ms ? "http://localhost:" + server.getLocalPort() : "http://127.0.0.1:" + server.getLocalPort() + path;
+            String msScope = "offline_access " + MS_FILES + (calendar ? " " + MS_CALENDAR : "");
             Map<String, String> q = new LinkedHashMap<>();
             String authorize;
             if (dropbox) {
@@ -200,6 +240,17 @@ final class Drives {
                 q.put("redirect_uri", redirect);
                 q.put("state", state);
                 authorize = DROPBOX_AUTHORIZE;
+            } else if (ms) {
+                q.put("client_id", k.microsoftClientId);
+                q.put("response_type", "code");
+                q.put("response_mode", "query");
+                q.put("scope", msScope);
+                q.put("code_challenge", challenge);
+                q.put("code_challenge_method", "S256");
+                q.put("prompt", "select_account");
+                q.put("redirect_uri", redirect);
+                q.put("state", state);
+                authorize = MS_AUTHORIZE;
             } else {
                 q.put("client_id", k.googleClientId);
                 q.put("response_type", "code");
@@ -219,17 +270,27 @@ final class Drives {
             Map<String, String> p = new LinkedHashMap<>();
             p.put("code", code);
             p.put("grant_type", "authorization_code");
-            p.put("client_id", dropbox ? k.dropboxAppKey : k.googleClientId);
-            if (!dropbox) {
+            p.put("client_id", dropbox ? k.dropboxAppKey : ms ? k.microsoftClientId : k.googleClientId);
+            if (ms) {
+                p.put("scope", msScope);
+            } else if (!dropbox) {
                 // Google's "client secret" for installed apps ships in every copy; PKCE protects the code
                 p.put("client_secret", k.googleClientSecret);
             }
             p.put("code_verifier", verifier);
             p.put("redirect_uri", redirect);
-            JSONObject t = tokenRequest(dropbox ? DROPBOX_TOKEN : GOOGLE_TOKEN, p);
+            JSONObject t = tokenRequest(dropbox ? DROPBOX_TOKEN : ms ? MS_TOKEN : GOOGLE_TOKEN, p);
             String refresh = t.optString("refresh_token", "");
             if (refresh.isEmpty()) {
-                throw new DriveException(dropbox ? "Dropbox did not allow offline access." : "Google did not allow offline access.");
+                throw new DriveException(dropbox ? "Dropbox did not allow offline access." : ms ? "Microsoft did not allow offline access." : "Google did not allow offline access.");
+            }
+            if (ms) {
+                String granted = " " + t.optString("scope").toLowerCase(Locale.ROOT).replace("https://graph.microsoft.com/", "") + " ";
+                if (t.has("scope") && !granted.contains(" " + MS_FILES.toLowerCase(Locale.ROOT) + " ")) {
+                    throw new DriveException("Allow Blockwise to use its folder in OneDrive, then try again.");
+                }
+                boolean cal = calendar && (!t.has("scope") || granted.contains(" " + MS_CALENDAR.toLowerCase(Locale.ROOT) + " "));
+                return new String[] {refresh, null, cal ? "calendar" : null};
             }
             if (!dropbox && t.has("scope") && !(" " + t.optString("scope") + " ").contains(" " + GOOGLE_SCOPE + " ")) {
                 throw new DriveException("Allow Blockwise to use its app data in Google Drive, then try again.");
@@ -361,19 +422,34 @@ final class Drives {
     /** The drive's Blockwise folder: list, read, write, remove (names checked). */
     static final class Folder {
         final String provider;
-        final String refreshToken;
+        /** Microsoft hands out a new one with each access token: the newest */
+        volatile String refreshToken;
+        /** OneDrive: Outlook was allowed with this login (its access tokens ask for it) */
+        volatile boolean calendar;
+        /** OneDrive: keeps the newest refresh token (the saved connection's folder) */
+        volatile Rotated rotated;
+        private final Context app;
         private final Keys k;
         private String access;
         private long until;
 
+        interface Rotated {
+            void kept(String refreshToken);
+        }
+
         Folder(Context c, String provider, String refreshToken) {
             this.provider = provider;
             this.refreshToken = refreshToken;
+            this.app = c.getApplicationContext();
             this.k = keys(c);
         }
 
         private boolean dropbox() {
             return DROPBOX.equals(provider);
+        }
+
+        private boolean ms() {
+            return ONEDRIVE.equals(provider);
         }
 
         private synchronized String token(boolean force) throws DriveException {
@@ -383,13 +459,15 @@ final class Drives {
             Map<String, String> p = new LinkedHashMap<>();
             p.put("grant_type", "refresh_token");
             p.put("refresh_token", refreshToken);
-            p.put("client_id", dropbox() ? k.dropboxAppKey : k.googleClientId);
-            if (!dropbox()) {
+            p.put("client_id", dropbox() ? k.dropboxAppKey : ms() ? k.microsoftClientId : k.googleClientId);
+            if (ms()) {
+                p.put("scope", "offline_access " + MS_FILES + (calendar ? " " + MS_CALENDAR : ""));
+            } else if (!dropbox()) {
                 p.put("client_secret", k.googleClientSecret);
             }
             JSONObject t;
             try {
-                t = tokenRequest(dropbox() ? DROPBOX_TOKEN : GOOGLE_TOKEN, p);
+                t = tokenRequest(dropbox() ? DROPBOX_TOKEN : ms() ? MS_TOKEN : GOOGLE_TOKEN, p);
             } catch (DriveException e) {
                 if (e.status == 401 || e.status == 400) {
                     throw new DriveException("The drive no longer accepts Blockwise. Connect it again.", 401, false, false);
@@ -397,6 +475,14 @@ final class Drives {
                 throw e;
             }
             access = t.optString("access_token");
+            String next = t.optString("refresh_token", "");
+            if (ms() && !next.isEmpty() && !next.equals(refreshToken) && next.length() < 8192) {
+                refreshToken = next;
+                Rotated r = rotated;
+                if (r != null) {
+                    r.kept(next);
+                }
+            }
             long seconds = Math.min(t.optLong("expires_in", 3600), 4 * 3600);
             until = System.currentTimeMillis() + seconds * 1000;
             return access;
@@ -477,8 +563,38 @@ final class Drives {
                 }
                 return names;
             }
+            if (ms()) {
+                for (String[] f : msList()) {
+                    names.add(f[0]);
+                }
+                return names;
+            }
             names.addAll(ids().keySet());
             return names;
+        }
+
+        /** OneDrive: the app folder's files {name, eTag} (the folder is made on first use) */
+        private List<String[]> msList() throws DriveException {
+            List<String[]> out = new ArrayList<>();
+            String url = APPROOT + "/children?$select=name,file,eTag&$top=999";
+            for (int page = 0; page < 200 && url != null; page++) {
+                Resp r = authed("GET", url, null, null);
+                JSONObject d = r.json();
+                JSONArray v = d == null ? null : d.optJSONArray("value");
+                if (r.status != 200 || v == null) {
+                    throw new DriveException("OneDrive could not list the folder (HTTP " + r.status + ").", r.status, false, false);
+                }
+                for (int i = 0; i < v.length(); i++) {
+                    JSONObject f = v.optJSONObject(i);
+                    if (f != null && f.has("file") && NAME.matcher(f.optString("name")).matches()) {
+                        out.add(new String[] {f.optString("name"), f.optString("eTag", "")});
+                    }
+                }
+                String next = d.optString("@odata.nextLink", "");
+                // (the next page: only ever below the app folder's fixed address)
+                url = next.startsWith(APPROOT + "/children?") && !next.contains("..") ? next : null;
+            }
+            return out;
         }
 
         /** Google: name -> its files, oldest first (Drive allows the same name twice) */
@@ -534,6 +650,24 @@ final class Drives {
                 }
                 return r.body;
             }
+            if (ms()) {
+                Resp r = authed("GET", APPROOT + ":/" + name + ":/content", null, null);
+                if (r.status == 404) {
+                    return null;
+                }
+                if (r.status == 302 || r.status == 301 || r.status == 307) {
+                    // A short-lived link to the file: no login is sent there
+                    String to = r.location == null ? "" : r.location;
+                    if (!MS_DOWNLOAD.matcher(to).matches()) {
+                        throw new DriveException("Unexpected answer from the drive.");
+                    }
+                    r = http("GET", to, null, null);
+                }
+                if (r.status != 200) {
+                    throw new DriveException("OneDrive could not read a file (HTTP " + r.status + ").", r.status, false, r.status >= 500);
+                }
+                return r.body;
+            }
             List<String> found = ids().get(name);
             if (found == null) {
                 return null;
@@ -567,6 +701,18 @@ final class Drives {
                 }
                 if (r.status != 200) {
                     throw new DriveException("Dropbox could not save a file (HTTP " + r.status + ").", r.status, false, false);
+                }
+                return;
+            }
+            if (ms()) {
+                Map<String, String> h = new HashMap<>();
+                h.put("Content-Type", "application/octet-stream");
+                Resp r = authed("PUT", APPROOT + ":/" + name + ":/content?@microsoft.graph.conflictBehavior=" + (create ? "fail" : "replace"), h, bytes);
+                if (r.status == 409 && create) {
+                    throw new DriveException("exists", 409, true, false);
+                }
+                if (r.status != 200 && r.status != 201) {
+                    throw new DriveException("OneDrive could not save a file (HTTP " + r.status + ").", r.status, false, false);
                 }
                 return;
             }
@@ -639,6 +785,13 @@ final class Drives {
                 }
                 return;
             }
+            if (ms()) {
+                Resp r = authed("DELETE", APPROOT + ":/" + name, null, null);
+                if (r.status != 204 && r.status != 200 && r.status != 404) {
+                    throw new DriveException("OneDrive could not remove a file (HTTP " + r.status + ").", r.status, false, false);
+                }
+                return;
+            }
             List<String> found = ids().get(name);
             for (String id : found == null ? new ArrayList<String>() : found) {
                 delete(id);
@@ -651,6 +804,9 @@ final class Drives {
          * @return {status, body as text}
          */
         Resp calendar(String method, String path, String bodyJson) throws DriveException {
+            if (ms()) {
+                return outlook(method, path, bodyJson);
+            }
             if (dropbox() || !app.tracker.core.CloudGuard.google(method, path)) {
                 throw new DriveException("Invalid request.", 400, false, false);
             }
@@ -673,9 +829,115 @@ final class Drives {
             return authed(m, GOOGLE_CALENDAR + path, h, body);
         }
 
+        /**
+         * A request to Outlook (Microsoft Graph): only what CloudGuard allows, only
+         * Blockwise's calendars, only a title, times and a repeat in an event.
+         */
+        private Resp outlook(String method, String path, String bodyJson) throws DriveException {
+            if (!app.tracker.core.CloudGuard.microsoft(method, path)) {
+                throw new DriveException("Invalid request.", 400, false, false);
+            }
+            Map<String, String> h = new HashMap<>();
+            h.put("Accept", "application/json");
+            byte[] body = null;
+            boolean making = "POST".equals(method) && "me/calendars".equals(path);
+            try {
+                if (bodyJson != null) {
+                    JSONObject in = new JSONObject(bodyJson);
+                    JSONObject out = new JSONObject();
+                    for (String f : making ? app.tracker.core.CloudGuard.GRAPH_CALENDAR_FIELDS : app.tracker.core.CloudGuard.GRAPH_EVENT_FIELDS) {
+                        if (!in.has(f)) {
+                            continue;
+                        }
+                        Object v = in.get(f);
+                        if (("start".equals(f) || "end".equals(f)) && v instanceof JSONObject) {
+                            JSONObject t = (JSONObject) v;
+                            v = new JSONObject().put("dateTime", t.optString("dateTime")).put("timeZone", t.optString("timeZone"));
+                        } else if ("recurrence".equals(f)) {
+                            v = v instanceof JSONObject ? v : JSONObject.NULL;
+                        } else if (!(v instanceof String)) {
+                            continue;
+                        }
+                        out.put(f, v);
+                    }
+                    if (making) {
+                        // Blockwise's mark: this calendar can be used from any device
+                        out.put("singleValueExtendedProperties", new JSONArray().put(new JSONObject()
+                                .put("id", app.tracker.core.CloudGuard.GRAPH_MARK).put("value", app.tracker.core.CloudGuard.GRAPH_MARK_VALUE)));
+                    }
+                    h.put("Content-Type", "application/json; charset=UTF-8");
+                    body = out.toString().getBytes(StandardCharsets.UTF_8);
+                }
+            } catch (JSONException e) {
+                throw new DriveException("Invalid request.", 400, false, false);
+            }
+            if (!making) {
+                String cal = app.tracker.core.CloudGuard.graphCalendar(path);
+                if (cal == null || !blockwiseCalendar(cal)) {
+                    throw new DriveException("Blockwise only uses the calendars it made.", 403, false, false);
+                }
+            }
+            if ("POST".equals(method) && body == null) {
+                body = new byte[0];
+            }
+            Resp r = authed(method, GRAPH + path, h, body);
+            if (making && r.status >= 200 && r.status < 300) {
+                JSONObject made = r.json();
+                String id = made == null ? "" : made.optString("id", "");
+                if (!id.isEmpty() && id.length() <= 300) {
+                    Store.addOutlookCalendar(app, id);
+                }
+            }
+            if ("DELETE".equals(method) && path.indexOf('/', "me/calendars/".length()) < 0 && (r.status == 204 || r.status == 404)) {
+                Store.removeOutlookCalendar(app, app.tracker.core.CloudGuard.graphCalendar(path));
+            }
+            return r;
+        }
+
+        /** Made by Blockwise: here (remembered), or on another device (its mark, looked up once) */
+        private boolean blockwiseCalendar(String cal) throws DriveException {
+            if (Store.outlookCalendars(app).contains(cal)) {
+                return true;
+            }
+            String seg = app.tracker.core.CloudGuard.encode(cal);
+            if (seg == null) {
+                return false;
+            }
+            String expand;
+            try {
+                expand = URLEncoder.encode("singleValueExtendedProperties($filter=id eq '" + app.tracker.core.CloudGuard.GRAPH_MARK + "')", "UTF-8").replace("+", "%20");
+            } catch (IOException e) {
+                return false;
+            }
+            Resp r = authed("GET", GRAPH + "me/calendars/" + seg + "?$select=id&$expand=" + expand, null, null);
+            if (r.status == 404) {
+                throw new DriveException("This calendar is no longer in Outlook.", 404, false, false);
+            }
+            JSONObject d = r.json();
+            JSONArray props = d == null ? null : d.optJSONArray("singleValueExtendedProperties");
+            for (int i = 0; props != null && i < props.length(); i++) {
+                JSONObject p = props.optJSONObject(i);
+                if (p != null && app.tracker.core.CloudGuard.GRAPH_MARK.equalsIgnoreCase(p.optString("id"))
+                        && app.tracker.core.CloudGuard.GRAPH_MARK_VALUE.equals(p.optString("value"))) {
+                    Store.addOutlookCalendar(app, cal);
+                    return true;
+                }
+            }
+            return false;
+        }
+
         String account() {
             if (dropbox()) {
                 return null;
+            }
+            if (ms()) {
+                try {
+                    JSONObject d = authed("GET", GRAPH + "me/drive?$select=id", null, null).json();
+                    String id = d == null ? "" : d.optString("id", "").replaceAll("[^\\w-]", "");
+                    return id.isEmpty() ? null : id.substring(0, Math.min(64, id.length()));
+                } catch (DriveException e) {
+                    return null;
+                }
             }
             try {
                 JSONObject d = authed("GET", GOOGLE_ABOUT, null, null).json();
@@ -691,6 +953,9 @@ final class Drives {
 
         /** Where the folder is now, to look for changes from there */
         String changeCursor() throws DriveException {
+            if (ms()) {
+                return msState();
+            }
             if (dropbox()) {
                 int[] st = {0};
                 JSONObject d;
@@ -718,11 +983,14 @@ final class Drives {
          * Dropbox: one look at the folder's list; Google Drive: as changes().
          */
         JSONObject changesNow(String cursor) throws DriveException {
-            if (!dropbox()) {
+            if (!dropbox() && !ms()) {
                 return changes(cursor, 0);
             }
             if (cursor == null || cursor.isEmpty() || cursor.length() > 4096) {
                 throw new DriveException("The folder's watch cursor expired.", 409, false, false);
+            }
+            if (ms()) {
+                return changes(cursor, 0);
             }
             int[] st = {0};
             try {
@@ -760,6 +1028,11 @@ final class Drives {
                 throw new DriveException("The folder's watch cursor expired.", 409, false, false);
             }
             try {
+                if (ms()) {
+                    // OneDrive: the folder's files and versions, compared (works for every kind of account)
+                    String now = msState();
+                    return new JSONObject().put("changed", !now.equals(cursor)).put("cursor", now).put("retryAfter", 0);
+                }
                 if (dropbox()) {
                     Map<String, String> h = new HashMap<>();
                     h.put("Content-Type", "application/json");
@@ -808,8 +1081,28 @@ final class Drives {
             }
         }
 
+        /** OneDrive: a fingerprint of the folder (names and versions) */
+        private String msState() throws DriveException {
+            List<String[]> files = msList();
+            List<String> lines = new ArrayList<>();
+            for (String[] f : files) {
+                lines.add(f[0] + "\n" + f[1]);
+            }
+            java.util.Collections.sort(lines);
+            try {
+                byte[] h = MessageDigest.getInstance("SHA-256").digest(String.join("\n\n", lines).getBytes(StandardCharsets.UTF_8));
+                return "h" + b64url(h);
+            } catch (Exception e) {
+                throw new DriveException("Something went wrong.");
+            }
+        }
+
         /** Disconnecting: the token stops working (offline: forgotten anyway) */
         void revoke() {
+            if (ms()) {
+                // (Microsoft has no way to end one app's token: it is forgotten here)
+                return;
+            }
             try {
                 if (dropbox()) {
                     authed("POST", DROPBOX_API + "auth/token/revoke", null, null);
@@ -831,6 +1124,7 @@ final class Drives {
     static final class Resp {
         int status;
         byte[] body;
+        String location;
 
         JSONObject json() {
             try {
@@ -853,7 +1147,7 @@ final class Drives {
             con.setConnectTimeout(20000);
             con.setReadTimeout(readSeconds * 1000);
             con.setUseCaches(false);
-            con.setRequestMethod(method);
+            setMethod(con, method);
             if (headers != null) {
                 for (Map.Entry<String, String> e : headers.entrySet()) {
                     con.setRequestProperty(e.getKey(), e.getValue());
@@ -872,6 +1166,7 @@ final class Drives {
             }
             Resp r = new Resp();
             r.status = con.getResponseCode();
+            r.location = con.getHeaderField("Location");
             if (con.getContentLengthLong() > MAX_FILE) {
                 throw new DriveException("A sync file is too large.");
             }
@@ -883,6 +1178,24 @@ final class Drives {
         } finally {
             if (con != null) {
                 con.disconnect();
+            }
+        }
+    }
+
+    /** PATCH where the HTTP client doesn't name it (Android's does) */
+    private static void setMethod(HttpURLConnection con, String method) throws IOException {
+        try {
+            con.setRequestMethod(method);
+        } catch (java.net.ProtocolException e) {
+            if (!"PATCH".equals(method)) {
+                throw e;
+            }
+            try {
+                java.lang.reflect.Field f = HttpURLConnection.class.getDeclaredField("method");
+                f.setAccessible(true);
+                f.set(con, method);
+            } catch (ReflectiveOperationException | RuntimeException x) {
+                throw e;
             }
         }
     }

@@ -19,6 +19,7 @@
 		'Your commitments, tasks, notes, blocks and tracked time in this browser go along.': 'Impegni, task, note, blocchi e tempo registrato in questo browser vengono con te.',
 		'With your Mac and phone, end-to-end encrypted with a passphrase only you know.': 'Con il Mac e il telefono, cifrato end-to-end con una passphrase che conosci solo tu.',
 		'Opening {drive}…': 'Apertura di {drive}…',
+		'With Google Drive or OneDrive, your blocks can also be in Google Calendar or Outlook.': 'Con Google Drive o OneDrive, i tuoi blocchi possono stare anche in Google Calendar o Outlook.',
 		'Sync with Nextcloud': 'Sincronizza con Nextcloud',
 		'Your commitments and tasks on your Mac, phone and in the browser. Blocks come from your Nextcloud calendars.': 'I tuoi impegni e task sul Mac, sul telefono e nel browser. I blocchi vengono dai calendari di Nextcloud.',
 		'Your commitments, tasks, notes and tracked time on this phone go along to Nextcloud. You log in once; the app gets its own password, stored encrypted on this phone.': 'Impegni, task, note e tempo registrato su questo telefono passano a Nextcloud. Accedi una volta; l\'app riceve una propria password, salvata cifrata su questo telefono.',

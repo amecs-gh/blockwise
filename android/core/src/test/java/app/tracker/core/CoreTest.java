@@ -122,6 +122,36 @@ public final class CoreTest {
             check(!CloudGuard.google(p[0], p[1]), "calendar refused " + p[0] + " " + p[1]);
         }
 
+        // --- Outlook: only Blockwise's calendar requests, and the calendar they are about ---
+        String gc = "me/calendars/AAMkAGI2TAAA%3D";
+        for (String[] p : new String[][] {
+                {"POST", "me/calendars"},
+                {"GET", gc + "/calendarView?startDateTime=2026-11-16T00:00:00Z&endDateTime=2026-11-23T00:00:00Z&$top=500&$select=id,subject,start,end"},
+                {"GET", gc + "/calendarView?startDateTime=2026-11-16T00:00:00Z&endDateTime=2026-11-23T00:00:00Z&$top=500&$select=id,subject&$skip=500"},
+                {"GET", gc + "/events/AAMkEv-1_x%3D?$select=subject,start,end,recurrence,originalStartTimeZone"},
+                {"GET", gc + "/events/AAMkEv1/instances?startDateTime=2026-10-12T09:00:00Z&endDateTime=2026-12-21T09:00:00Z&$top=200&$select=id,originalStart"},
+                {"POST", gc + "/events"},
+                {"PATCH", gc + "/events/AAMkEv1"},
+                {"DELETE", gc + "/events/AAMkEv1"},
+                {"DELETE", gc}}) {
+            check(CloudGuard.microsoft(p[0], p[1]), "outlook allowed " + p[0] + " " + p[1]);
+        }
+        for (String[] p : new String[][] {
+                {"GET", "me/calendars"}, {"GET", "me/events"}, {"GET", "me/messages"}, {"GET", "me"}, {"POST", "me/sendMail"},
+                {"GET", gc + "/events"}, {"GET", gc + "/events/AAMkEv1"}, {"POST", gc + "/events/AAMkEv1/forward"},
+                {"POST", gc + "/events/AAMkEv1/accept"}, {"GET", gc + "/calendarView?$filter=x"},
+                {"GET", gc + "/calendarView?startDateTime=2026-11-16T00:00:00Z&endDateTime=2026-11-23T00:00:00Z&$top=500&$select=id&$expand=attachments"},
+                {"PATCH", gc}, {"GET", gc + "/events/../../../messages"}, {"DELETE", "me/calendars/a%2Fb"},
+                {"GET", "me/drive/root/children"}, {"PUT", gc + "/events/AAMkEv1"}, {"POST", "me/calendars/x/../../sendMail"},
+                {"DELETE", "me/calendars//events/x"}, {null, "me/calendars"}}) {
+            check(!CloudGuard.microsoft(p[0], p[1]), "outlook refused " + p[0] + " " + p[1]);
+        }
+        check("AAMkAGI2TAAA=".equals(CloudGuard.graphCalendar(gc + "/events/AAMkEv1")), "outlook: the path's calendar");
+        check("AAMkAGI2TAAA=".equals(CloudGuard.graphCalendar(gc + "/calendarView?startDateTime=x")), "outlook: the view's calendar");
+        check(CloudGuard.graphCalendar("me/calendars") == null, "outlook: making one");
+        check("AAMkAGI2TAAA%3D".equals(CloudGuard.encode("AAMkAGI2TAAA=")), "outlook: encoded as the page does");
+        check(CloudGuard.decode("%0a") == null && CloudGuard.decode("%zz") == null && CloudGuard.decode("a%2") == null, "outlook: odd encodings refused");
+
         // --- reminders are remembered by the session's uuid (same from the phone's data and the server's) ---
         {
             Dash a = dash(true, 1L, false);

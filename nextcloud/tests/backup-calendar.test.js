@@ -10,6 +10,7 @@ const assert = require('node:assert/strict')
 const { createEngine } = require('../js/engine.js')
 const { createCloudCalendar } = require('../js/cloudcal.js')
 const { fakeGoogle } = require('./fake-gcal.js')
+const { fakeGraph } = require('./fake-graph.js')
 const ok = (n) => console.log('  ✔', n)
 
 const mem = () => { let s = null; return { load: async () => (s ? JSON.parse(s) : null), save: async (db) => { s = JSON.stringify(db) } } }
@@ -21,7 +22,7 @@ let ms = 0
 async function engineWith(calendar) {
 	let e = null
 	const cal = calendar === 'builtin' ? { kind: 'builtin' } : createCloudCalendar({
-		provider: 'google',
+		provider: calendar.provider || 'google',
 		request: calendar.request,
 		calendarsOf: () => (e ? e.snapshot().commitments.filter((c) => c.calendarUrl).map((c) => ({ url: c.calendarUrl, name: c.name, color: c.color })) : []),
 	})
@@ -100,5 +101,21 @@ const titles = (list) => list.map((b) => `${b.title}@${new Date(b.start * 1000).
 	const st3 = await d.api('GET', 'state')
 	assert.deepEqual(titles(await cd.readAll(T(0, 0), T(7, 0), st3.commitments.map((x) => x.calendarUrl))), titles(before), 'the same week, in Google Calendar')
 	ok('a built-in backup into Google Calendar')
+
+	// The Google Calendar backup into Outlook, and back out
+	const f = fakeGraph({ pageSize: 200 })
+	const { e: o, cal: co } = await engineWith({ provider: 'microsoft', request: f.request })
+	const r4 = await o.api('POST', 'backup', { records })
+	await co.flush()
+	assert.equal(r4.calendars, 2)
+	assert.deepEqual([...f.cals.values()].map((c) => c.name).sort(), ['Gym', 'Thesis'])
+	const st4 = await o.api('GET', 'state')
+	assert.ok(st4.commitments.every((x) => x.calendarUrl.startsWith('mscal:')))
+	assert.deepEqual(titles(await co.readAll(T(0, 0), T(7, 0), st4.commitments.map((x) => x.calendarUrl))), titles(before), 'the same week, in Outlook')
+	const fromOutlook = (await o.api('GET', 'backup')).records
+	const series = fromOutlook.find((x) => x.type === 'block' && x.fields.repeat === 'weekdays')
+	assert.deepEqual(series.fields.skip, [T(1, 9), T(3, 9)], 'exported from Outlook with what changed')
+	assert.equal((await o.api('POST', 'backup', { records })).blocks, 0, 'not twice')
+	ok('into Outlook, and out again')
 	console.log('backup with calendars: all checks passed')
 })().catch((e) => { console.error('✘', e); process.exit(1) })

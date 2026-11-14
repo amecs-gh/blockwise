@@ -35,6 +35,7 @@ let sharedBrowser = null
 const folder = new Map()
 // Google Calendar (the account's calendar with Google Drive), in memory
 const gcal = require('../../nextcloud/tests/fake-gcal.js').fakeGoogle()
+const graph = require('../../nextcloud/tests/fake-graph.js').fakeGraph()
 let folderVersion = 0
 const folderWaits = new Set()
 const folderChanged = () => { folderVersion++; for (const w of [...folderWaits]) w() }
@@ -101,7 +102,7 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 				if (!dev.calAllowed) env = { error: 'Invalid request.', status: 400 }
 				else {
 					dev.calCalls = (dev.calCalls || 0) + 1
-					try { env = { data: (await gcal.request(args[0], args[1], args[2] === null ? undefined : args[2])) ?? null } } catch (e) { env = { error: e.message, status: e.status || 0 } }
+					try { env = { data: (await (mode === 'onedrive' ? graph : gcal).request(args[0], args[1], args[2] === null ? undefined : args[2])) ?? null } } catch (e) { env = { error: e.message, status: e.status || 0 } }
 				}
 			}
 			else if (channel === 'blockCacheSave') { dev.blockCache = args[0]; env = { data: null } }
@@ -358,6 +359,43 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 			assert.deepEqual(g3.errors, [])
 			await g3.ctx.close()
 			console.log('  ✔ Google Drive + Google Calendar: moved there, planned there (offline too), another phone follows, and back')
+		}
+
+		// OneDrive: the same with Outlook
+		{
+			devA.calAllowed = false
+			const o1 = await phone(browser, 'app.html', { mode: 'onedrive', dev: devA, hash: '#settings' })
+			o1.page.on('dialog', (d) => d.accept())
+			await o1.page.waitForSelector('.imp-paccal input[role=switch]', { timeout: 15000 })
+			assert.match(await o1.page.textContent('.imp-paccal'), /Outlook/, 'named Outlook')
+			await o1.page.click('.imp-paccal input[role=switch]')
+			await o1.page.waitForFunction(() => document.querySelector('.imp-paccal input[role=switch]')?.checked && !document.querySelector('.imp-paccal input[role=switch]').disabled, null, { timeout: 15000 })
+			assert.ok(devA.calAllowed, 'asked for Outlook')
+			const st = await o1.page.evaluate(() => window.trackerApp.api('GET', 'state'))
+			assert.equal(st.features.calendarHome, 'microsoft')
+			assert.equal(graph.cals.size, st.commitments.length, 'a calendar per commitment')
+			assert.ok(st.commitments.every((c) => c.calendarId !== null))
+			const all = () => [...graph.cals.values()].flatMap((c) => [...c.events.values()])
+			for (let i = 0; i < 50 && !all().length; i++) await o1.page.waitForTimeout(100)
+			assert.ok(all().some((e) => e.subject === 'Planned for Google'), 'the blocks copied in')
+			await o1.page.evaluate(async () => {
+				const st = await window.trackerApp.api('GET', 'state')
+				const now = Math.floor(Date.now() / 1000)
+				await window.trackerApp.api('POST', 'blocks', { commitmentId: st.commitments[0].id, title: 'Planned for Outlook', start: now + 2 * 86400, end: now + 2 * 86400 + 3600 })
+			})
+			for (let i = 0; i < 50 && !all().some((e) => e.subject === 'Planned for Outlook'); i++) await o1.page.waitForTimeout(100)
+			assert.ok(all().some((e) => e.subject === 'Planned for Outlook'), 'planned here, in Outlook')
+			const titles = await o1.page.evaluate(async () => {
+				const now = Math.floor(Date.now() / 1000)
+				await window.trackerApp.api('GET', `blocks?from=${now}&to=${now + 86400 * 8}`)
+				await new Promise((r) => setTimeout(r, 600))
+				return (await window.trackerApp.api('GET', `blocks?from=${now}&to=${now + 86400 * 8}`)).blocks.map((b) => b.title)
+			})
+			assert.ok(titles.includes('Planned for Outlook') && titles.includes('Planned for Google'), 'read back from Outlook')
+			await o1.page.screenshot({ path: `${shots}/settings-outlook.png` })
+			assert.deepEqual(o1.errors, [])
+			await o1.ctx.close()
+			console.log('  ✔ OneDrive + Outlook: a calendar per commitment, the blocks there, planned there')
 		}
 	}
 

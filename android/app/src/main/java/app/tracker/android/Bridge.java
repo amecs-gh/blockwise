@@ -192,7 +192,7 @@ public final class Bridge {
                 break;
             case "connectDrive": {
                 final String provider = args.optString(0, "");
-                if (!Drives.DROPBOX.equals(provider) && !Drives.GOOGLE.equals(provider)) {
+                if (!Drives.DROPBOX.equals(provider) && !Drives.GOOGLE.equals(provider) && !Drives.ONEDRIVE.equals(provider)) {
                     reply(id, error(i18n().t("Invalid request."), 0));
                     break;
                 }
@@ -562,22 +562,26 @@ public final class Bridge {
     }
 
     /**
-     * [method, path, body]: a request to the account's calendar (Google Calendar,
-     * through the drive's login; only what CloudGuard allows). Answers the JSON, or
-     * an error with the status (0: not reachable).
+     * [method, path, body]: a request to the account's calendar (Google Calendar or
+     * Outlook, through the drive's login; only what CloudGuard allows). Answers the
+     * JSON, or an error with the status (0: not reachable).
      */
     private void cloudCal(String id, JSONArray args) {
         final String method = args.optString(0, "");
         final String path = args.optString(1, "");
         final Object body = args.isNull(2) ? null : args.opt(2);
-        if (!app.tracker.core.CloudGuard.google(method, path) || (body != null && !(body instanceof JSONObject))
+        final String provider = Store.drive(ctx);
+        final String calName = Drives.calendarName(provider);
+        final boolean allowed = Drives.GOOGLE.equals(provider) ? app.tracker.core.CloudGuard.google(method, path)
+                : Drives.ONEDRIVE.equals(provider) && app.tracker.core.CloudGuard.microsoft(method, path);
+        if (!allowed || (body != null && !(body instanceof JSONObject))
                 || (body != null && body.toString().length() > 64 * 1024) || !Store.driveCalendar(ctx)) {
             reply(id, error(i18n().t("Invalid request."), 400));
             return;
         }
         final Drives.Folder f = MainActivity.driveFolder(ctx);
         if (f == null) {
-            reply(id, error(i18n().t("Connect Google Drive first."), 401));
+            reply(id, error(i18n().t("Connect Google Drive or OneDrive first."), 401));
             return;
         }
         PAGE_IO.execute(() -> {
@@ -588,11 +592,11 @@ public final class Bridge {
                 if (r.status >= 200 && r.status < 300) {
                     result = "{\"data\":" + (text.trim().isEmpty() ? "null" : validJson(text)) + "}";
                 } else {
-                    String message = "Google Calendar: HTTP " + r.status;
+                    String message = calName + ": HTTP " + r.status;
                     try {
                         JSONObject e = new JSONObject(text).optJSONObject("error");
                         if (e != null && !e.optString("message").isEmpty()) {
-                            message = "Google Calendar: " + e.optString("message").replaceAll("[\\r\\n]", " ");
+                            message = calName + ": " + e.optString("message").replaceAll("[\\r\\n]", " ");
                             message = message.substring(0, Math.min(200, message.length()));
                         }
                     } catch (JSONException ignored) {

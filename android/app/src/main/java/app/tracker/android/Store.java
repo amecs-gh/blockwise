@@ -61,7 +61,7 @@ final class Store {
         return loggedIn(c) || local(c) || drive(c) != null;
     }
 
-    /** "nextcloud", "dropbox", "gdrive", "local", or null before the first start */
+    /** "nextcloud", "dropbox", "gdrive", "onedrive", "local", or null before the first start */
     static String mode(Context c) {
         if (loggedIn(c)) {
             return "nextcloud";
@@ -74,7 +74,7 @@ final class Store {
 
     private static final String DRIVE_ALIAS = "tracker-drive";
 
-    /** The connected drive ("dropbox" or "gdrive"), or null */
+    /** The connected drive ("dropbox", "gdrive" or "onedrive"), or null */
     static String drive(Context c) {
         SharedPreferences p = prefs(c);
         String d = p.getString("drive", null);
@@ -124,7 +124,7 @@ final class Store {
                 .apply();
     }
 
-    /** Google: the login also allows Blockwise's calendars (Google Calendar) */
+    /** The login also allows Blockwise's calendars (Google Calendar, Outlook) */
     static boolean driveCalendar(Context c) {
         return drive(c) != null && prefs(c).getBoolean("driveCalendar", false);
     }
@@ -138,9 +138,28 @@ final class Store {
         prefs(c).edit().putString("driveToken", encrypt(DRIVE_ALIAS, refreshToken)).apply();
     }
 
+    /** Outlook: the calendars known to be Blockwise's (made here, or found marked) */
+    static synchronized java.util.Set<String> outlookCalendars(Context c) {
+        return new java.util.HashSet<>(prefs(c).getStringSet("outlookCalendars", new java.util.HashSet<>()));
+    }
+
+    static synchronized void addOutlookCalendar(Context c, String id) {
+        java.util.Set<String> set = outlookCalendars(c);
+        if (id != null && set.size() < 500 && set.add(id)) {
+            prefs(c).edit().putStringSet("outlookCalendars", set).apply();
+        }
+    }
+
+    static synchronized void removeOutlookCalendar(Context c, String id) {
+        java.util.Set<String> set = outlookCalendars(c);
+        if (id != null && set.remove(id)) {
+            prefs(c).edit().putStringSet("outlookCalendars", set).apply();
+        }
+    }
+
     /** Forget the drive on this phone (the encrypted data on the drive stays). */
     static synchronized void forgetDrive(Context c) {
-        prefs(c).edit().remove("drive").remove("driveToken").remove("syncKey").remove("driveAccount").remove("driveCalendar").apply();
+        prefs(c).edit().remove("drive").remove("driveToken").remove("syncKey").remove("driveAccount").remove("driveCalendar").remove("outlookCalendars").apply();
         Vault.write(c, Vault.DRIVESTATE, null);
         Vault.write(c, Vault.BLOCKCACHE, null);
         try {

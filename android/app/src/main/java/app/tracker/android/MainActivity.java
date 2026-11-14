@@ -472,7 +472,8 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
                     .put("mode", Store.mode(this) == null ? JSONObject.NULL : Store.mode(this))
                     .put("drives", new JSONObject()
                             .put(Drives.DROPBOX, Drives.available(this, Drives.DROPBOX))
-                            .put(Drives.GOOGLE, Drives.available(this, Drives.GOOGLE)))
+                            .put(Drives.GOOGLE, Drives.available(this, Drives.GOOGLE))
+                            .put(Drives.ONEDRIVE, Drives.available(this, Drives.ONEDRIVE)))
                     .put("connecting", connecting)
                     .put("notifications", Store.notifications(this));
         } catch (JSONException ignored) {
@@ -787,7 +788,22 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
             return null;
         }
         if (savedDrive == null || !savedDrive.provider.equals(provider) || !savedDrive.refreshToken.equals(token)) {
-            savedDrive = new Drives.Folder(c, provider, token);
+            final Drives.Folder f = new Drives.Folder(c, provider, token);
+            final Context app = c.getApplicationContext();
+            f.calendar = Store.driveCalendar(c);
+            // Microsoft: each refresh brings a new token, kept (encrypted) at once
+            f.rotated = (next) -> {
+                try {
+                    synchronized (MainActivity.class) {
+                        if (savedDrive == f) {
+                            Store.replaceDriveToken(app, next);
+                        }
+                    }
+                } catch (Exception ignored) {
+                    // the one kept still works for a while
+                }
+            };
+            savedDrive = f;
         }
         return savedDrive;
     }
@@ -800,40 +816,41 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
     }
 
     /**
-     * Google Calendar for a Google Drive connected before (or without it): you log in
-     * again with the same account and allow it. Another account is refused.
+     * The account's calendar (Google Calendar, Outlook) for a drive connected without
+     * it: you log in again with the same account and allow it. Another account is refused.
      */
     void allowCalendar(CalendarDone done) {
         final String provider = Store.drive(this);
-        if (!Drives.GOOGLE.equals(provider)) {
-            done.done(Tracking.i18n().t("Connect Google Drive first."));
+        if (!Drives.GOOGLE.equals(provider) && !Drives.ONEDRIVE.equals(provider)) {
+            done.done(Tracking.i18n().t("Connect Google Drive or OneDrive first."));
             return;
         }
+        final boolean ms = Drives.ONEDRIVE.equals(provider);
         cancelDrive();
         final Drives.Login login = new Drives.Login();
         driveLogin = login;
         new Thread(() -> {
             try {
-                String[] r = Drives.login(this, provider, url -> runOnUiThread(() -> openLink(url)), login);
+                String[] r = Drives.login(this, provider, url -> runOnUiThread(() -> openLink(url)), login, true);
                 Drives.Folder f = new Drives.Folder(this, provider, r[0]);
                 String was = Store.driveAccount(this);
                 String now = f.account();
                 if (login.cancelled || was == null || !was.equals(now)) {
                     f.revoke();
                     if (!login.cancelled) {
-                        runOnUiThread(() -> done.done(Tracking.i18n().t("Log in with the Google account Blockwise syncs with.")));
+                        runOnUiThread(() -> done.done(Tracking.i18n().t(ms ? "Log in with the Microsoft account Blockwise syncs with." : "Log in with the Google account Blockwise syncs with.")));
                     }
                     return;
                 }
                 if (r[2] == null) {
                     f.revoke();
-                    runOnUiThread(() -> done.done(Tracking.i18n().t("Allow Blockwise to make calendars in Google Calendar, then try again.")));
+                    runOnUiThread(() -> done.done(Tracking.i18n().t(ms ? "Allow Blockwise to use Outlook, then try again." : "Allow Blockwise to make calendars in Google Calendar, then try again.")));
                     return;
                 }
                 Drives.Folder old = driveFolder(this);
-                Store.replaceDriveToken(this, r[0]);
+                Store.replaceDriveToken(this, f.refreshToken);
                 Store.setDriveCalendar(this, true);
-                if (old != null && !old.refreshToken.equals(r[0])) {
+                if (old != null && !old.refreshToken.equals(f.refreshToken)) {
                     old.revoke();
                 }
                 runOnUiThread(() -> done.done(null));
@@ -873,6 +890,7 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
                 pendingDrive = f;
                 pendingAccount = account;
                 pendingCalendar = r[2] != null;
+                f.calendar = pendingCalendar;
                 runOnUiThread(() -> done.done(null, exists));
             } catch (Drives.DriveException e) {
                 final String msg = e.getMessage();
