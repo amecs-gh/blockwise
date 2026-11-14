@@ -1858,3 +1858,8 @@ body.android .imp-pslide--prev {
 		animation: none;
 	}
 }
+
+/* Swipe anywhere on Tasks and Done (the whole screen, even below a short list) */
+body.android .imp-main--swipe {
+	touch-action: pan-y;
+}

@@ -502,6 +502,8 @@
 		try {
 			const page = await PAGES[route]()
 			main.append(page)
+			// A page that turns with a sideways swipe: anywhere on the screen, even below a short list
+			if (page.swipe) { swipeSides(main, ...page.swipe); main.classList.add('imp-main--swipe') }
 		} catch (e) {
 			console.error(e)
 			main.append(h('p', { class: 'imp-empty' }, tr('This page could not be loaded. Reload to try again.')))
@@ -1223,11 +1225,14 @@
 
 	/** Click-open menu next to an element; closes on Esc, outside click or a choice. */
 	let menuEl = null
+	let menuScrim = null
 	function closeMenu() {
 		if (!menuEl) return
 		const back = menuEl.returnFocus
 		menuEl.remove()
 		menuEl = null
+		// The tap that closed it ends on the scrim, not on the text under it
+		if (menuScrim) { const sc = menuScrim; menuScrim = null; setTimeout(() => sc.remove(), 400) }
 		if (back && document.contains(back)) back.focus()
 	}
 	function openMenu(anchor, build, { label = '' } = {}) {
@@ -1237,6 +1242,14 @@
 		const accent = getComputedStyle(anchor).getPropertyValue('--c')
 		if (accent) el.style.setProperty('--c', accent)
 		el.append(...[build(closeMenu)].flat(Infinity).filter((x) => x !== null && x !== undefined && x !== false))
+		// The phone: a tap outside only closes the menu (it doesn't open, select or edit what's under it)
+		if (PHONE) {
+			const swallow = (e) => { e.preventDefault(); e.stopPropagation() }
+			menuScrim = h('div', { class: 'imp-menu-scrim', 'aria-hidden': 'true' })
+			menuScrim.addEventListener('pointerdown', (e) => { swallow(e); closeMenu() })
+			for (const t of ['mousedown', 'mouseup', 'click', 'touchend', 'contextmenu']) menuScrim.addEventListener(t, swallow)
+			document.body.append(menuScrim)
+		}
 		document.body.append(el)
 		menuEl = el
 		const r = anchor.getBoundingClientRect()
@@ -4294,14 +4307,15 @@
 		const col = taskColumn(c, tasks, blockData.blocks, now)
 		// Swipe sideways for the next or previous commitment (the chips follow)
 		if (state.tasksSlide) { col.classList.add(state.tasksSlide > 0 ? 'imp-pslide--next' : 'imp-pslide--prev'); state.tasksSlide = 0 }
-		swipeSides(col, (dir) => {
+		// (on the whole screen, so an empty commitment can be swiped past too)
+		page.swipe = [(dir) => {
 			const list = state.commitments
 			const i = list.findIndex((x) => x.id === c.id)
 			const next = list[(i + dir + list.length) % list.length]
 			if (!next || next.id === c.id) return
 			state.tasksSlide = dir
 			pick(next)
-		}, () => !document.querySelector('.imp-menu, .imp-ned'))
+		}, () => !document.querySelector('.imp-menu, .imp-ned')]
 		page.append(col)
 		return page
 	}
@@ -4334,8 +4348,19 @@
 		const day = days[state.doneDay]
 		const totalTracked = days.reduce((s, x) => s + x.tracked, 0)
 		const totalPlanned = days.reduce((s, x) => s + x.planned, 0)
-		const page = h('div', { class: 'imp-page imp-pdone' })
+		const page = h('div', { class: `imp-page imp-pdone ${state.doneSlide > 0 ? 'imp-pslide--next' : state.doneSlide < 0 ? 'imp-pslide--prev' : ''}` })
+		state.doneSlide = 0
 		const week = (n) => { state.doneWeek = n; state.doneDay = null; render() }
+		// Swipe sideways: the next or previous day (into the next or previous week), never past today
+		page.swipe = [(dir) => {
+			let w = state.doneWeek
+			let i = state.doneDay + dir
+			if (i > 6) { if (w === 0) return; w -= 1; i = 0 }
+			if (i < 0) { w += 1; i = 6 }
+			if (w === 0 && Math.floor(addPeriod(startOfWeek(new Date()), 'day', i) / 1000) > now) return
+			Object.assign(state, { doneWeek: w, doneDay: i, doneDayWeek: w, doneSlide: dir })
+			render()
+		}]
 		page.append(phoneBar(tr('Done'), state.doneWeek === 0 ? tr('This week') : tr('Week of {date}', { date: fmt.day.format(ws) }),
 			h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('Previous week'), title: tr('Previous week'), onclick: () => week(state.doneWeek + 1) }, chevron(-1)),
 			h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('Next week'), title: tr('Next week'), disabled: state.doneWeek === 0, onclick: () => week(state.doneWeek - 1) }, chevron(1))))

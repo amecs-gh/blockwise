@@ -549,6 +549,59 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		await swipeTasks(-200, (t) => document.querySelector('.imp-pchip[aria-selected="true"]')?.innerText !== t)
 		await swipeTasks(200, (t) => document.querySelector('.imp-pchip[aria-selected="true"]')?.innerText === t)
 		assert.equal(await chosen(), firstChip)
+		// A commitment without tasks: swiping on the empty page below works too
+		const empty = await pc.page.evaluate(async () => window.trackerApp.api('POST', 'commitments', { name: 'Empty ' + Date.now(), color: '#888888' }))
+		await pc.page.evaluate(() => { location.hash = '#now'; setTimeout(() => { location.hash = '#tasks' }, 50) })
+		await pc.page.waitForSelector(`.imp-pchip >> text=${empty.name}`, { timeout: 15000 })
+		await pc.page.click(`.imp-pchip >> text=${empty.name}`)
+		await pc.page.waitForFunction((n) => document.querySelector('.imp-pchip[aria-selected="true"]')?.innerText.includes(n), empty.name)
+		const swipeAt = async (dx, y) => {
+			const cdp = await pc.page.context().newCDPSession(pc.page)
+			const x0 = dx < 0 ? 330 : 80
+			await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y }] })
+			for (let i = 1; i <= 3; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + (dx * i) / 3, y: y + i }] })
+			await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+			await cdp.detach()
+		}
+		let away = false
+		for (let i = 0; i < 3 && !away; i++) {
+			await swipeAt(i % 2 ? 200 : -200, 700)
+			away = !!(await pc.page.waitForFunction((n) => !document.querySelector('.imp-pchip[aria-selected="true"]')?.innerText.includes(n), empty.name, { timeout: 4000 }).catch(() => null))
+		}
+		assert.ok(away, 'swiped away from an empty commitment, below its (empty) list')
+		await pc.page.evaluate((id) => window.trackerApp.api('DELETE', 'commitments/' + id), empty.id)
+		// The ⋯ menu: a tap outside closes it, and doesn't start editing what's under it
+		await pc.page.evaluate(() => { location.hash = '#now'; setTimeout(() => { location.hash = '#tasks' }, 50) })
+		await pc.page.waitForSelector('.imp-pchip', { timeout: 15000 })
+		await pc.page.click(`.imp-pchip >> text=${firstChip.trim()}`)
+		await pc.page.waitForSelector('.imp-ptasks .imp-tq__more', { timeout: 15000 })
+		await pc.page.waitForSelector('.imp-updating[hidden]', { state: 'attached', timeout: 15000 }).catch(() => {})
+		await pc.page.locator('.imp-ptasks .imp-tq__more').first().click()
+		await pc.page.waitForSelector('.imp-menu', { timeout: 5000 })
+		const under = await pc.page.locator('.imp-ptasks .imp-tq__title').nth(1).boundingBox()
+		await pc.page.touchscreen.tap(under.x + 20, under.y + under.height / 2)
+		await pc.page.waitForTimeout(500)
+		const after = await pc.page.evaluate(() => ({ menu: !!document.querySelector('.imp-menu'), editing: !!document.querySelector('.imp-ptasks input[type=text], .imp-ptasks textarea, .imp-ptasks [contenteditable="true"]'), sel: String(getSelection()) }))
+		assert.deepEqual(after, { menu: false, editing: false, sel: '' }, 'menu closed, nothing edited or selected')
+		// Done: a swipe goes to the previous day, and back
+		await pc.page.evaluate(() => { location.hash = '#done' })
+		await pc.page.waitForSelector('.imp-pdone .imp-pdays', { timeout: 15000 })
+		const dayNow = () => pc.page.evaluate(() => document.querySelector('.imp-pday[aria-selected="true"]')?.getAttribute('aria-label').split(':')[0] + document.querySelector('.imp-pdone .imp-pbar p')?.innerText)
+		const d0 = await dayNow()
+		const doneSwipe = async (dx, same) => {
+			for (let i = 0; i < 3; i++) {
+				await pc.page.waitForSelector('.imp-updating[hidden]', { state: 'attached', timeout: 15000 }).catch(() => {})
+				await swipeAt(dx, 600)
+				await pc.page.waitForTimeout(700)
+				if ((await dayNow() === d0) === same) return
+			}
+			assert.fail(`done swiped ${dx}: ${await dayNow()}`)
+		}
+		await doneSwipe(200, false)
+		await doneSwipe(-200, true)
+		await swipeAt(-200, 600)
+		await pc.page.waitForTimeout(600)
+		assert.equal(await dayNow(), d0, 'not past today')
 		assert.deepEqual(pc.errors, [], 'no console errors')
 		await pc.ctx.close()
 		Object.assign(device, { phoneCals: null, phoneEvents: [], busyEvents: [] })

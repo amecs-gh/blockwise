@@ -1734,6 +1734,13 @@ body.android :is(.imp-ptasks, .imp-pcommit) .imp-tq__head {
 body.android :is(.imp-ptasks, .imp-pcommit) .imp-tq__head:has(> .imp-tq__check) {
 	grid-template-columns: auto minmax(0, 1fr) auto;
 }
+body.android #tracker-app :is(.imp-ptasks, .imp-pcommit) .imp-tq__head > .imp-tq__check {
+	grid-row: 1;
+	grid-column: 1;
+}
+body.android :is(.imp-ptasks, .imp-pcommit) .imp-tq__head:has(> .imp-tq__check) > .imp-tq__title {
+	grid-column: 2;
+}
 body.android :is(.imp-ptasks, .imp-pcommit) .imp-tq__title {
 	grid-row: 1;
 	flex: none;
@@ -1850,4 +1857,9 @@ body.android .imp-pslide--prev {
 	body.android :is(.imp-pslide--next, .imp-pslide--prev) {
 		animation: none;
 	}
+}
+
+/* Swipe anywhere on Tasks and Done (the whole screen, even below a short list) */
+body.android .imp-main--swipe {
+	touch-action: pan-y;
 }
