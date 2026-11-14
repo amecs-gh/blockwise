@@ -270,6 +270,8 @@ async function suite(pretty) {
 			await chooser.setFiles({ name: 'Blockwise-encrypted.json', mimeType: 'application/json', buffer: Buffer.from(sealedText) })
 		}
 		await pick()
+		// (the export form has passphrase fields too: wait for the import's)
+		await r.locator('.imp-backup .imp-backup__form input[autocomplete="current-password"]').waitFor()
 		await r.locator('.imp-backup input[type="password"]').fill('wrong passphrase')
 		await r.getByRole('button', { name: 'Open' }).click()
 		await r.getByText('Wrong passphrase, or the file was changed.').waitFor()
