@@ -490,10 +490,44 @@
 		}
 		return enginePromise
 	}
+	// --- the account's calendar: with Google Drive, blocks can live in Google Calendar ---
+	let cloud = null // its adapter (js/cloudcal.js), one for the app's life while it's used
+	let currentEngine = null
+	let cloudUsed = false // the engine was made with it
+	const accountCalendar = () => (mode === 'gdrive' ? 'google' : null)
+	function makeCloud() {
+		if (!cloud) {
+			cloud = window.BlockwiseCloudCalendar.createCloudCalendar({
+				provider: 'google',
+				request: (method, path, body) => call('cloudCal', method, path, body === undefined ? null : body),
+				storage: { load: () => call('blockCacheLoad'), save: (t) => call('blockCacheSave', t) },
+				// The commitments' calendars, from the data
+				calendarsOf: () => (currentEngine ? currentEngine.snapshot().commitments.filter((c) => typeof c.calendarUrl === 'string' && c.calendarUrl.startsWith('gcal:')).map((c) => ({ url: c.calendarUrl, name: c.name, color: c.color })) : []),
+				onChange: () => fire('changed'),
+				onLoading: () => fire('loading', loading()),
+				onOffline: () => fire('offline', true),
+				onRefused: (reasons) => {
+					const it = /^it\b/i.test(navigator.language || '')
+					try { window.OC.Notification.showTemporary((it ? 'Google Calendar non ha accettato alcune modifiche ai blocchi: ' : 'Google Calendar didn\'t take some changes to blocks: ') + reasons.join(' · '), { type: 'error' }) } catch (x) { /* no page */ }
+				},
+			})
+		}
+		return cloud
+	}
+	/** Where this phone keeps the blocks: the account's calendar if the data says so and it's allowed here */
+	async function wantsCloud(db) {
+		const home = db && db.settings && db.settings.f && db.settings.f.calendarHome
+		return home === accountCalendar() && home === 'google' && !!(await call('calendarAllowed').catch(() => false))
+	}
 	async function create() {
+		const kept = await call('dbLoad')
+		const first = kept ? JSON.parse(kept) : null
+		cloudUsed = mode !== 'nextcloud' && mode !== 'local' && await wantsCloud(first)
+		let loaded = false
 		const e = await window.TrackerEngine.createEngine({
 			storage: {
-				load: async () => { const t = await call('dbLoad'); return t ? JSON.parse(t) : null },
+				// (read once above, to know where the blocks are)
+				load: async () => { if (!loaded) { loaded = true; return first } const t = await call('dbLoad'); return t ? JSON.parse(t) : null },
 				save: (db) => call('dbSave', JSON.stringify(db)),
 			},
 			remote: mode === 'nextcloud' ? {
@@ -506,15 +540,88 @@
 				pull: async (since, limit) => (await openDrive()).pull(since, limit),
 				push: async (records) => (await openDrive()).push(records),
 			},
-			calendar: local ? { kind: 'builtin' } : calendar,
+			calendar: cloudUsed ? makeCloud() : local ? { kind: 'builtin' } : calendar,
 			// A change here: send it soon. After a sync: only update the notification.
 			onChange: (db, info) => { snapshotSoon(); if (mode !== 'local' && !(info && info.sync)) syncSoon(3000) },
 		})
 		engineNode = e.node()
+		currentEngine = e
 		setTimeout(watchDrive, 0)
 		// Just connected a sync after using the phone only: everything goes up
 		if (mode !== 'local' && await call('takeResend').catch(() => false)) await e.resendAll()
 		return e
+	}
+	/** Another device moved the blocks (or back): this phone follows; new commitments get their calendar */
+	async function followCalendarHome(e) {
+		if (mode === 'nextcloud' || mode === 'local') return
+		const want = e.calendarHome() === accountCalendar() && e.calendarHome() === 'google' && !!(await call('calendarAllowed').catch(() => false))
+		if (want !== cloudUsed) {
+			await e.flush()
+			enginePromise = null
+			firstSync = null
+			await engine()
+			fire('changed')
+			return
+		}
+		if (!cloudUsed) return
+		// The drive answered, so the network is back: what waits for the calendar goes too
+		if (cloud && cloud.pending()) cloud.flush().catch(() => {})
+		for (const c of e.snapshot().commitments) {
+			if (c.calendarUrl && c.calendarUrl.startsWith('gcal:')) continue
+			try { e.linkCalendar(c.uuid, await makeCloud().createCalendar({ name: c.name, color: c.color })) } catch (x) { break }
+		}
+	}
+	/**
+	 * Blocks into the account's calendar (on: a calendar per commitment, the built-in
+	 * blocks copied there and taken out of Blockwise), or back (off: the calendar's
+	 * events from 3 months back to a year ahead copied in). Every device follows.
+	 */
+	async function useAccountCalendar(on) {
+		const e = await engine()
+		if (accountCalendar() !== 'google') throw new Error('Connect Google Drive first.')
+		const it = /^it\b/i.test(navigator.language || '')
+		if (on) {
+			if (!(await call('calendarAllowed'))) await call('allowCalendar')
+			const c = makeCloud()
+			const snap = e.snapshot()
+			const urlOf = new Map()
+			for (const cm of snap.commitments) {
+				let url = cm.calendarUrl && cm.calendarUrl.startsWith('gcal:') ? cm.calendarUrl : null
+				if (!url) {
+					try { url = await c.createCalendar({ name: cm.name, color: cm.color }) } catch (x) {
+						throw new Error(it ? 'Google Calendar non risponde. Riprova quando sei online.' : 'Google Calendar didn\'t answer. Try again when you are online.')
+					}
+					e.linkCalendar(cm.uuid, url)
+				}
+				urlOf.set(cm.uuid, url)
+			}
+			const blocks = e.builtinBlocks()
+			const names = new Map(snap.commitments.map((cm) => [cm.uuid, cm.name]))
+			const copied = await c.importBlocks(blocks.filter((b) => urlOf.has(b.commitment)).map((b) => ({ url: urlOf.get(b.commitment), title: b.title || names.get(b.commitment) || '', start: b.start, end: b.end, repeat: b.repeat, until: b.until, skip: b.skip })))
+			e.removeBlocks(blocks.filter((b) => urlOf.has(b.commitment)).map((b) => b.uuid))
+			e.setCalendarHome('google')
+			await e.flush()
+			c.flush().catch(() => {})
+			enginePromise = null
+			firstSync = null
+			await engine()
+			syncNow(true)
+			return { copied }
+		}
+		const c = makeCloud()
+		const snap = e.snapshot()
+		const linked = snap.commitments.filter((cm) => cm.calendarUrl && cm.calendarUrl.startsWith('gcal:'))
+		const byUrl = new Map(linked.map((cm) => [cm.calendarUrl, cm.uuid]))
+		const now = Math.floor(Date.now() / 1000)
+		const events = linked.length ? await c.readAll(now - 90 * 86400, now + 365 * 86400, linked.map((cm) => cm.calendarUrl)) : []
+		const copied = e.importBlocks(events.map((ev) => ({ commitment: byUrl.get(ev.url), title: ev.title, start: ev.start, end: ev.end, origin: `gcal:${ev.uid}` })))
+		e.setCalendarHome('builtin')
+		await e.flush()
+		enginePromise = null
+		firstSync = null
+		await engine()
+		syncNow(true)
+		return { copied }
 	}
 	let engineNode = null
 	/** The drive's file sync, with the key kept (encrypted) by the app */
@@ -570,6 +677,7 @@
 				const r = await e.sync()
 				pulled = r.pulled || 0
 				reachable()
+				await followCalendarHome(e)
 				if (r.refused && r.refused.length) {
 					// Changes the server refused were undone here: say so (once per sync)
 					const reasons = [...new Set(r.refused.map((x) => x.reason))].join(' · ')
@@ -668,7 +776,14 @@
 		busy: (from, to, ids) => call('busy', from, to, ids),
 		onChanged: (cb) => listeners.changed.push(cb),
 		/** Waiting for Nextcloud (calendars, blocks): the page shows placeholders */
-		loading,
+		loading: () => loading() || !!(cloud && cloudUsed && cloud.loading()),
+		/** The account's calendar (Google Calendar with Google Drive): what's possible, and switching */
+		accountCalendar: async () => {
+			const e = await engine()
+			const provider = accountCalendar()
+			return provider ? { provider, home: e.calendarHome(), allowed: !!(await call('calendarAllowed').catch(() => false)), used: cloudUsed, waiting: cloud ? cloud.pending() : 0 } : null
+		},
+		useAccountCalendar,
 		onLoading: (cb) => listeners.loading.push(cb),
 		/** Nextcloud didn't answer (said at most every 10 minutes) */
 		onOffline: (cb) => {

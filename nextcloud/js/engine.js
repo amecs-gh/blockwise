@@ -41,8 +41,10 @@
 		session: ['commitment', 'start', 'end', 'blockUid', 'pomodoro'],
 		// The built-in calendar's blocks (only on devices without Nextcloud; never sent to a Nextcloud server)
 		block: ['commitment', 'title', 'start', 'end', 'repeat', 'until', 'skip', 'origin', 'created'],
-		settings: [...Object.keys({ focusMinutes: 0, shortBreakMinutes: 0, longBreakMinutes: 0, sessionsBeforeLongBreak: 0, reminderMinutes: 0, defaultEstimate: 0 }), 'pomodoro', 'showCalendar', 'longBreakUntil'],
+		settings: [...Object.keys({ focusMinutes: 0, shortBreakMinutes: 0, longBreakMinutes: 0, sessionsBeforeLongBreak: 0, reminderMinutes: 0, defaultEstimate: 0 }), 'pomodoro', 'showCalendar', 'longBreakUntil', 'calendarHome'],
 	}
+	/** Where blocks live with a drive: in Blockwise, or in the account's calendar (all devices follow) */
+	const CALENDAR_HOMES = ['builtin', 'google', 'microsoft']
 	const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 	/** "Carried over" marks: a set, at most 500 (the newest), like the server */
 	const carriedSet = (list) => [...new Set(list.filter((x) => typeof x === 'string' && x !== '' && x.length <= 600))].slice(-500)
@@ -231,6 +233,7 @@
 			}
 			return s
 		}
+		const calendarHome = () => (CALENDAR_HOMES.includes(db.settings.f.calendarHome) ? db.settings.f.calendarHome : 'builtin')
 		const longBreakUntil = () => {
 			const v = db.settings.f.longBreakUntil
 			return typeof v === 'number' && v > 0 ? v : null
@@ -531,7 +534,7 @@
 					running: running(),
 					longBreakUntil: longBreakUntil(),
 					now: now(),
-					features: { createBlocks: typeof o.calendar.createEvent === 'function', calendars: o.calendar.kind !== 'none', builtinCalendar: builtin, deleteCalendar: !builtin && typeof o.calendar.deleteCalendar === 'function' ? (o.calendar.kind === 'nextcloud' ? 'trash' : 'permanent') : null, calendarView: builtin || typeof o.calendar.updateEvent === 'function' },
+					features: { createBlocks: typeof o.calendar.createEvent === 'function', calendars: o.calendar.kind !== 'none', builtinCalendar: builtin, deleteCalendar: !builtin && typeof o.calendar.deleteCalendar === 'function' ? (o.calendar.kind === 'nextcloud' ? 'trash' : 'permanent') : null, calendarView: builtin || typeof o.calendar.updateEvent === 'function', calendarHome: calendarHome(), calendarKind: o.calendar.kind || null },
 					sync: { pending: pendingCount(), lastSync: db.lastSync, server: !!o.remote, refused: db.refused || null },
 				}
 			}],
@@ -1352,6 +1355,9 @@
 			/** Where a block was copied to (or came from): "apple:<event id>" */
 			markBlock: (uuid, origin) => { if (db.records.block[uuid]) { write('block', uuid, { origin: String(origin).slice(0, 600) }); changed() } },
 			removeBlocks: (uuids) => { for (const u of uuids || []) remove('block', u); changed() },
+			/** Where blocks live (set by the app, after moving them): every device follows */
+			calendarHome,
+			setCalendarHome: (home) => { if (CALENDAR_HOMES.includes(home) && home !== calendarHome()) { writeSettings({ calendarHome: home }); changed() } },
 			linkCalendar: (commitmentUuid, url) => { if (db.records.commitment[commitmentUuid]) { write('commitment', commitmentUuid, { calendarUrl: url }); changed() } },
 			/** Moving to a new sync (data taken along): send everything, read the new one from the start */
 			resendAll: () => { markAllDirty(); db.cursor = 0; return o.storage.save(db) },

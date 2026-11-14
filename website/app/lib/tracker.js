@@ -4557,6 +4557,19 @@
 			page.append(!state.commitments.length ? noCommitments() : h('div', { class: 'imp-empty' }, h('p', null, tr('The calendar is off in Settings.'))))
 			return page
 		}
+		// Another device moved the blocks to the account's calendar: this one needs to allow it too
+		const f = state.features || {}
+		if (f.calendarHome && f.calendarHome !== 'builtin' && f.calendarKind === 'builtin' && desktop.useAccountCalendar) {
+			const name = f.calendarHome === 'google' ? 'Google Calendar' : 'Outlook'
+			page.append(phoneBar(tr('Calendar'), null))
+			page.append(h('div', { class: 'imp-empty imp-paccal__ask' },
+				h('p', null, tr('Your blocks are in {calendar}. Allow it on this device to see and plan them.', { calendar: name })),
+				h('button', { type: 'button', class: 'imp-button imp-button--primary', onclick: async (e) => {
+					e.currentTarget.disabled = true
+					try { await desktop.useAccountCalendar(true); await refresh() } catch (x) { toast(x.message, true); e.currentTarget.disabled = false }
+				} }, tr('Allow {calendar}', { calendar: name }))))
+			return page
+		}
 		const days = calDays()
 		const from = tsOf(days[0])
 		const to = tsOf(addDays(days[days.length - 1], 1))
@@ -4602,6 +4615,57 @@
 		state.tasksView = 'notes'
 		location.replace('#tasks')
 		return h('div')
+	}
+
+	/**
+	 * Settings: blocks in the account's calendar (Google Calendar with Google Drive).
+	 * Every device follows; the blocks' titles and times are then stored by the
+	 * calendar's provider (tasks, notes and tracked time stay end-to-end encrypted).
+	 */
+	async function accountCalendarSettings() {
+		const info = await desktop.accountCalendar().catch(() => null)
+		if (!info) return h('div', { hidden: true })
+		const name = info.provider === 'google' ? 'Google Calendar' : 'Outlook'
+		const on = info.home === info.provider
+		const box = h('section', { class: 'imp-card imp-pbusy imp-paccal' })
+		const sw = h('input', {
+			type: 'checkbox',
+			role: 'switch',
+			checked: on,
+			'aria-describedby': 'imp-paccal-d',
+			onchange: async () => {
+				const want = sw.checked
+				sw.disabled = true
+				try {
+					if (!want && !confirm(tr('Copy your blocks back into Blockwise? The events stay in {calendar}.', { calendar: name }))) { sw.checked = true; return }
+					const r = await desktop.useAccountCalendar(want)
+					toast(want ? trn('%n block moved to {calendar}.', '%n blocks moved to {calendar}.', r.copied, { calendar: name }) : trn('%n block copied into Blockwise.', '%n blocks copied into Blockwise.', r.copied))
+					state.calBlocks = null
+					state.dayCache = null
+					await refresh()
+				} catch (e) {
+					sw.checked = !want
+					toast(e.message || tr('Something went wrong.'), true)
+				} finally {
+					sw.disabled = false
+				}
+			},
+		})
+		box.append(h('label', { class: 'imp-pbusy__head' },
+			h('span', null, h('strong', null, tr('Blocks in {calendar}', { calendar: name })),
+				h('span', { class: 'imp-muted', id: 'imp-paccal-d' }, tr('Each commitment gets its own calendar there; plan here or there, on every device. Their titles and times are then stored by {provider} (tasks, notes and tracked time stay end-to-end encrypted).', { provider: info.provider === 'google' ? 'Google' : 'Microsoft' }))),
+			sw))
+		if (on && !info.allowed) {
+			// Moved by another device: this one needs the permission too
+			box.append(h('div', { class: 'imp-paccal__ask' },
+				h('p', null, tr('Your blocks are in {calendar}. Allow it on this device to see and plan them.', { calendar: name })),
+				h('button', { type: 'button', class: 'imp-button imp-button--primary', onclick: async (e) => {
+					e.currentTarget.disabled = true
+					try { await desktop.useAccountCalendar(true); await refresh() } catch (x) { toast(x.message, true); e.currentTarget.disabled = false }
+				} }, tr('Allow {calendar}', { calendar: name }))))
+		}
+		if (on && info.waiting) box.append(h('p', { class: 'imp-muted imp-pbusy__none' }, trn('%n change waiting to reach the calendar', '%n changes waiting to reach the calendar', info.waiting)))
+		return box
 	}
 
 	/** Settings: your other calendars as grey busy time in Calendar (nothing copied, nothing synced) */
@@ -4658,6 +4722,7 @@
 			icon(ICON_ME, 22),
 			h('span', null, h('strong', null, tr('Account and sync')), h('span', { class: 'imp-muted' }, tr('Where your data is, sync, export'))),
 			chevron(1)))
+		if (desktop.accountCalendar) page.append(await accountCalendarSettings())
 		if (desktop.otherCalendars && calendarShown()) page.append(await busySettings())
 		page.append(await pageSettings())
 		return page

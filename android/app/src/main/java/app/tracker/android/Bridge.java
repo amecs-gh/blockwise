@@ -91,7 +91,7 @@ public final class Bridge {
     /** What only the app's window can do (dialogs, logins, permissions, other apps) */
     private static final java.util.Set<String> WINDOW_ONLY = new java.util.HashSet<>(java.util.Arrays.asList(
             "calendarAccess", "createEvent", "updateEvent", "deleteEvent", "otherCalendars", "busy", "login", "cancelLogin", "openCalendar", "calendarApp", "chooseCalendarApp", "account", "useLocal", "connect",
-            "backToApp", "connectDrive", "cancelDrive", "saveDrive", "saveFile", "openFile"));
+            "backToApp", "connectDrive", "cancelDrive", "saveDrive", "saveFile", "openFile", "allowCalendar"));
     private static final int MAX_FILE = 64 * 1024 * 1024;
 
     private void dispatch(String id, String channel, JSONArray args) {
@@ -240,7 +240,16 @@ public final class Bridge {
                 break;
             }
             case "blockCacheLoad":
-                background(id, () -> Store.client(ctx) == null ? null : Vault.read(ctx, Vault.BLOCKCACHE));
+                background(id, () -> Store.client(ctx) == null && Store.drive(ctx) == null ? null : Vault.read(ctx, Vault.BLOCKCACHE));
+                break;
+            case "cloudCal":
+                cloudCal(id, args);
+                break;
+            case "calendarAllowed":
+                reply(id, data(Store.driveCalendar(ctx)));
+                break;
+            case "allowCalendar":
+                activity.allowCalendar((err) -> reply(id, err == null ? data(true) : error(i18n().t(err), 0)));
                 break;
             case "blockCacheSave": {
                 final String bc = args.optString(0, "");
@@ -249,7 +258,7 @@ public final class Bridge {
                     break;
                 }
                 SAVE.execute(() -> {
-                    if (Store.client(ctx) != null) {
+                    if (Store.client(ctx) != null || Store.drive(ctx) != null) {
                         Vault.write(ctx, Vault.BLOCKCACHE, bc);
                     }
                     host.runOnUiThread(() -> reply(id, data(null)));
@@ -549,6 +558,53 @@ public final class Bridge {
                 return;
             }
             background(id, () -> new JSONObject().put("uid", Calendars.create(ctx, url, title, start, end, repeat, until, tz)));
+        });
+    }
+
+    /**
+     * [method, path, body]: a request to the account's calendar (Google Calendar,
+     * through the drive's login; only what CloudGuard allows). Answers the JSON, or
+     * an error with the status (0: not reachable).
+     */
+    private void cloudCal(String id, JSONArray args) {
+        final String method = args.optString(0, "");
+        final String path = args.optString(1, "");
+        final Object body = args.isNull(2) ? null : args.opt(2);
+        if (!app.tracker.core.CloudGuard.google(method, path) || (body != null && !(body instanceof JSONObject))
+                || (body != null && body.toString().length() > 64 * 1024) || !Store.driveCalendar(ctx)) {
+            reply(id, error(i18n().t("Invalid request."), 400));
+            return;
+        }
+        final Drives.Folder f = MainActivity.driveFolder(ctx);
+        if (f == null) {
+            reply(id, error(i18n().t("Connect Google Drive first."), 401));
+            return;
+        }
+        PAGE_IO.execute(() -> {
+            String result;
+            try {
+                Drives.Resp r = f.calendar(method, path, body == null ? null : body.toString());
+                String text = r.body == null ? "" : new String(r.body, java.nio.charset.StandardCharsets.UTF_8);
+                if (r.status >= 200 && r.status < 300) {
+                    result = "{\"data\":" + (text.trim().isEmpty() ? "null" : validJson(text)) + "}";
+                } else {
+                    String message = "Google Calendar: HTTP " + r.status;
+                    try {
+                        JSONObject e = new JSONObject(text).optJSONObject("error");
+                        if (e != null && !e.optString("message").isEmpty()) {
+                            message = "Google Calendar: " + e.optString("message").replaceAll("[\\r\\n]", " ");
+                            message = message.substring(0, Math.min(200, message.length()));
+                        }
+                    } catch (JSONException ignored) {
+                        // not JSON
+                    }
+                    result = error(message, r.status);
+                }
+            } catch (Drives.DriveException e) {
+                result = error(e.getMessage(), e.offline ? 0 : e.status);
+            }
+            final String out = result;
+            host.runOnUiThread(() -> reply(id, out));
         });
     }
 

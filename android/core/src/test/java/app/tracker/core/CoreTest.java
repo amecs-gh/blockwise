@@ -98,6 +98,30 @@ public final class CoreTest {
             check(!ApiGuard.allowed(p[0], p[1]), "refused " + p[0] + " " + p[1]);
         }
 
+        // --- the account's calendar: only Blockwise's calendar requests ---
+        for (String[] p : new String[][] {
+                {"POST", "calendars"},
+                {"GET", "calendars/cal1%40group.calendar.google.com/events?timeMin=2026-11-16T00%3A00%3A00Z&timeMax=2026-11-23T00%3A00%3A00Z&singleEvents=true&maxResults=2500&showDeleted=false&orderBy=startTime"},
+                {"GET", "calendars/c%40group.calendar.google.com/events?timeMin=2026-11-16T00:00:00Z&timeMax=2026-11-23T00:00:00Z&singleEvents=false&maxResults=2500&showDeleted=false&pageToken=abc_DEF-1"},
+                {"POST", "calendars/c%40g.com/events"},
+                {"GET", "calendars/c%40g.com/events/abc123"},
+                {"PATCH", "calendars/c%40g.com/events/abc123_20261116T090000Z"},
+                {"DELETE", "calendars/c%40g.com/events/abc123"},
+                {"POST", "calendars/c%40g.com/events/abc123/move?destination=d%40g.com"},
+                {"PATCH", "users/me/calendarList/c%40g.com?colorRgbFormat=true"},
+                {"DELETE", "calendars/c%40g.com"}}) {
+            check(CloudGuard.google(p[0], p[1]), "calendar allowed " + p[0] + " " + p[1]);
+        }
+        for (String[] p : new String[][] {
+                {"GET", "calendars"}, {"GET", "users/me/calendarList"}, {"GET", "calendars/c%40g.com/events?q=secret"},
+                {"GET", "calendars/c%40g.com/events/../../drive/v3/files"}, {"GET", "calendars/c%2F..%2Fx/events"},
+                {"PUT", "calendars/c%40g.com/events/abc"}, {"POST", "calendars/c%40g.com/acl"}, {"GET", "calendars/c%40g.com/acl"},
+                {"PATCH", "users/me/settings/x"}, {"DELETE", "users/me/calendarList/c%40g.com"}, {"POST", "calendars/c%40g.com/events/abc/move?destination=d&x=1"},
+                {"GET", "https://evil.example/x"}, {"GET", "calendars/c%40g.com/events?timeMin=a b"}, {null, "calendars"}, {"POST", "calendars/c@g.com/events"},
+                {"POST", "calendars//events"}}) {
+            check(!CloudGuard.google(p[0], p[1]), "calendar refused " + p[0] + " " + p[1]);
+        }
+
         // --- reminders are remembered by the session's uuid (same from the phone's data and the server's) ---
         {
             Dash a = dash(true, 1L, false);

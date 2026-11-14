@@ -792,6 +792,64 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
         return savedDrive;
     }
 
+    private static volatile boolean pendingCalendar;
+
+    interface CalendarDone {
+        /** @param error null when Google Calendar is allowed now */
+        void done(String error);
+    }
+
+    /**
+     * Google Calendar for a Google Drive connected before (or without it): you log in
+     * again with the same account and allow it. Another account is refused.
+     */
+    void allowCalendar(CalendarDone done) {
+        final String provider = Store.drive(this);
+        if (!Drives.GOOGLE.equals(provider)) {
+            done.done(Tracking.i18n().t("Connect Google Drive first."));
+            return;
+        }
+        cancelDrive();
+        final Drives.Login login = new Drives.Login();
+        driveLogin = login;
+        new Thread(() -> {
+            try {
+                String[] r = Drives.login(this, provider, url -> runOnUiThread(() -> openLink(url)), login);
+                Drives.Folder f = new Drives.Folder(this, provider, r[0]);
+                String was = Store.driveAccount(this);
+                String now = f.account();
+                if (login.cancelled || was == null || !was.equals(now)) {
+                    f.revoke();
+                    if (!login.cancelled) {
+                        runOnUiThread(() -> done.done(Tracking.i18n().t("Log in with the Google account Blockwise syncs with.")));
+                    }
+                    return;
+                }
+                if (r[2] == null) {
+                    f.revoke();
+                    runOnUiThread(() -> done.done(Tracking.i18n().t("Allow Blockwise to make calendars in Google Calendar, then try again.")));
+                    return;
+                }
+                Drives.Folder old = driveFolder(this);
+                Store.replaceDriveToken(this, r[0]);
+                Store.setDriveCalendar(this, true);
+                if (old != null && !old.refreshToken.equals(r[0])) {
+                    old.revoke();
+                }
+                runOnUiThread(() -> done.done(null));
+            } catch (Drives.DriveException e) {
+                final String msg = e.getMessage();
+                runOnUiThread(() -> done.done(msg));
+            } catch (Exception e) {
+                runOnUiThread(() -> done.done(Tracking.i18n().t("Blockwise could not use the Android Keystore")));
+            } finally {
+                if (driveLogin == login) {
+                    driveLogin = null;
+                }
+            }
+        }, "tracker-calendar-login").start();
+    }
+
     interface DriveDone {
         /** @param error null on success; exists: a Blockwise folder is there already */
         void done(String error, boolean exists);
@@ -814,6 +872,7 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
                 }
                 pendingDrive = f;
                 pendingAccount = account;
+                pendingCalendar = r[2] != null;
                 runOnUiThread(() -> done.done(null, exists));
             } catch (Drives.DriveException e) {
                 final String msg = e.getMessage();
@@ -836,6 +895,7 @@ public final class MainActivity extends Activity implements Tracking.Listener, B
         Tracking.IO.execute(() -> {
             try {
                 Store.saveDrive(this, f.provider, pendingAccount, f.refreshToken, keyBase64);
+                Store.setDriveCalendar(this, pendingCalendar);
             } catch (Exception e) {
                 runOnUiThread(() -> done.done(Tracking.i18n().t("Blockwise could not use the Android Keystore")));
                 return;

@@ -35,7 +35,9 @@ import java.util.regex.Pattern;
  *
  * - Dropbox: an "App folder" app, so Blockwise only ever sees Apps/Blockwise.
  * - Google Drive: the hidden app data folder (scope drive.appdata), so Blockwise
- *   can't see or change any of your other files.
+ *   can't see or change any of your other files. The same login can put your
+ *   blocks in Google Calendar (scope calendar.app.created: only calendars
+ *   Blockwise makes, never your other calendars), asked for with it.
  *
  * You log in in your browser (OAuth 2 with PKCE); the provider sends a one-time
  * code back to a small server in the app on this phone (127.0.0.1 only), checked
@@ -71,6 +73,8 @@ final class Drives {
     private static final String GOOGLE_CHANGES = "https://www.googleapis.com/drive/v3/changes";
     private static final String GOOGLE_ABOUT = "https://www.googleapis.com/drive/v3/about?fields=user(permissionId)";
     private static final String GOOGLE_SCOPE = "https://www.googleapis.com/auth/drive.appdata";
+    static final String CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.app.created";
+    private static final String GOOGLE_CALENDAR = "https://www.googleapis.com/calendar/v3/";
 
     private Drives() {
     }
@@ -159,7 +163,7 @@ final class Drives {
         }
     }
 
-    /** @return {refresh token, account id or null} */
+    /** @return {refresh token, account id or null, "calendar" if Google Calendar was allowed too} */
     static String[] login(Context c, String provider, Browser browser, Login login) throws DriveException {
         Keys k = keys(c);
         if (!available(c, provider)) {
@@ -199,7 +203,9 @@ final class Drives {
             } else {
                 q.put("client_id", k.googleClientId);
                 q.put("response_type", "code");
-                q.put("scope", GOOGLE_SCOPE);
+                // Drive's app folder, and the calendars Blockwise makes (Google lets you leave that out)
+                q.put("scope", GOOGLE_SCOPE + " " + CALENDAR_SCOPE);
+                q.put("include_granted_scopes", "true");
                 q.put("code_challenge", challenge);
                 q.put("code_challenge_method", "S256");
                 q.put("access_type", "offline");
@@ -230,7 +236,8 @@ final class Drives {
             }
             String account = dropbox ? t.optString("account_id", "") : "";
             account = account.replaceAll("[^\\w:-]", "");
-            return new String[] {refresh, account.isEmpty() ? null : account.substring(0, Math.min(64, account.length()))};
+            boolean calendar = !dropbox && (" " + t.optString("scope") + " ").contains(" " + CALENDAR_SCOPE + " ");
+            return new String[] {refresh, account.isEmpty() ? null : account.substring(0, Math.min(64, account.length())), calendar ? "calendar" : null};
         } finally {
             login.server = null;
             try {
@@ -639,6 +646,33 @@ final class Drives {
         }
 
         /** Google: which account (an id, no name or e-mail), so another account's data is not mixed in */
+        /**
+         * A request to Google Calendar (only those CloudGuard allows; the base is fixed).
+         * @return {status, body as text}
+         */
+        Resp calendar(String method, String path, String bodyJson) throws DriveException {
+            if (dropbox() || !app.tracker.core.CloudGuard.google(method, path)) {
+                throw new DriveException("Invalid request.", 400, false, false);
+            }
+            Map<String, String> h = new HashMap<>();
+            h.put("Accept", "application/json");
+            byte[] body = null;
+            if (bodyJson != null) {
+                h.put("Content-Type", "application/json; charset=UTF-8");
+                body = bodyJson.getBytes(StandardCharsets.UTF_8);
+            }
+            String m = method;
+            if ("PATCH".equals(method)) {
+                // (Android's HTTP client has no PATCH: Google takes it as an override)
+                h.put("X-HTTP-Method-Override", "PATCH");
+                m = "POST";
+            }
+            if ("POST".equals(m) && body == null) {
+                body = new byte[0];
+            }
+            return authed(m, GOOGLE_CALENDAR + path, h, body);
+        }
+
         String account() {
             if (dropbox()) {
                 return null;

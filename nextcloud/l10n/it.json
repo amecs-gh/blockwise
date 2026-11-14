@@ -8,6 +8,14 @@
 			"%2$s: il blocco finisce tra %1$s minuto",
 			"%2$s: il blocco finisce tra %1$s minuti"
 		],
+		"_%n block copied into Blockwise._::_%n blocks copied into Blockwise._": [
+			"%n blocco copiato in Blockwise.",
+			"%n blocchi copiati in Blockwise."
+		],
+		"_%n block moved to {calendar}._::_%n blocks moved to {calendar}._": [
+			"%n blocco spostato in {calendar}.",
+			"%n blocchi spostati in {calendar}."
+		],
 		"_%n block was not imported: here, blocks are events in your calendars._::_%n blocks were not imported: here, blocks are events in your calendars._": [
 			"%n blocco non è stato importato: qui i blocchi sono eventi nei tuoi calendari.",
 			"%n blocchi non sono stati importati: qui i blocchi sono eventi nei tuoi calendari."
@@ -15,6 +23,10 @@
 		"_%n block_::_%n blocks_": [
 			"%n blocco",
 			"%n blocchi"
+		],
+		"_%n change waiting to reach the calendar_::_%n changes waiting to reach the calendar_": [
+			"%n modifica in attesa di arrivare al calendario",
+			"%n modifiche in attesa di arrivare al calendario"
 		],
 		"_%n commitment_::_%n commitments_": [
 			"%n impegno",
@@ -138,6 +150,7 @@
 		"All": "Tutti",
 		"all commitments": "tutti gli impegni",
 		"All future blocks": "Tutti i blocchi futuri",
+		"Allow {calendar}": "Consenti {calendar}",
 		"Also delete its calendar \"{calendar}\" and all its events from Apple Calendar": "Elimina anche il suo calendario \"{calendar}\" e tutti i suoi eventi da Calendario di Apple",
 		"Also move its calendar \"{calendar}\" and all its events to the trash bin": "Sposta anche il suo calendario \"{calendar}\" e tutti i suoi eventi nel cestino",
 		"Another commitment uses this calendar": "Un altro impegno usa questo calendario",
@@ -156,6 +169,7 @@
 		"Block time used": "Tempo dei blocchi usato",
 		"Blocks are events in Apple Calendar (iCloud, Google, Exchange…). Your built-in blocks are copied there, and each commitment gets a calendar.": "I blocchi sono eventi in Calendario di Apple (iCloud, Google, Exchange…). I blocchi del calendario integrato vengono copiati lì e ogni impegno riceve un calendario.",
 		"Blocks in the next 4 weeks: {time}.": "Blocchi nelle prossime 4 settimane: {time}.",
+		"Blocks in {calendar}": "Blocchi in {calendar}",
 		"Blocks kept": "Blocchi rispettati",
 		"Blocks live in Blockwise and sync with your data. No calendar access needed.": "I blocchi stanno in Blockwise e si sincronizzano con i tuoi dati. Nessun accesso al calendario necessario.",
 		"Blocks of different commitments overlap on %s. Open Blockwise to see them.": "Blocchi di impegni diversi si sovrappongono (%s). Apri Blockwise per vederli.",
@@ -194,6 +208,7 @@
 		"Commitment deleted": "Impegno eliminato",
 		"Commitments": "Impegni",
 		"Commitments, calendar, timer and reminders": "Impegni, calendario, timer e promemoria",
+		"Copy your blocks back into Blockwise? The events stay in {calendar}.": "Ricopiare i blocchi in Blockwise? Gli eventi restano in {calendar}.",
 		"Could not load your commitments. Reload to try again.": "Impossibile caricare i tuoi impegni. Ricarica la pagina per riprovare.",
 		"Create": "Crea",
 		"Create a commitment": "Crea un impegno",
@@ -229,6 +244,7 @@
 		"e.g. 40m or 1h30": "es. 40m o 1h30",
 		"e.g. Thesis": "es. Tesi",
 		"each block takes tasks from the top": "ogni blocco prende i task dall'alto",
+		"Each commitment gets its own calendar there; plan here or there, on every device. Their titles and times are then stored by {provider} (tasks, notes and tracked time stay end-to-end encrypted).": "Ogni impegno ha lì il suo calendario; pianifica qui o lì, su ogni dispositivo. Titoli e orari dei blocchi vengono allora conservati da {provider} (attività, note e tempo registrato restano cifrati end-to-end).",
 		"Each commitment has its own calendar in Blockwise for its blocks.": "Ogni impegno ha il proprio calendario in Blockwise per i suoi blocchi.",
 		"Each commitment is a calendar. Name and color stay in sync with the Calendar app. Blocks of different commitments must not overlap; other calendars are ignored.": "Ogni impegno è un calendario. Nome e colore restano sincronizzati con l'app Calendario. I blocchi di impegni diversi non devono sovrapporsi; gli altri calendari vengono ignorati.",
 		"Earlier": "Prima",
@@ -568,6 +584,7 @@
 		"Yesterday": "Ieri",
 		"You can restore it from the trash bin in the Calendar app.": "Puoi ripristinarlo dal cestino nell'app Calendario.",
 		"Your blocks are in your calendar app.": "I tuoi blocchi sono nell'app Calendario.",
+		"Your blocks are in {calendar}. Allow it on this device to see and plan them.": "I tuoi blocchi sono in {calendar}. Consentilo su questo dispositivo per vederli e pianificarli.",
 		"Your data": "I tuoi dati",
 		"{done} of {goal} this week": "{done} di {goal} questa settimana",
 		"{done} of {total}": "{done} di {total}",

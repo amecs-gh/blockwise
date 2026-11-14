@@ -42,6 +42,9 @@
 		// Waiting for Nextcloud: placeholders where its answer goes
 		loading: app.loading ? () => app.loading() : undefined,
 		onLoading: app.onLoading ? (cb) => app.onLoading(cb) : undefined,
+		// Blocks in the account's calendar (Google Calendar with Google Drive)
+		accountCalendar: app.accountCalendar ? () => app.accountCalendar() : undefined,
+		useAccountCalendar: app.useAccountCalendar ? (on) => app.useAccountCalendar(on) : undefined,
 		onOffline: app.onOffline ? (cb) => app.onOffline(cb) : undefined,
 		// The phone and the web app have an account sheet; the Mac app uses its menu bar menu
 		account: app.account ? () => app.account() : undefined,

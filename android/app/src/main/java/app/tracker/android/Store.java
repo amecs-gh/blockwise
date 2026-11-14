@@ -124,10 +124,25 @@ final class Store {
                 .apply();
     }
 
+    /** Google: the login also allows Blockwise's calendars (Google Calendar) */
+    static boolean driveCalendar(Context c) {
+        return drive(c) != null && prefs(c).getBoolean("driveCalendar", false);
+    }
+
+    static void setDriveCalendar(Context c, boolean on) {
+        prefs(c).edit().putBoolean("driveCalendar", on).apply();
+    }
+
+    /** The same account logged in again (to allow the calendar too): its new token */
+    static synchronized void replaceDriveToken(Context c, String refreshToken) throws Exception {
+        prefs(c).edit().putString("driveToken", encrypt(DRIVE_ALIAS, refreshToken)).apply();
+    }
+
     /** Forget the drive on this phone (the encrypted data on the drive stays). */
     static synchronized void forgetDrive(Context c) {
-        prefs(c).edit().remove("drive").remove("driveToken").remove("syncKey").remove("driveAccount").apply();
+        prefs(c).edit().remove("drive").remove("driveToken").remove("syncKey").remove("driveAccount").remove("driveCalendar").apply();
         Vault.write(c, Vault.DRIVESTATE, null);
+        Vault.write(c, Vault.BLOCKCACHE, null);
         try {
             KeyStore ks = KeyStore.getInstance("AndroidKeyStore");
             ks.load(null);

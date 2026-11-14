@@ -1945,3 +1945,21 @@ body.android .imp-updating.is-offline {
 body.android .imp-skpage {
 	padding-top: calc(var(--inset-top) + 18px);
 }
+
+/* Settings: blocks in the account's calendar */
+body.android .imp-paccal__ask {
+	margin: 4px 18px 8px;
+	padding: 12px 14px;
+	border-radius: 16px;
+	background: var(--md-surfaceContainerHigh);
+}
+body.android .imp-paccal__ask p {
+	margin: 0 0 10px;
+	font-size: 13px;
+	line-height: 1.45;
+}
+body.android .imp-pcal > .imp-paccal__ask {
+	margin: 12px 0;
+	padding: 20px;
+	text-align: center;
+}

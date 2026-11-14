@@ -33,6 +33,8 @@ let sharedBrowser = null
 
 // A stand-in Dropbox folder (what the app's Drives.Folder does), shared by the phones
 const folder = new Map()
+// Google Calendar (the account's calendar with Google Drive), in memory
+const gcal = require('../../nextcloud/tests/fake-gcal.js').fakeGoogle()
 let folderVersion = 0
 const folderWaits = new Set()
 const folderChanged = () => { folderVersion++; for (const w of [...folderWaits]) w() }
@@ -91,7 +93,17 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 			else if (channel === 'takeResend') { env = { data: resend }; resend = false }
 			else if (channel === 'outbox') env = { data: [] }
 			// Nextcloud's blocks as last known (the app keeps them encrypted)
-			else if (channel === 'blockCacheLoad') env = { data: mode === 'nextcloud' ? dev.blockCache || null : null }
+			else if (channel === 'blockCacheLoad') env = { data: mode !== 'local' ? dev.blockCache || null : null }
+			// Google Calendar through the drive's login (the app's CloudGuard: same requests)
+			else if (channel === 'calendarAllowed') env = { data: !!dev.calAllowed }
+			else if (channel === 'allowCalendar') { dev.calAllowed = true; env = { data: true } }
+			else if (channel === 'cloudCal') {
+				if (!dev.calAllowed) env = { error: 'Invalid request.', status: 400 }
+				else {
+					dev.calCalls = (dev.calCalls || 0) + 1
+					try { env = { data: (await gcal.request(args[0], args[1], args[2] === null ? undefined : args[2])) ?? null } } catch (e) { env = { error: e.message, status: e.status || 0 } }
+				}
+			}
 			else if (channel === 'blockCacheSave') { dev.blockCache = args[0]; env = { data: null } }
 			// The phone's calendars (CalendarContract through DAVx5): none, unless a test puts some there
 			else if (channel === 'calendars') env = { data: dev.phoneCals || [] }
@@ -250,6 +262,103 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 			await bg.ctx.close()
 		}
 		console.log('  ✔ Dropbox: passphrase, encrypted folder, a second phone gets everything; background sync')
+
+		// Google Drive: the same login puts the blocks in Google Calendar, a calendar per commitment
+		{
+			const g1 = await phone(browser, 'app.html', { mode: 'gdrive', dev: devA, hash: '#settings' })
+			g1.page.on('dialog', (d) => d.accept())
+			await g1.page.waitForSelector('.imp-paccal input[role=switch]', { timeout: 15000 })
+			assert.ok(!(await g1.page.isChecked('.imp-paccal input[role=switch]')), 'off until turned on')
+			const builtinBefore = await g1.page.evaluate(async () => { const now = Math.floor(Date.now() / 1000); return (await window.trackerApp.api('GET', `blocks?from=${now}&to=${now + 86400 * 8}`)).blocks.length })
+			assert.ok(builtinBefore >= 2, 'built-in blocks to move')
+			await g1.page.click('.imp-paccal input[role=switch]')
+			await g1.page.waitForFunction(() => document.querySelector('.imp-paccal input[role=switch]')?.checked && !document.querySelector('.imp-paccal input[role=switch]').disabled, null, { timeout: 15000 })
+			assert.ok(devA.calAllowed, 'asked for Google Calendar')
+			const calIds = [...gcal.cals.keys()]
+			const st = await g1.page.evaluate(() => window.trackerApp.api('GET', 'state'))
+			assert.equal(st.features.calendarHome, 'google')
+			assert.equal(st.features.calendarKind, 'google', 'blocks from Google Calendar now')
+			assert.equal(calIds.length, st.commitments.length, 'a calendar per commitment')
+			assert.ok(st.commitments.every((c) => c.calendarId !== null), 'each linked to its calendar')
+			for (let i = 0; i < 50 && ![...gcal.cals.values()].some((c) => c.events.size); i++) await g1.page.waitForTimeout(100)
+			const copied = [...gcal.cals.values()].flatMap((c) => [...c.events.values()])
+			assert.ok(copied.some((e) => e.recurrence && e.recurrence[0] === 'RRULE:FREQ=WEEKLY'), 'the weekly block, as a weekly event')
+			const inCloud = await g1.page.evaluate(async () => {
+				const now = Math.floor(Date.now() / 1000)
+				await window.trackerApp.api('GET', `blocks?from=${now}&to=${now + 86400 * 8}`)
+				await new Promise((r) => setTimeout(r, 500))
+				return (await window.trackerApp.api('GET', `blocks?from=${now}&to=${now + 86400 * 8}`)).blocks.length
+			})
+			assert.equal(inCloud, builtinBefore, 'the same blocks, now from Google Calendar')
+			await g1.page.screenshot({ path: `${shots}/settings-google-calendar.png` })
+			// Planned on this phone: it reaches Google Calendar
+			const planned = await g1.page.evaluate(async () => {
+				const st = await window.trackerApp.api('GET', 'state')
+				const now = Math.floor(Date.now() / 1000)
+				await window.trackerApp.api('POST', 'blocks', { commitmentId: st.commitments[0].id, title: 'Planned for Google', start: now + 2 * 86400, end: now + 2 * 86400 + 3600 })
+				return true
+			})
+			assert.ok(planned)
+			for (let i = 0; i < 50 && !copied.concat([...gcal.cals.values()].flatMap((c) => [...c.events.values()])).some((e) => e.summary === 'Planned for Google'); i++) await g1.page.waitForTimeout(100)
+			assert.ok([...gcal.cals.values()].flatMap((c) => [...c.events.values()]).some((e) => e.summary === 'Planned for Google'), 'planned here, in Google Calendar')
+			await g1.page.waitForTimeout(3500) // (the change to the setting synced through the drive)
+			await g1.ctx.close()
+
+			// The other phone follows: asks to allow Google Calendar there too
+			const g2 = await phone(browser, 'app.html', { mode: 'gdrive', dev: devB, hash: '#settings' })
+			// (it learns at its first sync: then Calendar asks)
+			for (let i = 0; i < 40 && !(await g2.page.evaluate(async () => (await window.trackerApp.accountCalendar()).home === 'google')); i++) await g2.page.waitForTimeout(250)
+			await g2.page.evaluate(() => { location.hash = '#calendar' })
+			await g2.page.waitForSelector('.imp-paccal__ask button', { timeout: 15000 })
+			await g2.page.screenshot({ path: `${shots}/calendar-google-ask.png` })
+			await g2.page.click('.imp-paccal__ask button')
+			await g2.page.waitForSelector('.imp-pcal .imp-cv__grid', { timeout: 15000 })
+			const seen = await g2.page.evaluate(async () => {
+				const now = Math.floor(Date.now() / 1000)
+				await window.trackerApp.api('GET', `blocks?from=${now}&to=${now + 86400 * 8}`)
+				await new Promise((r) => setTimeout(r, 600))
+				return (await window.trackerApp.api('GET', `blocks?from=${now}&to=${now + 86400 * 8}`)).blocks.map((b) => b.title)
+			})
+			assert.ok(seen.includes('Planned for Google'), 'the other phone shows Google Calendar\'s blocks')
+			// Offline there: planned anyway, sent when Google answers again
+			gcal.setDown(true)
+			await g2.page.evaluate(async () => {
+				const st = await window.trackerApp.api('GET', 'state')
+				const now = Math.floor(Date.now() / 1000)
+				await window.trackerApp.api('POST', 'blocks', { commitmentId: st.commitments[0].id, title: 'Offline for Google', start: now + 3 * 86400, end: now + 3 * 86400 + 3600 })
+			})
+			const shown = await g2.page.evaluate(async () => { const now = Math.floor(Date.now() / 1000); return (await window.trackerApp.api('GET', `blocks?from=${now}&to=${now + 86400 * 8}`)).blocks.map((b) => b.title) })
+			assert.ok(shown.includes('Offline for Google'), 'shown at once, offline')
+			await g2.page.waitForTimeout(800)
+			gcal.setDown(false)
+			await g2.page.evaluate(() => window.trackerApp.api('GET', 'state'))
+			for (let i = 0; i < 100 && ![...gcal.cals.values()].flatMap((c) => [...c.events.values()]).some((e) => e.summary === 'Offline for Google'); i++) {
+				// (a change here: the drive syncs 3 s later, and what waits for the calendar goes with it)
+				if (i % 25 === 0) await g2.page.evaluate(() => window.trackerApp.api('PUT', 'settings', {})).catch(() => {})
+				await g2.page.waitForTimeout(200)
+			}
+			assert.ok([...gcal.cals.values()].flatMap((c) => [...c.events.values()]).some((e) => e.summary === 'Offline for Google'), 'reached Google Calendar when back')
+			assert.deepEqual(g2.errors, [])
+			await g2.ctx.close()
+
+			// Back into Blockwise: Google Calendar's blocks copied in
+			const g3 = await phone(browser, 'app.html', { mode: 'gdrive', dev: devA, hash: '#settings' })
+			g3.page.on('dialog', (d) => d.accept())
+			await g3.page.waitForSelector('.imp-paccal input[role=switch]:checked', { timeout: 15000 })
+			await g3.page.click('.imp-paccal input[role=switch]')
+			await g3.page.waitForFunction(() => !document.querySelector('.imp-paccal input[role=switch]')?.checked && !document.querySelector('.imp-paccal input[role=switch]').disabled, null, { timeout: 15000 })
+			const back = await g3.page.evaluate(async () => {
+				const st = await window.trackerApp.api('GET', 'state')
+				const now = Math.floor(Date.now() / 1000)
+				return { home: st.features.calendarHome, kind: st.features.calendarKind, titles: (await window.trackerApp.api('GET', `blocks?from=${now}&to=${now + 86400 * 8}`)).blocks.map((b) => b.title) }
+			})
+			assert.equal(back.home, 'builtin')
+			assert.equal(back.kind, 'builtin')
+			assert.ok(back.titles.includes('Planned for Google') && back.titles.includes('Offline for Google'), 'copied into Blockwise')
+			assert.deepEqual(g3.errors, [])
+			await g3.ctx.close()
+			console.log('  ✔ Google Drive + Google Calendar: moved there, planned there (offline too), another phone follows, and back')
+		}
 	}
 
 	// Without encryption, when chosen: a warning, no passphrase; the next phone isn't asked for one
