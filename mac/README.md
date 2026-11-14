@@ -46,7 +46,7 @@ copies the events of your commitments' calendars (3 months back to a year
 ahead) into the built-in calendar; nothing is doubled either way, and a block
 you changed replaces its old copy.
 
-### Dropbox and Google Drive: end-to-end encrypted
+### Dropbox, Google Drive and OneDrive: end-to-end encrypted
 
 With a drive, Blockwise asks for a **passphrase** (at least 10 characters) the
 first time; your other Macs use the same one. Everything is encrypted on your
@@ -68,12 +68,43 @@ notification, which carries no token), Google Drive is asked every 20 seconds
 while the window is open and every 2 minutes from the menu bar.
 
 Blockwise can only see its own folder: in Dropbox the app folder, in Google
-Drive the hidden app data folder (scope `drive.appdata`), not your other files.
+Drive the hidden app data folder (scope `drive.appdata`), in OneDrive its app
+folder (`Apps/Blockwise`, scope `Files.ReadWrite.AppFolder`), not your other files.
+OneDrive is checked for changes like Google Drive.
 
-## Set up Dropbox and Google Drive (once, for your build)
+### Blocks in Google Calendar or Outlook
 
-Every build needs its own app keys from Dropbox and Google; Blockwise doesn't
-ship any. They are not secret (the login uses PKCE), but they are yours.
+With Google Drive or OneDrive, Settings → **Blocks in Google Calendar** (or
+**Blocks in Outlook**) puts your blocks in that account's calendar: each
+commitment gets its own calendar there, the built-in blocks are moved to it,
+and from then on you plan in Blockwise or in the calendar app, on every device
+(each Mac and phone follows; one that hasn't allowed the calendar yet asks).
+Switching it off copies the calendar's events (3 months back to a year ahead)
+back into Blockwise. Blocks still show offline and changes wait until the
+calendar answers.
+
+What this means for your privacy: the titles and times of your **blocks** are
+then stored by Google or Microsoft like any calendar event (not end-to-end
+encrypted). Tasks, notes and tracked time stay end-to-end encrypted in the drive.
+
+What Blockwise may touch:
+
+- **Google**: the scope `calendar.app.created`, so Google itself only lets
+  Blockwise see and change the calendars Blockwise made. You can leave it out
+  on Google's consent page; then you're asked again when you switch it on.
+- **Microsoft**: Outlook needs `Calendars.ReadWrite`, which Microsoft can't
+  limit to some calendars, so it is asked for only when you switch it on, and
+  Blockwise limits itself: every calendar it makes carries a hidden mark, and
+  the app (not the page) refuses any request to a calendar without that mark,
+  any request other than the few calendar requests Blockwise makes, and any
+  field in an event other than its title, times and repeat (so it can never add
+  attendees or send anything to anyone). Mail and your other files are out of
+  reach.
+
+## Set up Dropbox, Google Drive and OneDrive (once, for your build)
+
+Every build needs its own app keys from Dropbox, Google and Microsoft; Blockwise
+doesn't ship any. They are not secret (the login uses PKCE), but they are yours.
 Copy `config/providers.example.json` to `config/providers.json` (not committed)
 and fill in what you set up. A choice without a key is hidden.
 
@@ -90,15 +121,47 @@ which is plenty for yourself.
 
 **Google Drive** (<https://console.cloud.google.com/>):
 
-1. Create a project, then APIs & Services → Library → enable **Google Drive API**.
-2. OAuth consent screen: External, add yourself as a test user, add the scope
-   `https://www.googleapis.com/auth/drive.appdata`.
-3. Credentials → Create credentials → OAuth client ID → **Desktop app**.
+1. Create a project, then APIs & Services → Library → enable **Google Drive API**
+   and **Google Calendar API**.
+2. OAuth consent screen (Google Auth Platform → Data access): add the scopes
+   `https://www.googleapis.com/auth/drive.appdata` and
+   `https://www.googleapis.com/auth/calendar.app.created`. Audience: External,
+   add yourself as a test user.
+3. Credentials (Clients) → Create → OAuth client ID → **Desktop app**. (The
+   Android app uses the same client, so create a Desktop app client even if you
+   only use the phone.)
 4. Copy the client ID into `googleClientId` and the client secret into
    `googleClientSecret` (for desktop apps Google doesn't treat it as secret).
 
 While the consent screen is in "Testing", Google asks you to log in again
-every 7 days; publish it to avoid that (Google may ask you to verify the app first).
+every 7 days; publish it (Audience → Publish app) to avoid that. Both scopes
+are "non-sensitive", so for yourself no verification is needed; Google may
+show an "unverified app" notice you can click through.
+
+**OneDrive and Outlook** (<https://entra.microsoft.com/> → App registrations,
+with any Microsoft account; a free Azure account works):
+
+1. New registration → name "Blockwise" → Supported account types: **Accounts
+   in any organizational directory and personal Microsoft accounts**.
+2. Redirect URI: platform **Public client/native (mobile & desktop)**, URI
+   `http://localhost` (exactly; Microsoft accepts any port for it).
+3. Authentication → Advanced settings → **Allow public client flows: Yes**. Save.
+4. API permissions → Add → Microsoft Graph → Delegated: `Files.ReadWrite.AppFolder`,
+   `Calendars.ReadWrite`, `offline_access` (and keep `User.Read`). No admin
+   consent is needed for your own account.
+5. No client secret: copy the **Application (client) ID** (on Overview) into
+   `microsoftClientId`.
+
+The OneDrive folder appears as `Apps/Blockwise` in your OneDrive. Microsoft has no
+way to end one app's login from the app; to cut it off, remove Blockwise at
+<https://account.live.com/consent/Manage> (personal) or <https://myapps.microsoft.com>
+(work or school).
+
+**For the GitHub builds** (Android and Mac): add repository variables (Settings →
+Secrets and variables → Actions → Variables) `DROPBOX_APP_KEY`,
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID`. The workflows
+write them into `providers.json` (see `.github/workflows/android.yml` and
+`mac.yml`: `microsoftClientId` must be in the JSON they write).
 
 ## Run it
 
@@ -159,7 +222,11 @@ To start it with your Mac, right-click the menu bar icon → **Open at login**.
   only. Without the Keychain nothing is saved.
 - Your passphrase is never stored: only the key made from it, in the Keychain.
 - Drive logins: PKCE and a random `state`, answered on `127.0.0.1` only; tokens
-  are sent in headers and bodies, never in URLs. Disconnecting revokes the token.
+  are sent in headers and bodies, never in URLs. Disconnecting revokes the token
+  (Dropbox, Google; Microsoft has none to revoke: remove the app in your account).
+- The account's calendar: only the calendar requests Blockwise makes, checked in
+  the app; in Outlook only calendars marked as Blockwise's, and events with a
+  title, times and a repeat only (see "Blocks in Google Calendar or Outlook").
 - Files from a drive are checked: each is authenticated (AES-GCM, bound to its
   name), so a changed, swapped or foreign file is refused, not merged.
 - Requests and the Nextcloud login use in-memory sessions: no cookies on disk.
@@ -172,6 +239,6 @@ To start it with your Mac, right-click the menu bar icon → **Open at login**.
 ## Tests
 
 ```bash
-npm test           # reminders, Pomodoro, Dropbox and Google Drive (stand-in servers)
+npm test           # reminders, Pomodoro, Dropbox, Google Drive, OneDrive and Outlook (stand-ins)
 npm run test:ui    # first-run screen; the whole app against a test Nextcloud on localhost:8080
 ```

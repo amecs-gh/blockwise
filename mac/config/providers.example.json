@@ -2,5 +2,6 @@
 	"_comment": "Copy to providers.json (not committed) and fill in your own app keys; see mac/README.md. Leave a key empty to hide that choice.",
 	"dropboxAppKey": "",
 	"googleClientId": "",
-	"googleClientSecret": ""
+	"googleClientSecret": "",
+	"microsoftClientId": ""
 }

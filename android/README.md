@@ -2,7 +2,7 @@
 
 Blockwise on your phone, like the Mac app. It works on its own (no account,
 nothing synced, the built-in calendar), or syncs with your Nextcloud, or with
-your Mac and other phones through Dropbox or Google Drive (end-to-end encrypted):
+your Mac and other phones through Dropbox, Google Drive or OneDrive (end-to-end encrypted):
 
 - **The app:** Blockwise's pages (Now, Tasks, Done, Time, Settings, each
   commitment) with a bottom tab bar and your commitments as chips on top. It's
@@ -71,10 +71,10 @@ You can sync later (person icon → **Set up sync**) and your data goes along.
 With Nextcloud, blocks planned on the phone stay on it (Nextcloud has its own
 calendars); with a drive, they go along too.
 
-**Dropbox or Google Drive:** tap it, allow Blockwise in your browser, then come
+**Dropbox, Google Drive or OneDrive:** tap it, allow Blockwise in your browser, then come
 back and choose a passphrase (or enter the one from your Mac). Everything is
 encrypted with it on the phone before it goes to the drive; Blockwise only sees
-its own folder there (Dropbox: Apps/Blockwise; Google Drive: hidden app data).
+its own folder there (Dropbox and OneDrive: Apps/Blockwise; Google Drive: hidden app data).
 The drive login and the key are kept encrypted by the Android Keystore. You
 can also choose **Sync without encryption** (no passphrase; the drive's
 provider can read the files), with a warning first.
@@ -85,7 +85,13 @@ seconds), and while it's closed Android lets it check about every 15 minutes.
 Only when something changed does it sync, in an invisible page of its own, so
 the timer notification and reminders follow what you do on your Mac. The
 drives are offered when the build has the app ids (the repository variables
-`DROPBOX_APP_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, same as the Mac app).
+`DROPBOX_APP_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID`,
+same as the Mac app; setting them up: mac/README.md).
+
+With Google Drive or OneDrive, Settings → **Blocks in Google Calendar / Outlook**
+puts your blocks in that account's calendar, a calendar per commitment; plan
+there or here, on every device. What Blockwise may touch there, and why it is
+limited to its own calendars: mac/README.md, "Blocks in Google Calendar or Outlook".
 
 Or choose **Sync with Nextcloud**, enter your Nextcloud address (your Tailscale
 name works) and tap **Log in**. Nextcloud's login page opens: log in and tap **Grant access**. The app gets its

@@ -36,8 +36,8 @@ English and Italian.
 | | Folder | What it is |
 |---|---|---|
 | **Nextcloud** | [`nextcloud/`](nextcloud) | A Nextcloud app: the web interface, the sync server for the other apps, and calendars in Nextcloud Calendar. |
-| **Android** | [`android/`](android) | Blockwise on your phone, Material 3. Works on its own (no account, the built-in calendar); optionally syncs with Nextcloud (blocks from the phone's calendars, via DAVx⁵) or through Dropbox / Google Drive, end-to-end encrypted. |
-| **Mac** | [`mac/`](mac) | A Mac app with a menu bar timer and notifications. Syncs with Nextcloud, or end-to-end encrypted through **Dropbox** or **Google Drive**, or keeps your data on the Mac only; blocks come from Apple Calendar. |
+| **Android** | [`android/`](android) | Blockwise on your phone, Material 3. Works on its own (no account, the built-in calendar); optionally syncs with Nextcloud (blocks from the phone's calendars, via DAVx⁵) or through Dropbox / Google Drive / OneDrive, end-to-end encrypted; with Google Drive or OneDrive, blocks can live in Google Calendar or Outlook. |
+| **Mac** | [`mac/`](mac) | A Mac app with a menu bar timer and notifications. Syncs with Nextcloud, or end-to-end encrypted through **Dropbox**, **Google Drive** or **OneDrive**, or keeps your data on the Mac only; blocks are built in, or in Apple Calendar, Google Calendar or Outlook. |
 | **Browser** | [`website/app/`](website/app) | Blockwise as a web page, with no server of its own: the data stays in the browser (encrypted in IndexedDB), and optionally syncs end-to-end encrypted through **Dropbox**. Published with the website. |
 
 All of them show the same interface: it is written once, in `nextcloud/js` and
@@ -91,6 +91,9 @@ node nextcloud/tests/markdown.test.js          # Markdown parser (no server need
 node nextcloud/tests/filesync.test.js          # encrypted drive sync (no server needed)
 node nextcloud/tests/backup.test.js            # backup export and import (no server needed)
 node mac/test/drives.test.js                   # Dropbox and Google Drive, stand-in servers
+node mac/test/onedrive.test.js                 # OneDrive and Outlook (stand-in Microsoft), the guard
+TZ=UTC node nextcloud/tests/cloudcal.test.js   # blocks in Google Calendar (stand-in)
+TZ=UTC node nextcloud/tests/cloudcal-outlook.test.js # blocks in Outlook (stand-in)
 cd android && ./gradlew :core:coreTest         # Android logic
 # With a Nextcloud test server on localhost:8080 (users admin and bob):
 node nextcloud/tests/sync.test.js
