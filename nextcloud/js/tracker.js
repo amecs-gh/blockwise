@@ -514,7 +514,7 @@
 		root.replaceChildren(layout(main), ...panels())
 		shownRoute = route
 		// The window's (or browser tab's) title says where you are
-		const here = state.route === 'commitment' ? commitmentById(state.commitmentId)?.name : state.route === 'calendar' ? tr('Calendar') : ROUTES.find((r) => r.id === state.route)?.label()
+		const here = state.route === 'commitment' ? commitmentById(state.commitmentId)?.name : state.route === 'calendar' ? tr('Calendar') : state.route === 'progress' ? tr('Progress') : ROUTES.find((r) => r.id === state.route)?.label()
 		if (here) document.title = `${here} · Blockwise`
 		main.scrollTop = scroll
 		if (state.refocus) {
@@ -2071,7 +2071,7 @@
 		} else {
 			out.append(h('div', { class: 'imp-notes__empty' },
 				h('p', null, tr('Notes are for everything that isn\'t a task: ideas, things to ask, links, checklists.')),
-				h('p', { class: 'imp-muted' }, tr('Tick a note when it\'s dealt with: it shows in Done.'))))
+				h('p', { class: 'imp-muted' }, PHONE ? tr('Tick a note when it\'s dealt with: it shows in Progress.') : tr('Tick a note when it\'s dealt with: it shows in Done.'))))
 		}
 		if (ticked.length) {
 			out.append(h('details', { class: 'imp-notes__ticked', open: state.notesTickedOpen ? true : null, ontoggle: (e) => { state.notesTickedOpen = e.target.open } },
@@ -4126,8 +4126,8 @@
 			tab('tasks', tr('Tasks'), routeIcon('tasks')),
 			// The planner, wherever the blocks live (built in, or the phone's calendars)
 			calendarShown() ? tab('calendar', tr('Calendar'), ICON_CAL) : null,
-			tab('done', tr('Done'), routeIcon('done')),
-			tab('time', tr('Time'), routeIcon('time'))))
+			// Done and Time, together: what you got done and how far your goals are
+			tab('progress', tr('Progress'), routeIcon('time'))))
 	}
 
 	/** A tab's top bar: title, a line under it, actions, and Settings */
@@ -4289,8 +4289,9 @@
 	// --- Tasks ---------------------------------------------------------------------
 
 	async function phoneTasks() {
-		const page = h('div', { class: 'imp-page imp-ptasks' })
-		page.append(phoneBar(tr('Tasks'), null))
+		const notes = state.tasksView === 'notes'
+		const page = h('div', { class: `imp-page imp-ptasks ${notes ? 'imp-ptasks--notes' : ''}` })
+		page.append(phoneBar(notes ? tr('Notes') : tr('Tasks'), null))
 		if (!state.commitments.length) {
 			page.append(noCommitments())
 			return page
@@ -4298,13 +4299,28 @@
 		if (!commitmentById(state.tasksFor)) state.tasksFor = state.commitments[0].id
 		const c = commitmentById(state.tasksFor)
 		const now = nowTs()
-		const [tasks, blockData] = await Promise.all([
-			api('GET', `tasks?commitmentId=${c.id}&status=open`),
-			api('GET', `blocks?from=${now - 86400}&to=${now + 14 * 86400}`).catch(() => ({ blocks: [] })),
-		])
-		const pick = (x) => { state.tasksFor = x.id; state.composer = null; render() }
+		const pick = (x) => { state.tasksFor = x.id; state.notesFor = x.id; state.composer = null; render() }
 		page.append(commitmentChips(c.id, pick))
-		const col = taskColumn(c, tasks, blockData.blocks, now)
+		// The same commitment's tasks or notes: one switch, the chips and the swipe stay
+		const seg = (v, label) => h('button', {
+			type: 'button',
+			role: 'tab',
+			'aria-selected': (state.tasksView === 'notes') === (v === 'notes') ? 'true' : 'false',
+			onclick: () => { state.tasksView = v; render() },
+		}, label)
+		page.append(h('div', { class: 'imp-pseg', role: 'tablist', 'aria-label': c.name }, seg('tasks', tr('Tasks')), seg('notes', tr('Notes'))))
+		let col
+		if (notes) {
+			const all = await api('GET', `notes?commitmentId=${c.id}`)
+			state.notesFor = c.id
+			col = h('div', { class: 'imp-notes' }, notesBody(c, all.filter((n) => !n.done), all.filter((n) => n.done).sort((a, b) => (b.doneAt || 0) - (a.doneAt || 0))))
+		} else {
+			const [tasks, blockData] = await Promise.all([
+				api('GET', `tasks?commitmentId=${c.id}&status=open`),
+				api('GET', `blocks?from=${now - 86400}&to=${now + 14 * 86400}`).catch(() => ({ blocks: [] })),
+			])
+			col = taskColumn(c, tasks, blockData.blocks, now)
+		}
 		// Swipe sideways for the next or previous commitment (the chips follow)
 		if (state.tasksSlide) { col.classList.add(state.tasksSlide > 0 ? 'imp-pslide--next' : 'imp-pslide--prev'); state.tasksSlide = 0 }
 		// (on the whole screen, so an empty commitment can be swiped past too)
@@ -4320,18 +4336,21 @@
 		return page
 	}
 
-	// --- Done ----------------------------------------------------------------------
+	// --- Progress (Done and Time together) ------------------------------------------
 
-	async function phoneDone() {
+	/** Progress: the week's goals, its days (planned and tracked), the chosen day, the last four weeks */
+	async function phoneProgress() {
 		const ws = addPeriod(startOfWeek(new Date()), 'week', -state.doneWeek)
 		const from = Math.floor(ws / 1000)
 		const to = Math.floor(addPeriod(ws, 'week', 1) / 1000)
-		const [done, blocks, sessions] = await Promise.all([
+		const weeks = [-3, -2, -1, 0].map(weekAt)
+		const now = nowTs()
+		const [done, blocks, sessions, recent] = await Promise.all([
 			api('GET', `done?from=${from}&to=${to}`),
 			api('GET', `blocks?from=${from}&to=${to}`),
 			api('GET', `sessions?from=${from}&to=${to}`),
+			api('GET', `sessions?from=${weeks[0].start}&to=${now + 60}`),
 		])
-		const now = nowTs()
 		const days = Array.from({ length: 7 }, (_, i) => {
 			const start = Math.floor(addPeriod(ws, 'day', i) / 1000)
 			const end = Math.floor(addPeriod(ws, 'day', i + 1) / 1000)
@@ -4348,7 +4367,7 @@
 		const day = days[state.doneDay]
 		const totalTracked = days.reduce((s, x) => s + x.tracked, 0)
 		const totalPlanned = days.reduce((s, x) => s + x.planned, 0)
-		const page = h('div', { class: `imp-page imp-pdone ${state.doneSlide > 0 ? 'imp-pslide--next' : state.doneSlide < 0 ? 'imp-pslide--prev' : ''}` })
+		const page = h('div', { class: `imp-page imp-pdone imp-pprogress ${state.doneSlide > 0 ? 'imp-pslide--next' : state.doneSlide < 0 ? 'imp-pslide--prev' : ''}` })
 		state.doneSlide = 0
 		const week = (n) => { state.doneWeek = n; state.doneDay = null; render() }
 		// Swipe sideways: the next or previous day (into the next or previous week), never past today
@@ -4361,9 +4380,44 @@
 			Object.assign(state, { doneWeek: w, doneDay: i, doneDayWeek: w, doneSlide: dir })
 			render()
 		}]
-		page.append(phoneBar(tr('Done'), state.doneWeek === 0 ? tr('This week') : tr('Week of {date}', { date: fmt.day.format(ws) }),
-			h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('Previous week'), title: tr('Previous week'), onclick: () => week(state.doneWeek + 1) }, chevron(-1)),
-			h('button', { type: 'button', class: 'imp-icon-btn', 'aria-label': tr('Next week'), title: tr('Next week'), disabled: state.doneWeek === 0, onclick: () => week(state.doneWeek - 1) }, chevron(1))))
+		page.append(phoneBar(tr('Progress'), state.doneWeek === 0 ? tr('This week') : tr('Week of {date}', { date: fmt.day.format(ws) }),
+			// Swipe for other days; these for screen readers and keyboards, and This week to come back
+			h('button', { type: 'button', class: 'imp-sr', onclick: () => week(state.doneWeek + 1) }, tr('Previous week')),
+			state.doneWeek ? h('button', { type: 'button', class: 'imp-sr', onclick: () => week(state.doneWeek - 1) }, tr('Next week')) : null,
+			state.doneWeek ? h('button', { type: 'button', class: 'imp-button imp-pcal__today', onclick: () => week(0) }, tr('This week')) : null))
+
+		// Weekly goals in the week shown (this week: what's left, and whether blocks cover it)
+		const current = state.doneWeek === 0
+		const trackedIn = (id) => sessions.filter((x) => x.commitmentId === id).reduce((sum, x) => sum + overlapSeconds(x.start, x.end ?? now, from, to), 0)
+		const plannedLeft = (id) => blocks.blocks.filter((b) => b.commitmentId === id).reduce((sum, b) => sum + overlapSeconds(b.start, b.end, Math.max(now, from), to), 0)
+		const withGoal = state.commitments.filter((c) => c.weeklyGoal)
+		const without = state.commitments.filter((c) => !c.weeklyGoal)
+		const daysLeft = Math.max(0, Math.ceil((to - now) / 86400))
+		const goals = h('section', { class: 'imp-pcard', 'aria-labelledby': 'imp-pgoals-h' },
+			h('div', { class: 'imp-psec__head' }, h('h2', { id: 'imp-pgoals-h' }, tr('Weekly goals')), current ? h('span', { class: 'imp-muted' }, trn('%n day left', '%n days left', daysLeft)) : null))
+		if (withGoal.length) {
+			goals.append(h('ul', { class: 'imp-pbars' }, withGoal.map((c) => {
+				const sec = trackedIn(c.id)
+				const goal = c.weeklyGoal * 60
+				const left = Math.max(0, goal - sec)
+				const plan = plannedLeft(c.id)
+				const note = !left ? tr('Goal reached') : !current ? tr('{left} short', { left: duration(left, { short: true }) }) : plan >= left
+					? tr('{left} to go · {planned} planned', { left: duration(left, { short: true }), planned: duration(plan, { short: true }) })
+					: tr('{left} to go · {planned} planned: plan more blocks', { left: duration(left, { short: true }), planned: duration(plan, { short: true }) })
+				return h('li', { style: { '--c': c.color } },
+					h('div', { class: 'imp-pbars__label' },
+						h('a', { href: `#c/${c.id}` }, h('span', { class: 'imp-dot', style: { background: c.color } }), c.name),
+						h('span', { class: 'imp-muted' }, h('strong', null, duration(sec, { short: true })), ' ', tr('of {goal}', { goal: fmtMin(c.weeklyGoal) }))),
+					h('div', { class: 'imp-pbars__track', 'aria-hidden': 'true' }, h('span', { style: { width: `${Math.min(100, Math.round((sec / goal) * 100))}%` } })),
+					h('span', { class: `imp-pbars__note ${left && (current ? plan < left : true) ? 'is-short' : ''}` }, note))
+			})))
+		} else {
+			goals.append(h('p', { class: 'imp-muted' }, tr('No weekly goals yet. Set one for a commitment in Settings.')))
+		}
+		if (without.length) {
+			goals.append(h('p', { class: 'imp-muted imp-pnogoal' }, tr('No goal: {list}', { list: without.map((c) => `${c.name} ${duration(trackedIn(c.id), { short: true })}`).join(' · ') })))
+		}
+		page.append(goals)
 
 		// The week: planned and tracked per day, as pairs of bars on one scale
 		const max = Math.max(3600, ...days.map((x) => Math.max(x.planned, x.tracked)))
@@ -4420,62 +4474,23 @@
 					h('span', { class: 'imp-pticked__title' }, x.task && x.task !== x.title ? `${x.task}: ${x.title}` : x.title),
 					h('span', { class: 'imp-muted' }, hourMin.format(at(x.doneAt))))))
 				: h('p', { class: 'imp-muted' }, tr('Nothing checked off this day.'))))
-		return page
-	}
 
-	// --- Time ------------------------------------------------------------------------
-
-	async function phoneTime() {
-		const weeks = [-3, -2, -1, 0].map(weekAt)
-		const now = nowTs()
-		const [sessions, blocks] = await Promise.all([
-			api('GET', `sessions?from=${weeks[0].start}&to=${now + 60}`),
-			api('GET', `blocks?from=${weeks[3].start}&to=${weeks[3].end}`),
-		])
-		const wk = weeks[3]
-		const tracked = (id, w) => sessions.filter((x) => x.commitmentId === id).reduce((s, x) => s + overlapSeconds(x.start, x.end ?? now, w.start, w.end), 0)
-		const plannedLeft = (id) => blocks.blocks.filter((b) => b.commitmentId === id).reduce((s, b) => s + overlapSeconds(b.start, b.end, Math.max(now, wk.start), wk.end), 0)
-		const daysLeft = Math.max(0, Math.ceil((wk.end - now) / 86400))
-		const page = h('div', { class: 'imp-page imp-ptime' })
-		page.append(phoneBar(tr('Time'), tr('This week')))
-
-		const withGoal = state.commitments.filter((c) => c.weeklyGoal)
-		const without = state.commitments.filter((c) => !c.weeklyGoal)
-		const goals = h('section', { class: 'imp-pcard', 'aria-labelledby': 'imp-pgoals-h' },
-			h('div', { class: 'imp-psec__head' }, h('h2', { id: 'imp-pgoals-h' }, tr('Weekly goals')), h('span', { class: 'imp-muted' }, trn('%n day left', '%n days left', daysLeft))))
-		if (withGoal.length) {
-			goals.append(h('ul', { class: 'imp-pbars' }, withGoal.map((c) => {
-				const sec = tracked(c.id, wk)
-				const goal = c.weeklyGoal * 60
-				const left = Math.max(0, goal - sec)
-				const plan = plannedLeft(c.id)
-				const note = !left ? tr('Goal reached') : plan >= left
-					? tr('{left} to go · {planned} planned', { left: duration(left, { short: true }), planned: duration(plan, { short: true }) })
-					: tr('{left} to go · {planned} planned: plan more blocks', { left: duration(left, { short: true }), planned: duration(plan, { short: true }) })
-				return h('li', { style: { '--c': c.color } },
-					h('div', { class: 'imp-pbars__label' },
-						h('a', { href: `#c/${c.id}` }, h('span', { class: 'imp-dot', style: { background: c.color } }), c.name),
-						h('span', { class: 'imp-muted' }, h('strong', null, duration(sec, { short: true })), ' ', tr('of {goal}', { goal: fmtMin(c.weeklyGoal) }))),
-					h('div', { class: 'imp-pbars__track', 'aria-hidden': 'true' }, h('span', { style: { width: `${Math.min(100, Math.round((sec / goal) * 100))}%` } })),
-					h('span', { class: `imp-pbars__note ${left && plan < left ? 'is-short' : ''}` }, note))
-			})))
-		} else {
-			goals.append(h('p', { class: 'imp-muted' }, tr('No weekly goals yet. Set one for a commitment in Settings.')))
-		}
-		if (without.length) {
-			goals.append(h('p', { class: 'imp-muted imp-pnogoal' }, tr('No goal: {list}', { list: without.map((c) => `${c.name} ${duration(tracked(c.id, wk), { short: true })}`).join(' · ') })))
-		}
-		page.append(goals)
-
-		// The last four weeks, all commitments
-		const totals = weeks.map((w) => sessions.reduce((s, x) => s + overlapSeconds(x.start, x.end ?? now, w.start, w.end), 0))
+		// The last four weeks, all commitments: tap one to see it
+		const totals = weeks.map((w) => recent.reduce((sum, x) => sum + overlapSeconds(x.start, x.end ?? now, w.start, w.end), 0))
 		const top = Math.max(3600, ...totals)
 		page.append(h('section', { class: 'imp-pcard', 'aria-labelledby': 'imp-pweeks-h' },
 			h('div', { class: 'imp-psec__head' }, h('h2', { id: 'imp-pweeks-h' }, tr('Tracked per week')), h('span', { class: 'imp-muted' }, tr('all commitments'))),
-			h('ol', { class: 'imp-pweeks' }, weeks.map((w, i) => h('li', { class: i === 3 ? 'is-current' : '' },
+			h('ol', { class: 'imp-pweeks' }, weeks.map((w, i) => h('li', { class: 3 - i === state.doneWeek ? 'is-current' : '' },
+				h('button', {
+					type: 'button',
+					class: 'imp-pweeks__btn',
+					'aria-pressed': 3 - i === state.doneWeek ? 'true' : 'false',
+					'aria-label': `${i === 3 ? tr('This week') : tr('Week of {date}', { date: fmt.day.format(w.date) })}: ${duration(totals[i], { short: true })}`,
+					onclick: () => week(3 - i),
+				},
 				h('span', { class: 'imp-pweeks__val' }, duration(totals[i], { short: true })),
 				h('span', { class: 'imp-pweeks__bar', style: { height: `${Math.max(4, Math.round((totals[i] / top) * 110))}px` }, 'aria-hidden': 'true' }),
-				h('span', { class: 'imp-muted' }, i === 3 ? tr('This week') : fmt.day.format(w.date)))))))
+				h('span', { class: 'imp-muted' }, i === 3 ? tr('This week') : fmt.day.format(w.date))))))))
 
 		// Everything else (charts by month and year, the table, CSV export): folded away
 		const more = h('details', { class: 'imp-pmore', ontoggle: async (e) => {
@@ -4582,9 +4597,10 @@
 
 	/** Notes (reached from a commitment's page): its notes, other commitments one tap away */
 	async function phoneNotes() {
-		const c = commitmentById(state.notesFor) || state.commitments[0]
-		if (c) { state.commitmentId = c.id; state.cTab = 'notes' }
-		location.replace(c ? `#c/${c.id}` : '#now')
+		const c = commitmentById(state.notesFor)
+		if (c) state.tasksFor = c.id
+		state.tasksView = 'notes'
+		location.replace('#tasks')
 		return h('div')
 	}
 
@@ -4652,7 +4668,7 @@
 	// ---------------------------------------------------------------------------
 
 	const PAGES = PHONE
-		? { now: phoneNow, tasks: phoneTasks, notes: phoneNotes, done: phoneDone, time: phoneTime, settings: phoneSettings, commitment: phoneCommitment, calendar: phoneCalendar }
+		? { now: phoneNow, tasks: phoneTasks, notes: phoneNotes, progress: phoneProgress, settings: phoneSettings, commitment: phoneCommitment, calendar: phoneCalendar }
 		: { now: pageNow, tasks: pageTasks, notes: pageNotes, done: pageDone, time: pageTime, settings: pageSettings, commitment: pageCommitment, calendar: pageCalendar }
 
 	function routeFromHash() {
@@ -4670,7 +4686,9 @@
 			state.commitmentId = Number(m[1])
 			return
 		}
-		state.route = PAGES[r] && r !== 'commitment' ? r : 'now'
+		// The phone's Progress holds what were Done and Time (old links still land there)
+		const name = PHONE && (r === 'done' || r === 'time') ? 'progress' : r
+		state.route = PAGES[name] && name !== 'commitment' ? name : 'now'
 	}
 
 	async function boot() {

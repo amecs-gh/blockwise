@@ -1863,3 +1863,65 @@ body.android .imp-pslide--prev {
 body.android .imp-main--swipe {
 	touch-action: pan-y;
 }
+
+/* Tasks | Notes: one commitment's two lists, under its chip */
+body.android .imp-pseg {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 4px;
+	margin: 0 0 12px;
+	padding: 4px;
+	border-radius: 22px;
+	background: var(--md-surfaceContainerHigh);
+}
+body.android .imp-pseg button {
+	height: 38px;
+	border: none;
+	border-radius: 18px;
+	background: transparent;
+	color: var(--md-onSurfaceVariant);
+	font: inherit;
+	font-size: 14px;
+	font-weight: 600;
+}
+body.android .imp-pseg button[aria-selected="true"] {
+	background: var(--md-surfaceContainerLow);
+	color: var(--md-onSurface);
+	font-weight: 800;
+	box-shadow: 0 1px 3px rgba(36, 34, 58, 0.12);
+}
+
+/* Progress: each of the last four weeks opens that week */
+body.android .imp-pweeks li {
+	align-items: stretch;
+}
+body.android .imp-pweeks__btn {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 4px;
+	width: 100%;
+	min-height: 48px;
+	padding: 4px 0;
+	border: none;
+	border-radius: 14px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+}
+body.android .imp-pweeks__btn[aria-pressed="true"] {
+	background: var(--md-surfaceContainerHigh);
+}
+body.android .imp-pweeks li.is-current .imp-pweeks__bar {
+	background: var(--md-primary);
+}
+
+/* "Updating from Nextcloud": just above the tab bar, never over a page's title */
+body.android .imp-updating {
+	top: auto;
+	bottom: calc(var(--navbar) + var(--inset-bottom) + 12px);
+}
+body.android:has(.imp-mini) .imp-updating {
+	bottom: calc(var(--navbar) + var(--inset-bottom) + 76px);
+}

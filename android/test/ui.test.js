@@ -332,15 +332,15 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		const tag = `${dark ? 'dark' : 'light'}-${locale.slice(0, 2)}`
 		await a.page.waitForSelector('.imp-ring__name', { timeout: 15000 })
 		const firstC = await a.page.evaluate(() => document.querySelector('.imp-ring__name')?.getAttribute('href')?.slice(1))
-		for (const pg of ['now', 'tasks', 'done', 'time', 'settings', firstC]) {
+		for (const pg of ['now', 'tasks', 'notes', 'progress', 'settings', firstC]) {
 			await a.page.evaluate((h) => { location.hash = h }, '#' + pg)
 			// wait until the page has loaded (some make several requests)
 			await a.page.waitForFunction((pg) => {
 				const q = (s) => !!document.querySelector(s)
 				return pg === 'now' ? q('.imp-pnow .imp-timer') && q('.imp-ptoday h2') && !q('.imp-ptoday [aria-busy]')
 					: pg === 'tasks' ? q('.imp-ptasks .imp-tcol')
-						: pg === 'done' ? q('.imp-pdone .imp-pdays')
-							: pg === 'time' ? q('.imp-ptime .imp-pweeks')
+						: pg === 'notes' ? q('.imp-ptasks--notes .imp-notes') && location.hash === '#tasks'
+							: pg === 'progress' ? q('.imp-pprogress .imp-pdays') && q('.imp-pprogress .imp-pweeks') && q('#imp-pgoals-h')
 								: pg === 'settings' ? q('.imp-psettings .imp-settings__section')
 									: q('.imp-pcommit .imp-ptabs')
 			}, pg, { timeout: 30000 })
@@ -352,10 +352,12 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 			})
 			assert.ok(info.overflow <= 1, `no sideways scroll on ${pg} (${info.overflow})`)
 			assert.equal(info.tabsBottom, info.h, 'tab bar at the bottom')
-			assert.equal(info.tabs, 5, 'Now, Tasks, Calendar, Done, Time')
+			assert.equal(info.tabs, 4, 'Now, Tasks, Calendar, Progress')
 			assert.equal(info.top, 1, 'Settings (or Back) at the top')
 			assert.ok(!info.failed, `page ${pg} loads`)
-			if (!dark || pg === 'now' || pg === 'tasks' || pg === 'notes') await a.page.screenshot({ path: `${shots}/${tag}-${pg.replace('/', '')}.png` })
+			if (!dark || pg === 'now' || pg === 'tasks' || pg === 'notes' || pg === 'progress') await a.page.screenshot({ path: `${shots}/${tag}-${pg.replace('/', '')}.png`, fullPage: pg === 'progress' })
+			// (back to the tasks, for the next round)
+			if (pg === 'notes') { await a.page.click('.imp-pseg button >> nth=0'); await a.page.waitForSelector('.imp-ptasks:not(.imp-ptasks--notes) .imp-tcol') }
 		}
 		if (tag === 'light-en') {
 			// Notes: on the commitment's page
@@ -417,8 +419,8 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		const sl = await phone(browser, 'app.html', { hash: '#now' })
 		await sl.page.waitForSelector('.imp-pnow .imp-timer', { timeout: 30000 })
 		const t0 = Date.now()
-		await sl.page.evaluate(() => { location.hash = '#done' })
-		await sl.page.waitForSelector('.imp-tabbar a.active[href="#done"]', { timeout: 5000 })
+		await sl.page.evaluate(() => { location.hash = '#progress' })
+		await sl.page.waitForSelector('.imp-tabbar a.active[href="#progress"]', { timeout: 5000 })
 		const switched = Date.now() - t0
 		assert.ok(switched < 800, `the tab switched in ${switched} ms`)
 		await sl.page.waitForSelector('.imp-updating:not([hidden])', { timeout: 5000 })
@@ -584,9 +586,9 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		const after = await pc.page.evaluate(() => ({ menu: !!document.querySelector('.imp-menu'), editing: !!document.querySelector('.imp-ptasks input[type=text], .imp-ptasks textarea, .imp-ptasks [contenteditable="true"]'), sel: String(getSelection()) }))
 		assert.deepEqual(after, { menu: false, editing: false, sel: '' }, 'menu closed, nothing edited or selected')
 		// Done: a swipe goes to the previous day, and back
-		await pc.page.evaluate(() => { location.hash = '#done' })
-		await pc.page.waitForSelector('.imp-pdone .imp-pdays', { timeout: 15000 })
-		const dayNow = () => pc.page.evaluate(() => document.querySelector('.imp-pday[aria-selected="true"]')?.getAttribute('aria-label').split(':')[0] + document.querySelector('.imp-pdone .imp-pbar p')?.innerText)
+		await pc.page.evaluate(() => { location.hash = '#done' }) // the old link: now Progress
+		await pc.page.waitForSelector('.imp-pprogress .imp-pdays', { timeout: 15000 })
+		const dayNow = () => pc.page.evaluate(() => document.querySelector('.imp-pday[aria-selected="true"]')?.getAttribute('aria-label').split(':')[0] + document.querySelector('.imp-pprogress .imp-pbar p')?.innerText)
 		const d0 = await dayNow()
 		const doneSwipe = async (dx, same) => {
 			for (let i = 0; i < 3; i++) {
