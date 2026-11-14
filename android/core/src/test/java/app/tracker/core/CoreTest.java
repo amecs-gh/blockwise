@@ -87,11 +87,14 @@ public final class CoreTest {
         check(!ServerUrl.sameOrigin("https://cloud.example.com", "http://cloud.example.com/"), "http is not https");
 
         // --- only the sync endpoints (and read-only calendar fallback) ---
-        for (String[] p : new String[][] {{"GET", "sync?since=0&limit=1000"}, {"GET", "sync?since=123456&limit=7"}, {"POST", "sync"}, {"GET", "state"}, {"GET", "blocks?from=1&to=2"}}) {
+        for (String[] p : new String[][] {{"GET", "sync?since=0&limit=1000"}, {"GET", "sync?since=123456&limit=7"}, {"POST", "sync"}, {"GET", "state"}, {"GET", "blocks?from=1&to=2"},
+                {"POST", "blocks"}, {"PUT", "blocks/12/1793610000"}, {"DELETE", "blocks/12/1793610000"}, {"DELETE", "blocks/12/1793610000?scope=future"}}) {
             check(ApiGuard.allowed(p[0], p[1]), "allowed " + p[0] + " " + p[1]);
         }
         for (String[] p : new String[][] {{"POST", "tasks"}, {"PUT", "settings"}, {"DELETE", "sessions/1"}, {"GET", "tasks"}, {"GET", "sync?since=0&limit=1000&x=1"},
-                {"GET", "sync?since=-1&limit=1"}, {"GET", "../../remote.php/dav"}, {"GET", "state/../x"}, {"POST", "state"}, {"GET", "sync"}, {"PROPFIND", "sync"}, {null, "state"}, {"GET", ""}}) {
+                {"GET", "sync?since=-1&limit=1"}, {"GET", "../../remote.php/dav"}, {"GET", "state/../x"}, {"POST", "state"}, {"GET", "sync"}, {"PROPFIND", "sync"}, {null, "state"}, {"GET", ""},
+                {"PUT", "blocks"}, {"DELETE", "blocks/1"}, {"PUT", "blocks/1/2/3"}, {"PUT", "blocks/../tasks/1"}, {"DELETE", "blocks/-1/2"}, {"PUT", "blocks/1/2?x=1"},
+                {"POST", "blocks/1/2"}, {"PUT", "tasks/1/2"}, {"PUT", "blocks/1234567890123/2"}, {"DELETE", "blocks/1/2?scope=everything"}, {"PUT", "blocks/1/2?scope=all"}}) {
             check(!ApiGuard.allowed(p[0], p[1]), "refused " + p[0] + " " + p[1]);
         }
 

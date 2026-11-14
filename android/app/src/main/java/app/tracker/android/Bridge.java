@@ -239,6 +239,23 @@ public final class Bridge {
                 });
                 break;
             }
+            case "blockCacheLoad":
+                background(id, () -> Store.client(ctx) == null ? null : Vault.read(ctx, Vault.BLOCKCACHE));
+                break;
+            case "blockCacheSave": {
+                final String bc = args.optString(0, "");
+                if (bc.isEmpty() || bc.length() > 4 * 1024 * 1024 || bc.charAt(0) != '{') {
+                    reply(id, error(i18n().t("Invalid request."), 0));
+                    break;
+                }
+                SAVE.execute(() -> {
+                    if (Store.client(ctx) != null) {
+                        Vault.write(ctx, Vault.BLOCKCACHE, bc);
+                    }
+                    host.runOnUiThread(() -> reply(id, data(null)));
+                });
+                break;
+            }
             case "takeResend":
                 background(id, () -> Store.takeResend(ctx));
                 break;
@@ -354,7 +371,8 @@ public final class Bridge {
         final String method = args.optString(0, null);
         final String path = args.optString(1, null);
         final Object body = args.isNull(2) ? null : args.opt(2);
-        if (!ApiGuard.allowed(method, path) || (body != null && !(body instanceof JSONObject)) || ("POST".equals(method) && body == null)) {
+        if (!ApiGuard.allowed(method, path) || (body != null && !(body instanceof JSONObject))
+                || (("POST".equals(method) || "PUT".equals(method)) && body == null) || ("DELETE".equals(method) && body != null)) {
             reply(id, error(t.t("Invalid request."), 0));
             return;
         }

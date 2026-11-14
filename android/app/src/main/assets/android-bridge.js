@@ -104,32 +104,53 @@
 	const serverForm = (u) => { const p = calPath(u); return p === null ? null : DAV + p.split('/').map(rawurlencode).join('/') + '/' }
 
 	let phoneCals = []
-	// The server's calendars and blocks, kept from the last answer: a page never waits for
-	// Nextcloud (it can be slow). What is missing or old is asked for in the background; the
-	// page shows placeholders meanwhile (loading()) and is drawn again when the answer comes.
-	// Kept on the phone too (last known), so a restart while Nextcloud is down still shows them.
+	// Nextcloud mode, local first. Blocks in the phone's calendars (DAVx5) are read and written
+	// there. Blocks in calendars the phone doesn't have come from Nextcloud: kept on the phone
+	// (encrypted, last known: a restart while Nextcloud is down still shows them), and planned,
+	// moved or deleted here even while it's down; those changes wait in order (`ops`) and are
+	// sent when it answers again. A page never waits for Nextcloud: what's missing or old is
+	// asked for in the background and the page is drawn again when the answer comes.
 	let serverCals = null
 	let serverCalsAt = 0
 	let serverCalsAsk = null
 	let serverTried = false // asked once this run (answered or not): never wait for it again
-	const serverBlocks = new Map() // "from-to" -> {at, list}
+	const serverBlocks = new Map() // "from-to" -> {at, list} (Nextcloud's answers, as they came)
 	const blockAsks = new Map()
 	const FRESH = 120000
-	const KEEP = 'serverCalendarCache'
-	try {
-		const kept = JSON.parse(localStorage.getItem(KEEP) || 'null')
-		if (kept && Array.isArray(kept.cals)) {
-			serverCals = kept.cals
-			// (as old: asked again soon, shown meanwhile)
-			for (const [k, list] of kept.blocks || []) if (Array.isArray(list)) serverBlocks.set(k, { at: 0, list })
+	// The weeks around today are always kept, so every page has them offline
+	const BACK = 42 * 86400
+	const AHEAD = 120 * 86400
+	// A block's id as the page sees it: Nextcloud's (+SERVER) or one planned here, not sent yet (+PENDING).
+	// Smaller numbers are the phone's calendar rows.
+	const SERVER = 9e12
+	const PENDING = 8e12
+	let ops = [] // waiting for Nextcloud: {op: 'create'|'update'|'delete', ...}
+	let nextPid = 1
+	const sentAs = new Map() // a block planned here and sent since: its id at Nextcloud
+	try { localStorage.removeItem('serverCalendarCache') } catch (e) { /* (an earlier version kept it here) */ }
+	let cacheLoad = null
+	function loadCache() {
+		if (!cacheLoad) {
+			cacheLoad = call('blockCacheLoad').then((t) => {
+				const kept = t ? JSON.parse(t) : null
+				if (!kept) return
+				if (serverCals === null && Array.isArray(kept.cals)) serverCals = kept.cals
+				// (as old: asked again soon, shown meanwhile)
+				for (const [k, list] of kept.blocks || []) if (Array.isArray(list) && !serverBlocks.has(k)) serverBlocks.set(k, { at: 0, list })
+				if (Array.isArray(kept.ops)) ops = kept.ops.concat(ops)
+				if (Number.isFinite(kept.nextPid)) nextPid = Math.max(nextPid, kept.nextPid)
+				if (ops.length) flushSoon(1000)
+			}).catch(() => { /* nothing kept */ })
 		}
-	} catch (e) { /* none kept */ }
+		return cacheLoad
+	}
 	let keepTimer = null
 	function keepSoon() {
 		clearTimeout(keepTimer)
 		keepTimer = setTimeout(() => {
-			try { localStorage.setItem(KEEP, JSON.stringify({ cals: serverCals || [], blocks: [...serverBlocks].slice(-12).map(([k, v]) => [k, v.list]) })) } catch (e) { /* full: next time */ }
-		}, 1000)
+			const blocks = [...serverBlocks].slice(-12).map(([k, v]) => [k, v.list])
+			call('blockCacheSave', JSON.stringify({ cals: serverCals || [], blocks, ops, nextPid })).catch(() => { /* next time */ })
+		}, 800)
 	}
 	let asking = 0
 	// Nothing is "loading" while Nextcloud is known to be down: the pages show what the phone has
@@ -149,6 +170,12 @@
 		offlineSaid = Date.now()
 		fire('offline', true)
 	}
+	/** Nextcloud answered: back online, and what waited is sent */
+	const reachable = () => {
+		offlineSaid = 0
+		offlineNow = false
+		if (ops.length) flushSoon(300)
+	}
 	function askServerCalendars() {
 		if (serverCalsAsk) return serverCalsAsk
 		asked(1)
@@ -158,8 +185,7 @@
 			const changed = serverCals !== null && JSON.stringify(next) !== JSON.stringify(serverCals)
 			serverCals = next
 			serverCalsAt = Date.now()
-			offlineSaid = 0
-			offlineNow = false
+			reachable()
 			keepSoon()
 			if (changed) fire('changed')
 		}).catch(() => {
@@ -173,51 +199,159 @@
 	// instead of a new one every second
 	const GRID = 6 * 3600
 	const gridKey = (from, to) => `${Math.floor(from / GRID) * GRID}-${Math.ceil(to / GRID) * GRID}`
-	/** The last known answer covering [from, to), if any */
+	/** The last known answer covering [from, to), if any: [its range, it] */
 	function knownBlocks(from, to) {
-		const exact = serverBlocks.get(gridKey(from, to))
-		if (exact) return exact
+		const key = gridKey(from, to)
+		if (serverBlocks.has(key)) return [key, serverBlocks.get(key)]
+		let best = null
 		for (const [k, v] of serverBlocks) {
 			const [a, b] = k.split('-').map(Number)
-			if (a <= from && b >= to) return v
+			if (a <= from && b >= to && (!best || v.at > best[1].at)) best = [k, v]
 		}
-		return null
+		return best
 	}
-	function askServerBlocks(from, to) {
-		const key = gridKey(from, to)
-		const [gFrom, gTo] = key.split('-').map(Number)
+	function askServerBlocks(key) {
 		if (blockAsks.has(key)) return blockAsks.get(key)
+		const [gFrom, gTo] = key.split('-').map(Number)
 		asked(1)
 		const p = remote('GET', `blocks?from=${gFrom}&to=${gTo}`).then(({ blocks }) => {
 			const before = serverBlocks.get(key)
+			serverBlocks.delete(key)
 			serverBlocks.set(key, { at: Date.now(), list: blocks || [] })
 			if (serverBlocks.size > 40) serverBlocks.delete(serverBlocks.keys().next().value)
-			offlineNow = false
+			reachable()
 			keepSoon()
 			if (!before || JSON.stringify(before.list) !== JSON.stringify(blocks || [])) fire('changed')
 		}).catch(() => {
 			// Offline: keep what's known, ask again in a minute
 			const before = serverBlocks.get(key)
-			serverBlocks.set(key, { at: Date.now() - FRESH + 60000, list: before ? before.list : [], failed: true })
+			serverBlocks.set(key, { at: Date.now() - FRESH + 60000, list: before ? before.list : [], failed: !before })
 			unreachable()
 		}).finally(() => { blockAsks.delete(key); asked(-1) })
 		blockAsks.set(key, p)
 		return p
 	}
+	/** The weeks around today, always kept */
+	function windowKey() {
+		const day = new Date()
+		day.setHours(0, 0, 0, 0)
+		const t = Math.floor(day / 1000)
+		return gridKey(t - BACK, t + AHEAD)
+	}
+
+	// --- changes made here to Nextcloud's blocks, shown at once and sent when it answers ---
+	const DAY = 86400
+	/** A block planned here: its occurrences in [from, to) (the planner's repeats) */
+	function occurrencesOf(o, from, to) {
+		const len = o.end - o.start
+		const out = []
+		const until = o.until || Infinity
+		const at = new Date(o.start * 1000)
+		for (let i = 0; i < 800; i++) {
+			const s = Math.floor(at / 1000)
+			if (s >= to || s > until) break
+			const weekday = at.getDay()
+			if (s + len > from && !(o.repeat === 'weekdays' && (weekday === 0 || weekday === 6))) out.push(s)
+			if (!o.repeat) break
+			if (o.repeat === 'daily' || o.repeat === 'weekdays') at.setDate(at.getDate() + 1)
+			else if (o.repeat === 'weekly') at.setDate(at.getDate() + 7)
+			else if (o.repeat === 'biweekly') at.setDate(at.getDate() + 14)
+			else if (o.repeat === 'monthly') at.setMonth(at.getMonth() + 1)
+			else break
+		}
+		return out.map((s) => ({ uid: `pending-${o.pid}#${s}`, title: o.title, start: s, end: s + len, calendarId: o.calendarId, pid: o.pid, occurrence: s, repeat: o.repeat || '', until: o.until || null }))
+	}
+	const touches = (b, o) => b.series === o.series && b.pid === undefined
+		&& (!b.repeat || o.scope === 'all' || !o.scope || (o.scope === 'this' ? b.occurrence === o.occurrence : b.occurrence >= o.occurrence))
+	/** Nextcloud's blocks with the changes waiting on top */
+	function withChanges(list, from, to) {
+		let out = list.slice()
+		for (const o of ops) {
+			if (o.op === 'create') out.push(...occurrencesOf(o, from - DAY, to + DAY))
+			else if (o.op === 'delete') out = out.filter((b) => !touches(b, o))
+			else {
+				const ch = o.ch
+				const delta = ch.start !== undefined ? ch.start - o.occurrence : 0
+				out = out.map((b) => {
+					if (!touches(b, o)) return b
+					const start = b.start + delta
+					const len = ch.start !== undefined && ch.end !== undefined ? ch.end - ch.start : ch.end !== undefined && b.occurrence === o.occurrence ? ch.end - b.start : b.end - b.start
+					return { ...b, start, end: start + len, title: ch.title !== undefined ? ch.title : b.title, calendarId: ch.calendarId !== undefined ? ch.calendarId : b.calendarId }
+				})
+			}
+		}
+		return out.filter((b) => b.end > from && b.start < to)
+	}
+	let flushTimer = null
+	let flushing = null
+	function flushSoon(ms) {
+		clearTimeout(flushTimer)
+		flushTimer = setTimeout(flush, ms)
+	}
+	/** Sends the waiting changes, oldest first; stops at the first that can't reach Nextcloud */
+	function flush() {
+		if (flushing || !ops.length || mode !== 'nextcloud') return flushing
+		flushing = (async () => {
+			let sent = 0
+			const refused = []
+			while (ops.length) {
+				const o = ops[0]
+				try {
+					if (o.op === 'create') {
+						const r = await remote('POST', 'blocks', { calendarId: o.calendarId, title: o.title, start: o.start, end: o.end, repeat: o.repeat || '', until: o.until || null, tz: o.tz || undefined })
+						if (r && Number.isFinite(r.series)) sentAs.set(o.pid, r.series)
+					} else if (o.op === 'update') {
+						await remote('PUT', `blocks/${o.series}/${o.occurrence}`, o.ch)
+					} else {
+						await remote('DELETE', `blocks/${o.series}/${o.occurrence}?scope=${['this', 'future', 'all'].includes(o.scope) ? o.scope : 'all'}`, undefined)
+					}
+				} catch (e) {
+					// Not reachable (or not logged in): it stays, in order, for next time
+					if (!e.status || e.status >= 500 || e.status === 401) { unreachable(); break }
+					// Refused (the block is gone, the calendar too…): dropped, and said
+					refused.push(e.message)
+				}
+				ops.shift()
+				sent++
+				keepSoon()
+			}
+			if (refused.length) {
+				const it = /^it\b/i.test(navigator.language || '')
+				try { window.OC.Notification.showTemporary((it ? 'Alcune modifiche ai blocchi non sono state accettate da Nextcloud: ' : 'Nextcloud didn\'t take some changes to blocks: ') + [...new Set(refused)].join(' · '), { type: 'error' }) } catch (x) { /* no page */ }
+			}
+			if (sent) {
+				// What Nextcloud has now: asked again
+				for (const v of serverBlocks.values()) v.at = 0
+				fire('changed')
+			}
+		})().finally(() => { flushing = null })
+		return flushing
+	}
+	function calendarIdOf(url) {
+		const cal = (serverCals || []).find((c) => samePath(c.url, url))
+		if (!cal) throw new Error('This commitment\'s calendar is not known yet. Try again when Nextcloud is reachable.')
+		return cal.id
+	}
+	const queue = (o) => { ops.push(o); keepSoon(); flushSoon(300) }
+
 	const calendar = {
 		/** The phone's Nextcloud calendars (offline too), plus the server's others as last known */
 		async calendars() {
+			await loadCache()
 			phoneCals = (await call('calendars').catch(() => [])) || []
 			// Nothing known yet and nothing on the phone either (first start): wait for the server, briefly
-			// (only on the very first start, and only once: never again while Nextcloud is down)
 			if (serverCals === null && !phoneCals.length && !serverTried) await Promise.race([askServerCalendars(), new Promise((r) => setTimeout(r, 4000))])
 			// (old, or never answered: asked again, but after a failure only once a minute)
 			else if (Date.now() - serverCalsAt > FRESH) askServerCalendars()
+			// The weeks around today, for every page (and for when Nextcloud is down)
+			const w = windowKey()
+			const kept = serverBlocks.get(w)
+			if (!kept || Date.now() - kept.at > FRESH) askServerBlocks(w)
 			const out = phoneCals.map((c) => ({ url: serverForm(c.url), name: c.name, color: c.color })).filter((c) => c.url)
 			for (const c of serverCals || []) if (!out.some((p) => samePath(p.url, c.url))) out.push({ url: c.url, name: c.name, color: c.color })
 			return out
 		},
-		/** Blocks from the phone's calendars; for calendars the phone doesn't have, the server's as last known */
+		/** Blocks from the phone's calendars; for calendars the phone doesn't have, Nextcloud's as last known (with the changes made here) */
 		async events(from, to, urls) {
 			const onPhone = urls.filter((u) => phoneCals.some((p) => samePath(p.url, u)))
 			const rest = urls.filter((u) => !onPhone.includes(u))
@@ -225,24 +359,78 @@
 			const out = onPhone.length ? ((await call('events', from, to, onPhone).catch(() => { incomplete = true; return [] })) || []) : []
 			if (rest.length) {
 				const known = knownBlocks(from, to)
-				if (!known || Date.now() - known.at > FRESH) askServerBlocks(from, to)
-				if (!known || !serverCals || known.failed) incomplete = true
-				for (const b of (known && known.list) || []) {
-					if (!(b.end > from && b.start < to)) continue
+				if (!known) askServerBlocks(gridKey(from, to))
+				else if (Date.now() - known[1].at > FRESH) askServerBlocks(known[0])
+				if (!known || !serverCals || known[1].failed) incomplete = true
+				for (const b of withChanges((known && known[1].list) || [], from, to)) {
 					const cal = (serverCals || []).find((c) => c.id === b.calendarId)
 					const url = cal && rest.find((u) => samePath(u, cal.url))
-					if (url) out.push({ uid: b.uid, title: b.title, start: b.start, end: b.end, url })
+					if (!url) continue
+					const ev = { uid: b.uid, title: b.title, start: b.start, end: b.end, url }
+					if (b.pid !== undefined) Object.assign(ev, { series: PENDING + b.pid, occurrence: b.occurrence, repeat: b.repeat, until: b.until })
+					else if (Number.isFinite(b.series)) Object.assign(ev, { series: SERVER + b.series, occurrence: b.occurrence, repeat: b.repeat || '', until: b.until || null })
+					out.push(ev)
 				}
 			}
 			// Some blocks may be missing: the engine shows what it has, but doesn't count blocks as ended
 			if (incomplete) out.incomplete = true
 			return out
 		},
-		/** A new block in the commitment's calendar on the phone (DAVx5 uploads it) */
-		createEvent: (ev) => call('createEvent', ev),
-		/** Move or change one in the phone's calendar (this / future / all; `url`: another commitment's calendar) */
-		updateEvent: (series, occurrence, ch) => call('updateEvent', series, occurrence, ch),
-		deleteEvent: (series, occurrence, scope) => call('deleteEvent', series, occurrence, scope),
+		/** A new block: in the commitment's calendar on the phone (DAVx5 uploads it), else for Nextcloud (sent when it answers) */
+		async createEvent(ev) {
+			await loadCache()
+			if (phoneCals.some((p) => samePath(p.url, ev.url))) return call('createEvent', ev)
+			const pid = nextPid++
+			queue({ op: 'create', pid, calendarId: calendarIdOf(ev.url), title: ev.title, start: ev.start, end: ev.end, repeat: ev.repeat || '', until: ev.until || null, tz: ev.tz })
+			return { uid: `pending-${pid}#${ev.start}` }
+		},
+		/** Move or change one (this / future / all; `url`: another commitment's calendar) */
+		async updateEvent(series, occurrence, ch) {
+			await loadCache()
+			if (series < PENDING) return call('updateEvent', series, occurrence, ch)
+			const calendarId = ch.url !== undefined ? calendarIdOf(ch.url) : undefined
+			if (series < SERVER) {
+				const pid = series - PENDING
+				const o = ops.find((x) => x.op === 'create' && x.pid === pid)
+				if (!o) {
+					// Sent meanwhile: change it at Nextcloud
+					if (!sentAs.has(pid)) throw new Error('This block is gone. Pull to refresh.')
+					return calendar.updateEvent(SERVER + sentAs.get(pid), occurrence, ch)
+				}
+				const len = o.end - o.start
+				if (ch.start !== undefined) o.start = o.start + (ch.start - occurrence)
+				o.end = ch.end !== undefined && ch.start !== undefined ? o.start + (ch.end - ch.start) : o.start + len
+				if (ch.title !== undefined) o.title = ch.title
+				if (calendarId !== undefined) o.calendarId = calendarId
+				if (ch.repeat !== undefined && ch.repeat !== 'custom') o.repeat = ch.repeat
+				if (ch.until !== undefined) o.until = ch.until
+				keepSoon()
+				flushSoon(300)
+				return { ok: true, series, occurrence: o.start }
+			}
+			const change = {}
+			for (const k of ['start', 'end', 'title', 'repeat', 'until', 'scope', 'tz']) if (ch[k] !== undefined) change[k] = ch[k]
+			if (calendarId !== undefined) change.calendarId = calendarId
+			queue({ op: 'update', series: series - SERVER, occurrence, scope: change.scope || 'all', ch: change })
+			return { ok: true, series, occurrence: ch.start !== undefined ? ch.start : occurrence }
+		},
+		async deleteEvent(series, occurrence, scope) {
+			await loadCache()
+			if (series < PENDING) return call('deleteEvent', series, occurrence, scope)
+			if (series < SERVER) {
+				const pid = series - PENDING
+				const i = ops.findIndex((x) => x.op === 'create' && x.pid === pid)
+				if (i < 0) {
+					if (!sentAs.has(pid)) return { ok: true }
+					return calendar.deleteEvent(SERVER + sentAs.get(pid), occurrence, scope)
+				}
+				ops.splice(i, 1)
+				keepSoon()
+				return { ok: true }
+			}
+			queue({ op: 'delete', series: series - SERVER, occurrence, scope: scope || 'all' })
+			return { ok: true }
+		},
 	}
 
 	/** The drive's folder through the app (it holds the login); bytes as base64 over the bridge */
@@ -381,7 +569,7 @@
 				if (mode === 'local') { snapshotSoon(); if (always) fire('changed'); return }
 				const r = await e.sync()
 				pulled = r.pulled || 0
-				offlineNow = false
+				reachable()
 				if (r.refused && r.refused.length) {
 					// Changes the server refused were undone here: say so (once per sync)
 					const reasons = [...new Set(r.refused.map((x) => x.reason))].join(' · ')

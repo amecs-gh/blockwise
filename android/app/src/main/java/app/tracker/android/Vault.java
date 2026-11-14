@@ -34,6 +34,8 @@ final class Vault {
     static final String OUTBOX = "outbox";
     /** Where the drive sync has read up to (web/filesync.js) */
     static final String DRIVESTATE = "drivestate";
+    /** Nextcloud's blocks as last known, and the changes to them waiting to be sent */
+    static final String BLOCKCACHE = "blockcache";
 
     private static final Map<String, String> memory = new HashMap<>();
 
@@ -134,7 +136,7 @@ final class Vault {
     static synchronized void wipe(Context c) {
         memory.clear();
         unreadable.clear();
-        for (String name : new String[] {DB, SNAPSHOT, OUTBOX, DRIVESTATE}) {
+        for (String name : new String[] {DB, SNAPSHOT, OUTBOX, DRIVESTATE, BLOCKCACHE}) {
             File f = file(c, name);
             if (f != null) {
                 new AtomicFile(f).delete();

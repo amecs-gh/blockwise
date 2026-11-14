@@ -16,6 +16,9 @@ const THEME = (dark) => ({ dark, insets: { top: 32, bottom: 24, left: 0, right: 
 
 const device = { db: null, snapshot: null, offline: false, remoteCalls: [] }
 const GUARD = /^(sync\?since=\d{1,18}&limit=\d{1,5}|state|blocks\?from=\d{1,12}&to=\d{1,12})$/ // = core ApiGuard
+const GUARD_PUT = /^blocks\/\d{1,12}\/\d{1,12}$/
+const GUARD_DELETE = /^blocks\/\d{1,12}\/\d{1,12}(\?scope=(this|future|all))?$/
+const guarded = (method, p) => method === 'GET' ? GUARD.test(p) : method === 'PUT' ? GUARD_PUT.test(p) : method === 'DELETE' ? GUARD_DELETE.test(p) : method === 'POST' && (p === 'sync' || p === 'blocks')
 
 /** On phone A (its own page): add a commitment and wait until it is on the drive */
 async function a2b(dev, name) {
@@ -87,6 +90,9 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 			else if (channel === 'snapshot') { dev.snapshot = args[0]; env = { data: null } }
 			else if (channel === 'takeResend') { env = { data: resend }; resend = false }
 			else if (channel === 'outbox') env = { data: [] }
+			// Nextcloud's blocks as last known (the app keeps them encrypted)
+			else if (channel === 'blockCacheLoad') env = { data: mode === 'nextcloud' ? dev.blockCache || null : null }
+			else if (channel === 'blockCacheSave') { dev.blockCache = args[0]; env = { data: null } }
 			// The phone's calendars (CalendarContract through DAVx5): none, unless a test puts some there
 			else if (channel === 'calendars') env = { data: dev.phoneCals || [] }
 			else if (channel === 'events') {
@@ -114,7 +120,7 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 				const [method, p, body] = args
 				dev.remoteCalls.push(`${method} ${p}`)
 				if (mode === 'local') throw new Error('no server on this phone only')
-				if (!(method === 'GET' ? GUARD.test(p) : method === 'POST' && p === 'sync')) throw new Error('refused by ApiGuard: ' + method + ' ' + p)
+				if (!guarded(method, p)) throw new Error('refused by ApiGuard: ' + method + ' ' + p)
 				// (a server that's down: no answer for a while, then the connection fails)
 				if (dev.offline) { if (dev.downDelay) await new Promise((r) => setTimeout(r, dev.downDelay)); throw new Error('offline') }
 				if (dev.slow) await new Promise((r) => setTimeout(r, dev.slow))
@@ -383,6 +389,8 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		await a.page.click('.imp-ptabs button >> nth=2')
 		await a.page.waitForSelector('.imp-pcommit .imp-cpage')
 		assert.ok(await a.page.$('.imp-newblock button'), 'Plan a block on the commitment page')
+		const ncBlocks = async () => (await (await fetch(`${SERVER}/index.php/apps/tracker/api/blocks?from=${Math.floor(Date.now() / 1000) - 86400}&to=${Math.floor(Date.now() / 1000) + 30 * 86400}`, { headers: { Authorization: AUTH, 'OCS-APIRequest': 'true' } })).json()).blocks
+		const beforeUids = new Set((await ncBlocks()).map((b) => b.uid))
 		// (a page load or sync finishing just then may redraw the page: then once more)
 		for (let i = 0; ; i++) {
 			try {
@@ -397,8 +405,14 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 				if (i >= 2) throw e
 			}
 		}
-		await a.page.waitForTimeout(400)
-		// The form stays open (the calendar isn't on this phone) unless a sync redrew the page meanwhile
+		// Its calendar isn't on this phone: the block goes to Nextcloud (right away when it answers)
+		let fresh = []
+		for (let i = 0; i < 20 && !fresh.length; i++) {
+			await a.page.waitForTimeout(400)
+			fresh = (await ncBlocks()).filter((b) => !beforeUids.has(b.uid))
+		}
+		assert.ok(fresh.length >= 1, 'the planned block reached Nextcloud')
+		for (const b of fresh) await fetch(`${SERVER}/index.php/apps/tracker/api/blocks/${b.series}/${b.occurrence}`, { method: 'DELETE', headers: { Authorization: AUTH, 'OCS-APIRequest': 'true' } })
 		if (await a.page.$('.imp-newblock__actions button[type=button]')) await a.page.click('.imp-newblock__actions button[type=button]', { timeout: 3000 }).catch(() => {})
 		// Account (in Settings) reaches the app; Calendar is the planner, never another app
 		await a.page.evaluate(() => { location.hash = '#settings' })
@@ -411,12 +425,13 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		await a.ctx.close()
 	}
 	// Everything came from the phone's engine; the server only saw sync requests
-	assert.ok(device.remoteCalls.every((c) => /^(GET sync|POST sync|GET state|GET blocks)/.test(c)), 'only sync endpoints')
+	assert.ok(device.remoteCalls.every((c) => /^(GET sync|POST sync|GET state|GET blocks|POST blocks)/.test(c)), 'only sync and block endpoints')
 	assert.ok(device.snapshot && Array.isArray(device.snapshot.commitments) && device.snapshot.node, 'snapshot for the notifications')
 
 	// A slow Nextcloud: tabs switch at once, the parts that wait for it show placeholders and fill in
 	{
 		device.slow = 2500
+		device.blockCache = null // (a phone that hasn't seen Nextcloud's blocks yet)
 		const sl = await phone(browser, 'app.html', { hash: '#now' })
 		await sl.page.waitForSelector('.imp-pnow .imp-timer', { timeout: 30000 })
 		const t0 = Date.now()
@@ -470,10 +485,10 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		// Tapped: Edit and Delete, as with the built-in calendar
 		await pc.page.evaluate(() => { location.hash = '#now'; setTimeout(() => { location.hash = '#calendar' }, 50) })
 		await pc.page.waitForSelector('.imp-pcal .imp-cv__ev', { timeout: 15000 })
-		await pc.page.locator('.imp-pcal .imp-cv__ev').first().tap()
+		await pc.page.locator('.imp-pcal .imp-cv__ev:has-text("On the phone")').first().tap()
 		await pc.page.waitForSelector('.imp-cvpanel button.imp-button--danger', { timeout: 5000 })
 		await pc.page.click('.imp-cvpanel button.imp-button--danger')
-		await pc.page.waitForFunction(() => !document.querySelector('.imp-pcal .imp-cv__ev'), null, { timeout: 5000 })
+		await pc.page.waitForFunction(() => ![...document.querySelectorAll('.imp-pcal .imp-cv__ev')].some((e) => e.textContent.includes('On the phone')), null, { timeout: 5000 })
 		assert.equal(device.phoneEvents.length, 0, 'deleted from the phone\'s calendar')
 		// Settings: other calendars, then Calendar shows them in grey
 		await pc.page.evaluate(() => { location.hash = '#settings' })
@@ -638,6 +653,31 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 	assert.equal(added.estimate, 20)
 	await o.page.waitForTimeout(600)
 	assert.ok(Object.keys(JSON.parse(device.db).dirty).length > pendingBefore, 'change saved on the phone, waiting to sync')
+	// Blocks while Nextcloud is down: the last known are there, and planning works (sent when it's back)
+	const day0 = new Date(); day0.setHours(0, 0, 0, 0)
+	const T = (d, h) => Math.floor(day0.getTime() / 1000) + d * 86400 + h * 3600
+	const fromServer = await (await fetch(`${SERVER}/index.php/apps/tracker/api/blocks?from=${T(-14, 0)}&to=${T(0, 0)}`, { headers: { Authorization: AUTH, 'OCS-APIRequest': 'true' } })).json()
+	const offlineBlocks = await o.page.evaluate((r) => window.trackerApp.api('GET', `blocks?from=${r[0]}&to=${r[1]}`), [T(-14, 0), T(0, 0)])
+	assert.ok(fromServer.blocks.length > 0, 'the test server has blocks in the last two weeks')
+	assert.deepEqual(offlineBlocks.blocks.map((b) => b.uid).sort(), fromServer.blocks.map((b) => b.uid).sort(), 'the last two weeks\' blocks, offline')
+	const planned = 'Offline block ' + Date.now()
+	const made = await o.page.evaluate(async ([title, s, e]) => {
+		const st = await window.trackerApp.api('GET', 'state')
+		const c = st.commitments.find((x) => x.calendarId)
+		await window.trackerApp.api('POST', 'blocks', { commitmentId: c.id, title, start: s, end: e })
+		const { blocks } = await window.trackerApp.api('GET', `blocks?from=${s - 3600}&to=${e + 3600}`)
+		const b = blocks.find((x) => x.title === title)
+		// moved an hour later, still offline
+		const moved = await window.trackerApp.api('PUT', `blocks/${b.series}/${b.occurrence}`, { start: s + 3600, end: e + 3600, scope: 'all' })
+		const after = (await window.trackerApp.api('GET', `blocks?from=${s - 3600}&to=${e + 7200}`)).blocks.filter((x) => x.title === title)
+		return { moved, after: after.map((x) => [x.start, x.end]) }
+	}, [planned, T(1, 10), T(1, 11)])
+	assert.deepEqual(made.after, [[T(1, 11), T(1, 12)]], 'planned and moved while Nextcloud is down')
+	await o.page.goto(o.page.url())
+	await o.page.waitForSelector('.imp-pnow, .imp-ptasks', { timeout: 15000 })
+	const kept = await o.page.evaluate(([title, s, e]) => window.trackerApp.api('GET', `blocks?from=${s}&to=${e}`).then((r) => r.blocks.filter((x) => x.title === title).length), [planned, T(1, 0), T(2, 0)])
+	assert.equal(kept, 1, 'still there after a restart while it is down')
+
 	// Every tab opens at once from the phone's data while the server doesn't answer (slowly)
 	device.downDelay = 3000
 	await o.page.evaluate(() => { location.hash = '#now' })
@@ -656,7 +696,8 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		await n2.page.waitForFunction(() => !document.querySelector('.imp-ptoday [aria-busy]'), null, { timeout: 4000 + 3000 + 2000 })
 		await n2.page.waitForTimeout(2000)
 		assert.equal(await n2.page.locator('.imp-ptoday [aria-busy]').count(), 0, 'no placeholders stay in Now')
-		assert.ok(await n2.page.locator('.imp-updating[hidden], .imp-updating.is-offline').count(), 'no Updating pill while it is down (the note that it is, at most)')
+		// (Updating only while the first try is under way; then at most the note that it's down)
+		await n2.page.waitForSelector('.imp-updating[hidden], .imp-updating.is-offline', { state: 'attached', timeout: 8000 })
 		await n2.ctx.close()
 	}
 	device.downDelay = 0
@@ -673,6 +714,21 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 	const onServer = all.find((x) => x.type === 'task' && x.id === added.uuid)
 	assert.ok(onServer && onServer.fields.title === title, 'the offline task reached the server when back online')
 	assert.equal(Object.keys(JSON.parse(device.db).dirty).length, 0, 'nothing left to sync')
+	// The block planned offline reached Nextcloud, where it was moved to
+	await back.page.waitForFunction(() => true)
+	let onNc = null
+	for (let i = 0; i < 20 && !onNc; i++) {
+		const r = await (await fetch(`${SERVER}/index.php/apps/tracker/api/blocks?from=${T(1, 0)}&to=${T(2, 0)}`, { headers: { Authorization: AUTH, 'OCS-APIRequest': 'true' } })).json()
+		onNc = r.blocks.find((x) => x.title === planned)
+		if (!onNc) await back.page.waitForTimeout(500)
+	}
+	assert.ok(onNc && onNc.start === T(1, 11) && onNc.end === T(1, 12), 'the offline block reached Nextcloud, moved')
+	await back.page.waitForTimeout(1200) // (saved a moment after)
+	assert.ok(!JSON.parse(device.blockCache).ops.length, 'nothing waiting')
+	await back.page.evaluate((b) => window.trackerApp.api('GET', `blocks?from=${b.start - 10}&to=${b.end + 10}`).then((r) => {
+		const x = r.blocks.find((y) => y.uid === b.uid)
+		return x && window.trackerApp.api('DELETE', `blocks/${x.series}/${x.occurrence}`)
+	}), onNc)
 	await back.page.evaluate((id) => window.trackerApp.api('DELETE', 'tasks/' + id), added.id)
 	await back.page.waitForTimeout(4500)
 	// Idle with the app open: no more requests (a sync must not schedule the next one)
