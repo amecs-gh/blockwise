@@ -5,8 +5,9 @@
  *
  * Local-first: Blockwise runs here (the engine, nextcloud/js/engine.js, in this
  * process), keeps your data encrypted on this Mac and syncs it, when it can, with
- * Nextcloud, Dropbox or Google Drive (end-to-end encrypted there), or not at all.
- * Blocks come from Nextcloud's calendars, or from Apple Calendar.
+ * Nextcloud, Dropbox, Google Drive or OneDrive (end-to-end encrypted there), or
+ * not at all. Blocks come from Nextcloud's calendars, from Apple Calendar, or
+ * from the drive account's calendar (Google Calendar, Outlook: js/cloudcal.js).
  */
 const {
 	app, BrowserWindow, Tray, Menu, nativeImage, Notification,
@@ -19,6 +20,7 @@ const { pathToFileURL } = require('node:url')
 const nc = require('./nextcloud')
 const { createEngine } = require('../renderer/web/engine.js')
 const FileSync = require('../renderer/web/filesync.js')
+const { createCloudCalendar, PROVIDERS: CLOUD } = require('../renderer/web/cloudcal.js')
 const drives = require('./drives')
 const cal = require('./calendar')
 const { createVault } = require('./vault')
@@ -35,9 +37,10 @@ const PAGES = ['now', 'tasks', 'done', 'time', 'settings']
 
 let t = (s) => s
 /**
- * { provider: nextcloud | dropbox | gdrive | local, notifications,
+ * { provider: nextcloud | dropbox | gdrive | onedrive | local, notifications,
  *   nextcloud: server, loginName, appPassword (encrypted), encrypted, format,
- *   drives: driveToken (encrypted refresh token), driveAccount, syncKey (encrypted) }
+ *   drives: driveToken (encrypted refresh token), driveAccount, syncKey (encrypted),
+ *   driveCalendar (the login allows the account's calendar), outlookCalendars (Blockwise's, known) }
  */
 let config = null
 let client = null // Nextcloud
@@ -50,7 +53,12 @@ let syncTimer = null
 let syncError = null
 let refreshSoonTimer = null
 let pendingDrive = null // a drive being connected (setup)
-const PROVIDER_NAMES = { nextcloud: 'Nextcloud', dropbox: 'Dropbox', gdrive: 'Google Drive', local: 'This Mac' }
+const PROVIDER_NAMES = { nextcloud: 'Nextcloud', dropbox: 'Dropbox', gdrive: 'Google Drive', onedrive: 'OneDrive', local: 'This Mac' }
+// The calendar that comes with a drive's account
+const ACCOUNT_CALENDAR = { gdrive: 'google', onedrive: 'microsoft' }
+const CALENDAR_NAMES = { google: 'Google Calendar', microsoft: 'Outlook' }
+let cloud = null // the account's calendar (js/cloudcal.js), while the blocks live there
+let cloudUsed = false
 let tray = null
 let popover = null
 let popoverHiddenAt = 0
@@ -81,7 +89,7 @@ function loadConfig() {
 		const c = JSON.parse(fs.readFileSync(configPath(), 'utf8'))
 		if (!c.provider && c.server) c.provider = 'nextcloud' // earlier versions
 		if (c.provider === 'nextcloud') return c.server && c.loginName && c.appPassword ? c : null
-		if (c.provider === 'dropbox' || c.provider === 'gdrive') return c.driveToken && c.syncKey ? c : null
+		if (c.provider === 'dropbox' || c.provider === 'gdrive' || c.provider === 'onedrive') return c.driveToken && c.syncKey ? c : null
 		return c.provider === 'local' ? c : null
 	} catch (e) {
 		return null
@@ -102,6 +110,7 @@ const KEY_FORMAT = {
 	dropboxAppKey: /^[a-z0-9]{8,32}$/,
 	googleClientId: /^[0-9]{6,30}-[a-z0-9]{10,64}\.apps\.googleusercontent\.com$/,
 	googleClientSecret: /^[A-Za-z0-9_-]{10,80}$/,
+	microsoftClientId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
 }
 const userKeysFile = () => path.join(app.getPath('userData'), 'providers.json')
 function readKeys(file) {
@@ -122,6 +131,7 @@ function loadProviderKeys() {
 		dropboxAppKey: built.dropboxAppKey || own.dropboxAppKey || '',
 		googleClientId: google.googleClientId || '',
 		googleClientSecret: google.googleClientSecret || '',
+		microsoftClientId: built.microsoftClientId || own.microsoftClientId || '',
 	}
 }
 /** Keys pasted on the first-run screen; checked against the providers' formats */
@@ -132,6 +142,10 @@ function saveProviderKeys(provider, keys) {
 		const v = String(k.dropboxAppKey || '').trim()
 		if (!KEY_FORMAT.dropboxAppKey.test(v)) throw new Error('That is not a Dropbox app key (letters and digits, from the app\'s Settings page).')
 		own.dropboxAppKey = v
+	} else if (provider === 'onedrive') {
+		const id = String(k.microsoftClientId || '').trim().toLowerCase()
+		if (!KEY_FORMAT.microsoftClientId.test(id)) throw new Error('That is not a Microsoft application (client) ID (like 00000000-0000-0000-0000-000000000000).')
+		own.microsoftClientId = id
 	} else if (provider === 'gdrive') {
 		const id = String(k.googleClientId || '').trim()
 		const secret = String(k.googleClientSecret || '').trim()
@@ -146,7 +160,7 @@ function saveProviderKeys(provider, keys) {
 	fs.writeFileSync(userKeysFile(), JSON.stringify(own, null, 1), { mode: 0o600 })
 	loadProviderKeys()
 }
-const providersReady = () => ({ dropbox: !!providerKeys.dropboxAppKey, gdrive: !!(providerKeys.googleClientId && providerKeys.googleClientSecret) })
+const providersReady = () => ({ dropbox: !!providerKeys.dropboxAppKey, gdrive: !!(providerKeys.googleClientId && providerKeys.googleClientSecret), onedrive: !!providerKeys.microsoftClientId })
 
 const appearancePath = () => path.join(app.getPath('userData'), 'appearance')
 function setAppearance(mode) {
@@ -218,10 +232,32 @@ async function openPassword(c) {
 /** fetch without the default session, so cookies Nextcloud sets stay in memory */
 const apiFetch = (u, o) => session.fromPartition(API_PARTITION).fetch(u, o)
 
-function driveStore(provider, refreshToken) {
-	return provider === 'dropbox'
-		? drives.dropboxStore({ appKey: providerKeys.dropboxAppKey, refreshToken, fetch: apiFetch })
-		: drives.googleStore({ clientId: providerKeys.googleClientId, clientSecret: providerKeys.googleClientSecret, refreshToken, fetch: apiFetch })
+/**
+ * @param {object} [o]
+ * @param {(token: string) => void} [o.onRotate] OneDrive: keeps the newest refresh token
+ * @param {boolean} [o.calendar] OneDrive: Outlook allowed with this login
+ */
+function driveStore(provider, refreshToken, o = {}) {
+	if (provider === 'dropbox') return drives.dropboxStore({ appKey: providerKeys.dropboxAppKey, refreshToken, fetch: apiFetch })
+	if (provider === 'onedrive') {
+		return drives.onedriveStore({
+			clientId: providerKeys.microsoftClientId, refreshToken, fetch: apiFetch, onRotate: o.onRotate,
+			calendar: () => (o.calendar !== undefined ? o.calendar : !!(config && config.driveCalendar)),
+			// Outlook calendars known to be Blockwise's (kept in the config)
+			known: {
+				has: (id) => !!(config && Array.isArray(config.outlookCalendars) && config.outlookCalendars.includes(id)),
+				add: (id) => { if (config && (config.outlookCalendars || []).length < 500 && !(config.outlookCalendars || []).includes(id)) { config.outlookCalendars = [...(config.outlookCalendars || []), id]; saveConfig(config) } },
+				remove: (id) => { if (config && Array.isArray(config.outlookCalendars)) { config.outlookCalendars = config.outlookCalendars.filter((x) => x !== id); saveConfig(config) } },
+			},
+		})
+	}
+	return drives.googleStore({ clientId: providerKeys.googleClientId, clientSecret: providerKeys.googleClientSecret, refreshToken, fetch: apiFetch })
+}
+/** The saved connection's newest refresh token (Microsoft), kept encrypted */
+function keepRotated(token) {
+	const c = config
+	if (!c || !vault) return
+	vault.seal(token).then((sealed) => { if (sealed && config === c) { c.driveToken = sealed; saveConfig(c) } }).catch(() => {})
 }
 
 /** The Apple Calendar helper inside the app (mac/helper) */
@@ -237,9 +273,6 @@ async function connect({ fresh = false } = {}) {
 		? nc.createClient({ server: config.server, loginName: config.loginName, appPassword: await openPassword(config), fetch: apiFetch })
 		: null
 	const helper = helperPath()
-	// Without Nextcloud: Blockwise's built-in calendar, or Apple Calendar when you chose it (Settings → Calendar)
-	const calendar = client ? cal.nextcloudCalendar({ api: client.api }) : helper && calendarMode() === 'apple' ? cal.appleCalendar({ helperPath: helper }) : { kind: 'builtin' }
-
 	let inner = null
 	if (client) inner = { pull: (since, limit) => client.api('GET', `sync?since=${since}&limit=${limit}`), push: (records) => client.api('POST', 'sync', { records }) }
 	const lazy = { pull: (since, limit) => inner.pull(since, limit), push: (records) => inner.push(records) }
@@ -257,6 +290,15 @@ async function connect({ fresh = false } = {}) {
 		stored = null
 		unreadableData = true
 	}
+	const isDrive = config.provider === 'dropbox' || config.provider === 'gdrive' || config.provider === 'onedrive'
+	driveStoreNow = isDrive ? driveStore(config.provider, await vault.unseal(config.driveToken), { onRotate: keepRotated }) : null
+	// Without Nextcloud: Blockwise's built-in calendar, the drive account's calendar (when
+	// your data says so and it's allowed on this Mac), or Apple Calendar when you chose it
+	cloud = null
+	cloudUsed = !client && wantsCloud(stored)
+	const calendar = client ? cal.nextcloudCalendar({ api: client.api })
+		: cloudUsed ? makeCloud()
+			: helper && calendarMode() === 'apple' ? cal.appleCalendar({ helperPath: helper }) : { kind: 'builtin' }
 	engine = await createEngine({
 		storage: { load: async () => (stored ? JSON.parse(stored) : null), save: (db) => vault.write('data', JSON.stringify(db)) },
 		remote: config.provider === 'local' ? null : lazy,
@@ -266,10 +308,8 @@ async function connect({ fresh = false } = {}) {
 			refreshSoon()
 		},
 	})
-	if (config.provider === 'dropbox' || config.provider === 'gdrive') {
-		const refreshToken = await vault.unseal(config.driveToken)
+	if (isDrive) {
 		const key = Buffer.from(await vault.unseal(config.syncKey), 'base64')
-		driveStoreNow = driveStore(config.provider, refreshToken)
 		inner = await FileSync.createRemote({
 			store: driveStoreNow,
 			key: new Uint8Array(key),
@@ -278,6 +318,133 @@ async function connect({ fresh = false } = {}) {
 		})
 	}
 	remote = config.provider === 'local' ? null : lazy
+}
+
+// --- the drive account's calendar (Google Calendar, Outlook) -----------------------------------
+
+const accountCalendar = () => (config && ACCOUNT_CALENDAR[config.provider]) || null
+const inCloud = (url) => typeof url === 'string' && !!accountCalendar() && url.startsWith(CLOUD[accountCalendar()].prefix)
+/** Blocks in the account's calendar: your data says so (every device follows) and this Mac's login allows it */
+function wantsCloud(stored) {
+	let home = null
+	try { const db = stored ? JSON.parse(stored) : null; home = db && db.settings && db.settings.f && db.settings.f.calendarHome } catch (e) { home = null }
+	return !!home && home === accountCalendar() && !!config.driveCalendar && !!driveStoreNow
+}
+function makeCloud() {
+	const store = driveStoreNow
+	const name = CALENDAR_NAMES[accountCalendar()]
+	cloud = createCloudCalendar({
+		provider: accountCalendar(),
+		request: (method, p, body) => store.calendar(method, p, body === undefined ? null : body),
+		// What the calendar said last (the weeks around today), encrypted like your data
+		storage: { load: async () => (vault ? vault.read('blockcache') : null), save: async (text) => { if (vault) vault.write('blockcache', text) } },
+		calendarsOf: () => (engine ? engine.snapshot().commitments.filter((c) => inCloud(c.calendarUrl)).map((c) => ({ url: c.calendarUrl, name: c.name, color: c.color })) : []),
+		onChange: () => { notifyChanged(); refreshSoon() },
+		onRefused: (reasons) => notify(t('{calendar} didn\'t take some changes to blocks', { calendar: name }), reasons.join(' · ')),
+	})
+	return cloud
+}
+/** After a sync: another device moved the blocks (or back), so this Mac follows; new commitments get their calendar */
+async function followCalendarHome() {
+	if (!engine || !accountCalendar()) return
+	const want = engine.calendarHome() === accountCalendar() && !!config.driveCalendar
+	if (want !== cloudUsed) {
+		await engine.flush().catch(() => {})
+		await connect()
+		watchDrive()
+		refresh()
+		notifyChanged()
+		return
+	}
+	if (!cloudUsed || !cloud) return
+	if (cloud.pending()) cloud.flush().catch(() => {})
+	for (const c of engine.snapshot().commitments) {
+		if (inCloud(c.calendarUrl)) continue
+		try { engine.linkCalendar(c.uuid, await cloud.createCalendar({ name: c.name, color: c.color })) } catch (e) { break }
+	}
+}
+/** Log in again with the same account and allow its calendar too */
+async function allowCalendar() {
+	const provider = config && config.provider
+	if (!accountCalendar()) throw new Error(t('Connect Google Drive or OneDrive first.'))
+	const opts = { fetch: apiFetch, openBrowser: (u) => openLink(u) }
+	const flow = provider === 'onedrive'
+		? drives.connectMicrosoft({ clientId: providerKeys.microsoftClientId, calendar: true, ...opts })
+		: drives.connectGoogle({ clientId: providerKeys.googleClientId, clientSecret: providerKeys.googleClientSecret, ...opts })
+	const r = await flow
+	let token = r.refreshToken
+	const store = driveStore(provider, token, { calendar: false, onRotate: (x) => { token = x } })
+	const now = await store.account().catch(() => null)
+	if (!now || now !== config.driveAccount) {
+		await store.revoke().catch(() => {})
+		throw new Error(t(provider === 'onedrive' ? 'Log in with the Microsoft account Blockwise syncs with.' : 'Log in with the Google account Blockwise syncs with.'))
+	}
+	if (!r.calendar) {
+		await store.revoke().catch(() => {})
+		throw new Error(t(provider === 'onedrive' ? 'Allow Blockwise to use Outlook, then try again.' : 'Allow Blockwise to make calendars in Google Calendar, then try again.'))
+	}
+	const sealed = await vault.seal(token)
+	if (!sealed) throw new Error(t('Blockwise could not use the Keychain.'))
+	const old = driveStoreNow
+	config.driveToken = sealed
+	config.driveCalendar = true
+	saveConfig(config)
+	if (old && provider !== 'onedrive') await old.revoke().catch(() => {})
+}
+/**
+ * Blocks into the account's calendar (on: a calendar per commitment, the built-in
+ * blocks copied there and taken out of Blockwise), or back (off: the calendar's
+ * events from 3 months back to a year ahead copied in). Every device follows.
+ */
+async function useAccountCalendar(on) {
+	if (!engine || !accountCalendar()) throw new Error(t('Connect Google Drive or OneDrive first.'))
+	const name = CALENDAR_NAMES[accountCalendar()]
+	if (on) {
+		if (!config.driveCalendar) {
+			await allowCalendar()
+			await engine.flush().catch(() => {})
+			await connect()
+		}
+		const c = cloud || makeCloud()
+		const snap = engine.snapshot()
+		const urlOf = new Map()
+		for (const cm of snap.commitments) {
+			let url = inCloud(cm.calendarUrl) ? cm.calendarUrl : null
+			if (!url) {
+				try { url = await c.createCalendar({ name: cm.name, color: cm.color }) } catch (x) {
+					throw new Error(t('{calendar} didn\'t answer. Try again when you are online.', { calendar: name }))
+				}
+				engine.linkCalendar(cm.uuid, url)
+			}
+			urlOf.set(cm.uuid, url)
+		}
+		const blocks = engine.builtinBlocks().filter((b) => urlOf.has(b.commitment))
+		const names = new Map(snap.commitments.map((cm) => [cm.uuid, cm.name]))
+		const copied = await c.importBlocks(blocks.map((b) => ({ url: urlOf.get(b.commitment), title: b.title || names.get(b.commitment) || '', start: b.start, end: b.end, repeat: b.repeat, until: b.until, skip: b.skip })))
+		engine.removeBlocks(blocks.map((b) => b.uuid))
+		engine.setCalendarHome(accountCalendar())
+		await engine.flush().catch(() => {})
+		await c.flush().catch(() => {})
+		await connect()
+		watchDrive()
+		syncNow()
+		notifyChanged()
+		return { copied }
+	}
+	const c = cloud || makeCloud()
+	const snap = engine.snapshot()
+	const linked = snap.commitments.filter((cm) => inCloud(cm.calendarUrl))
+	const byUrl = new Map(linked.map((cm) => [cm.calendarUrl, cm.uuid]))
+	const now = Math.floor(Date.now() / 1000)
+	const events = linked.length ? await c.readAll(now - 90 * DAY, now + 365 * DAY, linked.map((cm) => cm.calendarUrl)) : []
+	const copied = engine.importBlocks(events.map((ev) => ({ commitment: byUrl.get(ev.url), title: ev.title, start: ev.start, end: ev.end, origin: `${CLOUD[accountCalendar()].prefix}${ev.uid}` })))
+	engine.setCalendarHome('builtin')
+	await engine.flush().catch(() => {})
+	await connect()
+	watchDrive()
+	syncNow()
+	notifyChanged()
+	return { copied }
 }
 
 /** After switching from the menu bar: tell what happened */
@@ -300,6 +467,10 @@ const baseUid = (uid) => String(uid).replace(/#\d+$/, '')
  */
 async function setCalendarMode(mode) {
 	if (!engine || config.provider === 'nextcloud' || (mode !== 'apple' && mode !== 'builtin') || mode === calendarMode()) return { changed: false }
+	if (cloudUsed) {
+		await dialog.showMessageBox({ type: 'info', buttons: [t('OK')], message: t('Your blocks are in {calendar}.', { calendar: CALENDAR_NAMES[accountCalendar()] }), detail: t('Turn that off in Settings first.') })
+		return { changed: false }
+	}
 	const helper = helperPath()
 	if (mode === 'apple' && !helper) {
 		await dialog.showMessageBox({ type: 'info', buttons: [t('OK')], message: t('Apple Calendar is not part of this build.'), detail: t('Build the app with Xcode\'s command line tools installed (npm run build).') })
@@ -465,6 +636,7 @@ async function disconnect({ revoke, keepData = false, carry = false }) {
 	if (!keepData && vault) {
 		vault.remove('data')
 		vault.remove('drivestate')
+		vault.remove('blockcache')
 		try { fs.unlinkSync(ownerPath()) } catch (e) { /* none */ }
 	}
 	if (carry) {
@@ -476,6 +648,8 @@ async function disconnect({ revoke, keepData = false, carry = false }) {
 	engine = null
 	remote = null
 	driveStoreNow = null
+	cloud = null
+	cloudUsed = false
 	config = null
 	memoryPassword = null
 	dash = null
@@ -540,6 +714,7 @@ async function syncNow() {
 	try {
 		const r = await engine.sync()
 		syncError = null
+		await followCalendarHome().catch(() => {})
 		if (r && (r.pulled || (r.refused && r.refused.length))) notifyChanged()
 		if (r && r.refused && r.refused.length) {
 			const reasons = [...new Set(r.refused.map((x) => x.reason))].join(' · ')
@@ -587,7 +762,7 @@ function publicState() {
 		now: Math.floor(Date.now() / 1000),
 		provider,
 		// A drive is offered only once its app key is set (config/providers.json)
-		providers: ['nextcloud', 'local', ...['gdrive', 'dropbox'].filter((p) => providersReady()[p])],
+		providers: ['nextcloud', 'local', ...['gdrive', 'onedrive', 'dropbox'].filter((p) => providersReady()[p])],
 		providersReady: providersReady(),
 		server: config && config.server,
 		host: provider === 'nextcloud' ? new URL(config.server).host : provider ? t(PROVIDER_NAMES[provider]) : null,
@@ -929,19 +1104,23 @@ let unreadableData = false
 
 /** Connect a drive: you allow Blockwise in your browser. @return {{exists: boolean}} a Blockwise folder is there already */
 async function connectDrive(provider) {
-	if (provider !== 'dropbox' && provider !== 'gdrive') throw new Error('Invalid request.')
+	if (provider !== 'dropbox' && provider !== 'gdrive' && provider !== 'onedrive') throw new Error('Invalid request.')
 	if (!providersReady()[provider]) throw new Error('Set up {drive} first.')
 	if (pendingDrive && pendingDrive.cancel) pendingDrive.cancel()
 	const opts = { fetch: apiFetch, openBrowser: (u) => openLink(u) }
 	const flow = provider === 'dropbox'
 		? drives.connectDropbox({ appKey: providerKeys.dropboxAppKey, ...opts })
-		: drives.connectGoogle({ clientId: providerKeys.googleClientId, clientSecret: providerKeys.googleClientSecret, ...opts })
+		: provider === 'onedrive'
+			? drives.connectMicrosoft({ clientId: providerKeys.microsoftClientId, ...opts })
+			: drives.connectGoogle({ clientId: providerKeys.googleClientId, clientSecret: providerKeys.googleClientSecret, ...opts })
 	pendingDrive = { provider, cancel: flow.cancel }
 	const r = await flow
-	const store = driveStore(provider, r.refreshToken)
-	const account = r.account || (store.account ? await store.account().catch(() => null) : null)
+	const pending = { provider, refreshToken: r.refreshToken, calendar: !!r.calendar }
+	const store = driveStore(provider, r.refreshToken, { calendar: false, onRotate: (x) => { pending.refreshToken = x } })
+	pending.store = store
+	pending.account = r.account || (store.account ? await store.account().catch(() => null) : null)
 	const { exists, encrypted } = await FileSync.inspect(store)
-	pendingDrive = { provider, refreshToken: r.refreshToken, account, store }
+	pendingDrive = pending
 	return { exists, encrypted }
 }
 
@@ -956,8 +1135,8 @@ async function unlockDrive(passphrase, encrypt = true) {
 	const driveToken = await v.seal(pendingDrive.refreshToken)
 	const syncKey = await v.seal(Buffer.from(key).toString('base64'))
 	if (!driveToken || !syncKey) throw new Error(t('Blockwise needs its own Keychain entry ("Blockwise Safe Storage") to keep the connection; it can\'t see your other passwords. Quit Blockwise, open it again, connect, and click Always Allow when macOS asks.'))
-	const { provider, account } = pendingDrive
-	config = { provider, driveToken, syncKey, driveAccount: account, notifications: true }
+	const { provider, account, calendar } = pendingDrive
+	config = { provider, driveToken, syncKey, driveAccount: account, driveCalendar: calendar, notifications: true }
 	saveConfig(config)
 	pendingDrive = null
 	await finishSetup(`${provider}:${account || ''}`)
@@ -1019,6 +1198,9 @@ handle('openCalendar', (ts) => openCalendar(typeof ts === 'number' ? ts : undefi
 handle('calendarMode', () => ({ mode: calendarMode(), available: !!config && config.provider !== 'nextcloud' }))
 // Only from the main window; asks you before anything changes
 handle('setCalendarMode', (mode) => setCalendarMode(String(mode || '')), 'app.html')
+// The drive account's calendar (Google Calendar, Outlook): what's possible, and switching (from the main window)
+handle('accountCalendar', () => (engine && accountCalendar() ? { provider: accountCalendar(), home: engine.calendarHome(), allowed: !!config.driveCalendar, used: cloudUsed, waiting: cloud ? cloud.pending() : 0 } : null))
+handle('useAccountCalendar', (on) => useAccountCalendar(on === true), 'app.html')
 // Light, dark or like macOS: for every window (and the menus), kept on this Mac
 handle('appearance', () => nativeTheme.themeSource)
 handle('setAppearance', (mode) => setAppearance(String(mode || '')), 'app.html')

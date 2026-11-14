@@ -30,6 +30,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import app.tracker.core.CloudGuard;
+
 /**
  * Dropbox and Google Drive as sync folders, like on the Mac (mac/src/drives.js):
  *
@@ -297,8 +299,8 @@ final class Drives {
             }
             String account = dropbox ? t.optString("account_id", "") : "";
             account = account.replaceAll("[^\\w:-]", "");
-            boolean calendar = !dropbox && (" " + t.optString("scope") + " ").contains(" " + CALENDAR_SCOPE + " ");
-            return new String[] {refresh, account.isEmpty() ? null : account.substring(0, Math.min(64, account.length())), calendar ? "calendar" : null};
+            boolean googleCalendar = !dropbox && (" " + t.optString("scope") + " ").contains(" " + CALENDAR_SCOPE + " ");
+            return new String[] {refresh, account.isEmpty() ? null : account.substring(0, Math.min(64, account.length())), googleCalendar ? "calendar" : null};
         } finally {
             login.server = null;
             try {
@@ -428,7 +430,7 @@ final class Drives {
         volatile boolean calendar;
         /** OneDrive: keeps the newest refresh token (the saved connection's folder) */
         volatile Rotated rotated;
-        private final Context app;
+        private final Context appContext;
         private final Keys k;
         private String access;
         private long until;
@@ -440,7 +442,7 @@ final class Drives {
         Folder(Context c, String provider, String refreshToken) {
             this.provider = provider;
             this.refreshToken = refreshToken;
-            this.app = c.getApplicationContext();
+            this.appContext = c.getApplicationContext();
             this.k = keys(c);
         }
 
@@ -807,7 +809,7 @@ final class Drives {
             if (ms()) {
                 return outlook(method, path, bodyJson);
             }
-            if (dropbox() || !app.tracker.core.CloudGuard.google(method, path)) {
+            if (dropbox() || !CloudGuard.google(method, path)) {
                 throw new DriveException("Invalid request.", 400, false, false);
             }
             Map<String, String> h = new HashMap<>();
@@ -834,7 +836,7 @@ final class Drives {
          * Blockwise's calendars, only a title, times and a repeat in an event.
          */
         private Resp outlook(String method, String path, String bodyJson) throws DriveException {
-            if (!app.tracker.core.CloudGuard.microsoft(method, path)) {
+            if (!CloudGuard.microsoft(method, path)) {
                 throw new DriveException("Invalid request.", 400, false, false);
             }
             Map<String, String> h = new HashMap<>();
@@ -845,7 +847,7 @@ final class Drives {
                 if (bodyJson != null) {
                     JSONObject in = new JSONObject(bodyJson);
                     JSONObject out = new JSONObject();
-                    for (String f : making ? app.tracker.core.CloudGuard.GRAPH_CALENDAR_FIELDS : app.tracker.core.CloudGuard.GRAPH_EVENT_FIELDS) {
+                    for (String f : making ? CloudGuard.GRAPH_CALENDAR_FIELDS : CloudGuard.GRAPH_EVENT_FIELDS) {
                         if (!in.has(f)) {
                             continue;
                         }
@@ -863,7 +865,7 @@ final class Drives {
                     if (making) {
                         // Blockwise's mark: this calendar can be used from any device
                         out.put("singleValueExtendedProperties", new JSONArray().put(new JSONObject()
-                                .put("id", app.tracker.core.CloudGuard.GRAPH_MARK).put("value", app.tracker.core.CloudGuard.GRAPH_MARK_VALUE)));
+                                .put("id", CloudGuard.GRAPH_MARK).put("value", CloudGuard.GRAPH_MARK_VALUE)));
                     }
                     h.put("Content-Type", "application/json; charset=UTF-8");
                     body = out.toString().getBytes(StandardCharsets.UTF_8);
@@ -872,7 +874,7 @@ final class Drives {
                 throw new DriveException("Invalid request.", 400, false, false);
             }
             if (!making) {
-                String cal = app.tracker.core.CloudGuard.graphCalendar(path);
+                String cal = CloudGuard.graphCalendar(path);
                 if (cal == null || !blockwiseCalendar(cal)) {
                     throw new DriveException("Blockwise only uses the calendars it made.", 403, false, false);
                 }
@@ -885,27 +887,27 @@ final class Drives {
                 JSONObject made = r.json();
                 String id = made == null ? "" : made.optString("id", "");
                 if (!id.isEmpty() && id.length() <= 300) {
-                    Store.addOutlookCalendar(app, id);
+                    Store.addOutlookCalendar(appContext, id);
                 }
             }
             if ("DELETE".equals(method) && path.indexOf('/', "me/calendars/".length()) < 0 && (r.status == 204 || r.status == 404)) {
-                Store.removeOutlookCalendar(app, app.tracker.core.CloudGuard.graphCalendar(path));
+                Store.removeOutlookCalendar(appContext, CloudGuard.graphCalendar(path));
             }
             return r;
         }
 
         /** Made by Blockwise: here (remembered), or on another device (its mark, looked up once) */
         private boolean blockwiseCalendar(String cal) throws DriveException {
-            if (Store.outlookCalendars(app).contains(cal)) {
+            if (Store.outlookCalendars(appContext).contains(cal)) {
                 return true;
             }
-            String seg = app.tracker.core.CloudGuard.encode(cal);
+            String seg = CloudGuard.encode(cal);
             if (seg == null) {
                 return false;
             }
             String expand;
             try {
-                expand = URLEncoder.encode("singleValueExtendedProperties($filter=id eq '" + app.tracker.core.CloudGuard.GRAPH_MARK + "')", "UTF-8").replace("+", "%20");
+                expand = URLEncoder.encode("singleValueExtendedProperties($filter=id eq '" + CloudGuard.GRAPH_MARK + "')", "UTF-8").replace("+", "%20");
             } catch (IOException e) {
                 return false;
             }
@@ -917,9 +919,9 @@ final class Drives {
             JSONArray props = d == null ? null : d.optJSONArray("singleValueExtendedProperties");
             for (int i = 0; props != null && i < props.length(); i++) {
                 JSONObject p = props.optJSONObject(i);
-                if (p != null && app.tracker.core.CloudGuard.GRAPH_MARK.equalsIgnoreCase(p.optString("id"))
-                        && app.tracker.core.CloudGuard.GRAPH_MARK_VALUE.equals(p.optString("value"))) {
-                    Store.addOutlookCalendar(app, cal);
+                if (p != null && CloudGuard.GRAPH_MARK.equalsIgnoreCase(p.optString("id"))
+                        && CloudGuard.GRAPH_MARK_VALUE.equals(p.optString("value"))) {
+                    Store.addOutlookCalendar(appContext, cal);
                     return true;
                 }
             }

@@ -38,6 +38,9 @@
 		// The Mac app: built-in calendar or Apple Calendar (Settings → Calendar)
 		calendarMode: app.calendarMode ? () => app.calendarMode() : undefined,
 		setCalendarMode: app.setCalendarMode ? (mode) => app.setCalendarMode(mode) : undefined,
+		// With Google Drive or OneDrive: the blocks in Google Calendar or Outlook (Settings)
+		accountCalendar: app.accountCalendar ? () => app.accountCalendar() : undefined,
+		useAccountCalendar: app.useAccountCalendar ? (on) => app.useAccountCalendar(on) : undefined,
 		onChanged: (cb) => app.onChanged(cb),
 		// Only the phone app has an account sheet; the Mac app uses its menu bar menu
 		account: app.account ? () => app.account() : undefined,

@@ -284,7 +284,7 @@ if (require.main === module) (async () => {
 	assert.throws(() => drives.connectGoogle({ clientId: '', fetch, openBrowser: () => {} }), /no Google client id/)
 	const g1 = await drives.connectGoogle({ clientId: 'goo-id', clientSecret: 'not-secret', fetch, openBrowser: browser([]), endpoints: GOO })
 	const gauth = p.seen.auths.at(-1)
-	assert.equal(gauth.scope, 'https://www.googleapis.com/auth/drive.appdata', 'only the hidden app folder, not your files')
+	assert.equal(gauth.scope, 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/calendar.app.created', 'only the hidden app folder (not your files), and the calendars Blockwise makes')
 	assert.equal(gauth.access_type, 'offline')
 	const gs1 = drives.googleStore({ clientId: 'goo-id', clientSecret: 'not-secret', refreshToken: g1.refreshToken, fetch, endpoints: GOO })
 	assert.equal(await gs1.account(), '0123456789')

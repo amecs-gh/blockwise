@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node scripts/sync-web.js && electron .",
     "helper": "mkdir -p helper/build && swiftc -O -target arm64-apple-macos13 -framework EventKit -o helper/build/blockwise-calendar helper/BlockwiseCalendar.swift",
-    "test": "node scripts/sync-web.js && node test/alerts.test.js && node test/drives.test.js && node test/providers.test.js && node test/calmode.test.js && node test/login.test.js",
+    "test": "node scripts/sync-web.js && node test/alerts.test.js && node test/drives.test.js && node test/providers.test.js && node test/calmode.test.js && node test/login.test.js && node test/onedrive.test.js && node test/cloudmode.test.js",
     "test:ui": "node scripts/sync-web.js && node test/setup.test.js && node test/calendar.test.js && node test/start-ui.test.js && node test/app.test.js",
     "build": "node scripts/sync-web.js && npm run helper && electron-builder --mac dir",
     "dmg": "node scripts/sync-web.js && npm run helper && electron-builder --mac dmg"

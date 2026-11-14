@@ -29,6 +29,7 @@ const PAGE = (title, text) => `<!doctype html><html><head><meta charset="utf-8">
  * @param {object} o
  * @param {number} o.port 0 = any free port
  * @param {string} o.path e.g. "/dropbox"
+ * @param {string} [o.host] in the address given to the provider ("localhost" for Microsoft); the server is on 127.0.0.1 either way
  * @param {(redirectUri: string, state: string) => string} o.authorizeUrl the provider's login page
  * @param {(url: string) => void} o.openBrowser
  * @param {number} [o.timeoutMs] 5 minutes
@@ -70,7 +71,7 @@ function waitForCode(o) {
 	let redirectUri = null
 	server.on('error', (e) => settle(Object.assign(new Error(e.code === 'EADDRINUSE' ? `Port ${o.port} on this Mac is in use; close the app using it and try again.` : e.message), { code: 'port' })))
 	server.listen(o.port || 0, '127.0.0.1', () => {
-		redirectUri = `http://127.0.0.1:${server.address().port}${o.path}`
+		redirectUri = o.host === 'localhost' ? `http://localhost:${server.address().port}${o.path === '/' ? '' : o.path}` : `http://127.0.0.1:${server.address().port}${o.path}`
 		timer = setTimeout(() => settle(Object.assign(new Error('The login took too long. Try again.'), { code: 'timeout' })), o.timeoutMs || 5 * 60 * 1000)
 		o.openBrowser(o.authorizeUrl(redirectUri, state))
 	})

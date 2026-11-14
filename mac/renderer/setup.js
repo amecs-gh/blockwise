@@ -7,7 +7,7 @@
 	const $ = (id) => document.getElementById(id)
 	const MIN_NEW = 10
 	let t = (s) => s
-	let drive = null // 'dropbox' | 'gdrive' while connecting one
+	let drive = null // 'dropbox' | 'gdrive' | 'onedrive' while connecting one
 	let ready = null // drives with app keys in this build
 	let creating = false // a new sync folder (else: open the one your other devices made)
 
@@ -39,6 +39,7 @@
 		nextcloud: ['Nextcloud', 'Your own server. Calendars, tasks and time sync with the Nextcloud app and your phone.'],
 		dropbox: ['Dropbox', 'Synced through a Blockwise folder in your Dropbox, encrypted with a passphrase only you know.'],
 		gdrive: ['Google Drive', 'Synced through a hidden Blockwise folder in your Google Drive, encrypted with a passphrase only you know.'],
+		onedrive: ['OneDrive', 'Synced through a Blockwise folder in your OneDrive, encrypted with a passphrase only you know.'],
 		local: ['This Mac only', 'No sync. You can connect Nextcloud or a drive later; your data comes along.'],
 	}
 
@@ -46,7 +47,7 @@
 		const box = $('step-choose')
 		box.textContent = ''
 		for (const p of providers) {
-			if (!CHOICES[p] || ((p === 'gdrive' || p === 'dropbox') && !(ready && ready[p]))) continue
+			if (!CHOICES[p] || ((p === 'gdrive' || p === 'dropbox' || p === 'onedrive') && !(ready && ready[p]))) continue
 			const b = document.createElement('button')
 			b.type = 'button'
 			b.className = 'u-choice'

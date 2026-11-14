@@ -43,7 +43,7 @@ fs.writeFileSync(keysFile, JSON.stringify({ dropboxAppKey: 'dbxtestkey12', googl
 	T.ready()
 	await sleep(300)
 	let s = await call('state')
-	assert.deepEqual(s.providersReady, { dropbox: true, gdrive: false }, 'Google not set up in this build')
+	assert.deepEqual(s.providersReady, { dropbox: true, gdrive: false, onedrive: false }, 'Google and Microsoft not set up in this build')
 	assert.deepEqual(s.providers, ['nextcloud', 'local', 'dropbox'], 'a drive without its app key is not offered')
 	assert.match((await T.handlers.connectDrive(EV, 'gdrive')).error, /Set up/)
 
