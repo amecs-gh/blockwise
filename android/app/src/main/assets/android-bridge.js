@@ -132,12 +132,19 @@
 		}, 1000)
 	}
 	let asking = 0
-	const asked = (d) => { asking += d; fire('loading', asking > 0) }
+	// Nothing is "loading" while Nextcloud is known to be down: the pages show what the phone has
+	const loading = () => asking > 0 && !offlineNow
+	const asked = (d) => { asking += d; fire('loading', loading()) }
 	// Nextcloud didn't answer: say once that the app carries on with what's on the phone
 	let offlineSaid = 0
 	let offlineNow = false
 	const unreachable = () => {
-		offlineNow = true
+		if (!offlineNow) {
+			offlineNow = true
+			// Drawn again without placeholders: what's on the phone is all there is for now
+			fire('loading', false)
+			fire('changed')
+		}
 		if (Date.now() - offlineSaid < 10 * 60000) return
 		offlineSaid = Date.now()
 		fire('offline', true)
@@ -185,6 +192,7 @@
 			const before = serverBlocks.get(key)
 			serverBlocks.set(key, { at: Date.now(), list: blocks || [] })
 			if (serverBlocks.size > 40) serverBlocks.delete(serverBlocks.keys().next().value)
+			offlineNow = false
 			keepSoon()
 			if (!before || JSON.stringify(before.list) !== JSON.stringify(blocks || [])) fire('changed')
 		}).catch(() => {
@@ -373,6 +381,7 @@
 				if (mode === 'local') { snapshotSoon(); if (always) fire('changed'); return }
 				const r = await e.sync()
 				pulled = r.pulled || 0
+				offlineNow = false
 				if (r.refused && r.refused.length) {
 					// Changes the server refused were undone here: say so (once per sync)
 					const reasons = [...new Set(r.refused.map((x) => x.reason))].join(' · ')
@@ -471,7 +480,7 @@
 		busy: (from, to, ids) => call('busy', from, to, ids),
 		onChanged: (cb) => listeners.changed.push(cb),
 		/** Waiting for Nextcloud (calendars, blocks): the page shows placeholders */
-		loading: () => asking > 0,
+		loading,
 		onLoading: (cb) => listeners.loading.push(cb),
 		/** Nextcloud didn't answer (said at most every 10 minutes) */
 		onOffline: (cb) => {

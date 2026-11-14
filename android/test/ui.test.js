@@ -649,7 +649,16 @@ async function phone(browser, file, { dark = false, locale = 'en-US', hash = '',
 		const ms = Date.now() - t0
 		assert.ok(ms < 1500, `${hash} opened in ${ms} ms with Nextcloud down`)
 	}
-	// the skeleton sits below the status bar
+	// Now: no placeholders for today's blocks once Nextcloud is known to be down (fresh page, server slow to fail)
+	{
+		const n2 = await phone(browser, 'app.html', { hash: '#now' })
+		await n2.page.waitForSelector('.imp-pnow .imp-ptoday', { timeout: 15000 })
+		await n2.page.waitForFunction(() => !document.querySelector('.imp-ptoday [aria-busy]'), null, { timeout: 4000 + 3000 + 2000 })
+		await n2.page.waitForTimeout(2000)
+		assert.equal(await n2.page.locator('.imp-ptoday [aria-busy]').count(), 0, 'no placeholders stay in Now')
+		assert.ok(await n2.page.locator('.imp-updating[hidden], .imp-updating.is-offline').count(), 'no Updating pill while it is down (the note that it is, at most)')
+		await n2.ctx.close()
+	}
 	device.downDelay = 0
 	assert.deepEqual(o.errors.filter((e) => !/offline/.test(e)), [], 'no console errors offline')
 	await o.ctx.close()
